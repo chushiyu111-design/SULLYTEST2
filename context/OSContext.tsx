@@ -565,6 +565,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           backup.roomTodos = dbData.roomTodos || [];
           backup.roomNotes = dbData.roomNotes || [];
           
+          // --- FIX: Include Schedule Data and Journal Stickers ---
+          backup.tasks = dbData.tasks || [];
+          backup.anniversaries = dbData.anniversaries || [];
+          backup.savedJournalStickers = dbData.savedJournalStickers || [];
+
           // Exclude Heavy Media Stores
           backup.assets = undefined; 
           backup.galleryImages = undefined;
@@ -602,6 +607,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           backup.userProfile = undefined;
           backup.roomTodos = undefined;
           backup.roomNotes = undefined;
+          backup.tasks = undefined;
+          backup.anniversaries = undefined;
+          backup.savedJournalStickers = undefined;
       }
 
       try { return JSON.stringify(backup); } catch (e: any) { throw new Error("导出失败: 数据量过大"); }
