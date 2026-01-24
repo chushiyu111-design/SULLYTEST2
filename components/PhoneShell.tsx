@@ -100,7 +100,13 @@ const PhoneShell: React.FC = () => {
 
     return (
       <div 
-        onClick={unlock}
+        onClick={() => {
+            // Request Web Notification Permission on Unlock Interaction
+            if ('Notification' in window && Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+            unlock();
+        }}
         className="relative w-full h-full bg-cover bg-center cursor-pointer overflow-hidden group font-light select-none"
         style={{ backgroundImage: bgImageValue, color: contentColor }}
       >

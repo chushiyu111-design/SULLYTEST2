@@ -423,7 +423,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     initData();
   }, []);
 
-  // --- Update: Handle Scheduled Messages with Unread Flags ---
+  // --- Update: Handle Scheduled Messages with Unread Flags & Web Notifications ---
   useEffect(() => {
       if (!isDataLoaded || characters.length === 0) return;
       const checkAllSchedules = async () => {
@@ -450,6 +450,27 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                       if (!isChattingWithThisChar) {
                           addToast(`${char.name} 发来了一条消息`, 'success');
                           newUnreadState[char.id] = (newUnreadState[char.id] || 0) + dueMessages.length;
+
+                          // [NEW] Web Notification Logic
+                          // Check for Browser Support and Permission
+                          if (window.Notification && Notification.permission === 'granted') {
+                              try {
+                                  const notif = new Notification(char.name, {
+                                      body: dueMessages[0].content, // Preview the first message
+                                      icon: char.avatar,
+                                      silent: false
+                                  });
+                                  
+                                  // Optional: Focus window on click
+                                  notif.onclick = () => {
+                                      window.focus();
+                                      setActiveApp(AppID.Chat);
+                                      setActiveCharacterId(char.id);
+                                  };
+                              } catch (e) {
+                                  console.error("Web Notification failed", e);
+                              }
+                          }
                       }
                   }
               } catch (e) {
