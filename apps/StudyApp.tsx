@@ -218,6 +218,9 @@ const StudyApp: React.FC = () => {
     const [importPreference, setImportPreference] = useState('');
     const [tempPdfData, setTempPdfData] = useState<{name: string, text: string} | null>(null);
 
+    // Delete Confirmation State
+    const [deleteTarget, setDeleteTarget] = useState<StudyCourse | null>(null);
+
     const currentSprite = selectedChar?.sprites?.['normal'] || selectedChar?.avatar;
 
     useEffect(() => {
@@ -681,10 +684,16 @@ Note: Use "我" (I) to refer to yourself.
         setShowChapterMenu(false);
     };
 
-    const handleDeleteCourse = async (e: React.MouseEvent, id: string) => {
+    const requestDeleteCourse = (e: React.MouseEvent, course: StudyCourse) => {
         e.stopPropagation();
-        await DB.deleteCourse(id);
-        setCourses(prev => prev.filter(c => c.id !== id));
+        setDeleteTarget(course);
+    };
+
+    const confirmDeleteCourse = async () => {
+        if (!deleteTarget) return;
+        await DB.deleteCourse(deleteTarget.id);
+        setCourses(prev => prev.filter(c => c.id !== deleteTarget.id));
+        setDeleteTarget(null);
         addToast('课程已删除', 'success');
     };
 
@@ -749,7 +758,12 @@ Note: Use "我" (I) to refer to yourself.
                                         </div>
                                     </div>
                                 </div>
-                                <button onClick={(e) => handleDeleteCourse(e, course.id)} className="absolute top-2 right-2 bg-black/20 hover:bg-red-500/80 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all">×</button>
+                                <button 
+                                    onClick={(e) => requestDeleteCourse(e, course)} 
+                                    className="absolute top-2 right-2 bg-black/20 hover:bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all z-20"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -769,6 +783,24 @@ Note: Use "我" (I) to refer to yourself.
                                 className="w-full h-32 bg-slate-100 rounded-xl p-3 text-sm focus:outline-emerald-500 resize-none"
                             />
                         </div>
+                    </div>
+                </Modal>
+
+                {/* Delete Confirmation Modal */}
+                <Modal 
+                    isOpen={!!deleteTarget} 
+                    title="删除课程" 
+                    onClose={() => setDeleteTarget(null)} 
+                    footer={
+                        <div className="flex gap-2 w-full">
+                            <button onClick={() => setDeleteTarget(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-bold rounded-2xl">取消</button>
+                            <button onClick={confirmDeleteCourse} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg shadow-red-200">确认删除</button>
+                        </div>
+                    }
+                >
+                    <div className="py-4 text-center">
+                        <p className="text-sm text-slate-600 mb-2">确定要删除课程 <br/><span className="font-bold text-slate-800">"{deleteTarget?.title}"</span> 吗？</p>
+                        <p className="text-xs text-red-400">删除后无法恢复，学习进度将丢失。</p>
                     </div>
                 </Modal>
             </div>
