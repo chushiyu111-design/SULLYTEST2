@@ -1,15 +1,17 @@
 
 
 
+
+
 import { 
     CharacterProfile, ChatTheme, Message, UserProfile, 
     Task, Anniversary, DiaryEntry, RoomTodo, RoomNote, 
-    GalleryImage, FullBackupData, GroupProfile, SocialPost 
+    GalleryImage, FullBackupData, GroupProfile, SocialPost, StudyCourse 
 } from '../types';
 
 const DB_NAME = 'AetherOS_Data';
 // CRITICAL FIX: Increment version to force `onupgradeneeded` for recent feature updates
-const DB_VERSION = 24; 
+const DB_VERSION = 25; 
 
 const STORE_CHARACTERS = 'characters';
 const STORE_MESSAGES = 'messages';
@@ -26,7 +28,8 @@ const STORE_ROOM_TODOS = 'room_todos';
 const STORE_ROOM_NOTES = 'room_notes'; 
 const STORE_GROUPS = 'groups'; 
 const STORE_JOURNAL_STICKERS = 'journal_stickers';
-const STORE_SOCIAL_POSTS = 'social_posts'; // New
+const STORE_SOCIAL_POSTS = 'social_posts';
+const STORE_COURSES = 'courses'; // New
 
 export interface ScheduledMessage {
     id: string;
@@ -61,9 +64,9 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORE_MESSAGES)) {
         const msgStore = db.createObjectStore(STORE_MESSAGES, { keyPath: 'id', autoIncrement: true });
         msgStore.createIndex('charId', 'charId', { unique: false });
-        msgStore.createIndex('groupId', 'groupId', { unique: false }); // New Index for Groups
+        msgStore.createIndex('groupId', 'groupId', { unique: false }); 
       } else {
-          // Upgrade Path: If message store exists but index doesn't
+          // Upgrade Path
           const msgStore = (event.target as IDBOpenDBRequest).transaction?.objectStore(STORE_MESSAGES);
           if (msgStore && !msgStore.indexNames.contains(STORE_MESSAGES) && !msgStore.indexNames.contains('groupId')) {
               try {
@@ -96,7 +99,6 @@ const openDB = (): Promise<IDBDatabase> => {
       createStore(STORE_TASKS, { keyPath: 'id' });
       createStore(STORE_ANNIVERSARIES, { keyPath: 'id' });
 
-      // New Stores for Room
       if (!db.objectStoreNames.contains(STORE_ROOM_TODOS)) {
           db.createObjectStore(STORE_ROOM_TODOS, { keyPath: 'id' });
       }
@@ -105,14 +107,10 @@ const openDB = (): Promise<IDBDatabase> => {
           notesStore.createIndex('charId', 'charId', { unique: false });
       }
 
-      // Groups Store
       createStore(STORE_GROUPS, { keyPath: 'id' });
-
-      // Journal Stickers Store
       createStore(STORE_JOURNAL_STICKERS, { keyPath: 'name' });
-
-      // Social Posts Store
       createStore(STORE_SOCIAL_POSTS, { keyPath: 'id' });
+      createStore(STORE_COURSES, { keyPath: 'id' }); // New Store
     };
   });
 };
@@ -156,10 +154,8 @@ export const DB = {
       const transaction = db.transaction(STORE_MESSAGES, 'readonly');
       const store = transaction.objectStore(STORE_MESSAGES);
       const index = store.index('charId');
-      // Fetch all messages where charId matches
       const request = index.getAll(IDBKeyRange.only(charId));
       request.onsuccess = () => {
-          // Filter out messages that belong to a group (groupId should be undefined for private chat)
           const results = (request.result || []).filter((m: Message) => !m.groupId);
           resolve(results);
       };
@@ -225,15 +221,13 @@ export const DB = {
       const cursor = request.result;
       if (cursor) { 
           const m = cursor.value as Message;
-          if (!m.groupId) { // Only delete private messages
+          if (!m.groupId) { 
               store.delete(cursor.primaryKey); 
           }
           cursor.continue(); 
       }
     };
   },
-
-  // --- Groups ---
 
   getGroups: async (): Promise<GroupProfile[]> => {
       const db = await openDB();
@@ -271,8 +265,6 @@ export const DB = {
       });
   },
 
-  // --- Social Posts ---
-
   getSocialPosts: async (): Promise<SocialPost[]> => {
       const db = await openDB();
       if (!db.objectStoreNames.contains(STORE_SOCIAL_POSTS)) return [];
@@ -302,8 +294,6 @@ export const DB = {
       const transaction = db.transaction(STORE_SOCIAL_POSTS, 'readwrite');
       transaction.objectStore(STORE_SOCIAL_POSTS).clear();
   },
-
-  // --- Other Stores (Emojis, Themes, etc.) ... Keeping them as is ---
 
   getEmojis: async (): Promise<{name: string, url: string}[]> => {
     const db = await openDB();
@@ -374,8 +364,6 @@ export const DB = {
     transaction.objectStore(STORE_ASSETS).delete(id);
   },
 
-  // --- Journal Stickers ---
-
   getJournalStickers: async (): Promise<{name: string, url: string}[]> => {
     const db = await openDB();
     if (!db.objectStoreNames.contains(STORE_JOURNAL_STICKERS)) return [];
@@ -399,8 +387,6 @@ export const DB = {
     const transaction = db.transaction(STORE_JOURNAL_STICKERS, 'readwrite');
     transaction.objectStore(STORE_JOURNAL_STICKERS).delete(name);
   },
-
-  // --- Gallery ---
 
   saveGalleryImage: async (img: GalleryImage): Promise<void> => {
       const db = await openDB();
@@ -444,8 +430,6 @@ export const DB = {
       });
   },
 
-  // --- Scheduled Messages ---
-
   saveScheduledMessage: async (msg: ScheduledMessage): Promise<void> => {
       const db = await openDB();
       const transaction = db.transaction(STORE_SCHEDULED, 'readwrite');
@@ -475,8 +459,6 @@ export const DB = {
       transaction.objectStore(STORE_SCHEDULED).delete(id);
   },
 
-  // --- User Profile ---
-
   saveUserProfile: async (profile: UserProfile): Promise<void> => {
       const db = await openDB();
       const transaction = db.transaction(STORE_USER, 'readwrite');
@@ -501,8 +483,6 @@ export const DB = {
       });
   },
 
-  // --- Diaries ---
-
   getDiariesByCharId: async (charId: string): Promise<DiaryEntry[]> => {
       const db = await openDB();
       return new Promise((resolve, reject) => {
@@ -526,8 +506,6 @@ export const DB = {
       const transaction = db.transaction(STORE_DIARIES, 'readwrite');
       transaction.objectStore(STORE_DIARIES).delete(id);
   },
-
-  // --- Tasks (Schedule App) ---
 
   getAllTasks: async (): Promise<Task[]> => {
       const db = await openDB();
@@ -554,8 +532,6 @@ export const DB = {
       transaction.objectStore(STORE_TASKS).delete(id);
   },
 
-  // --- Anniversaries (Schedule App) ---
-
   getAllAnniversaries: async (): Promise<Anniversary[]> => {
       const db = await openDB();
       if (!db.objectStoreNames.contains(STORE_ANNIVERSARIES)) return [];
@@ -580,8 +556,6 @@ export const DB = {
       const transaction = db.transaction(STORE_ANNIVERSARIES, 'readwrite');
       transaction.objectStore(STORE_ANNIVERSARIES).delete(id);
   },
-
-  // --- Room Extensions (To-Do & Notebook) ---
 
   getRoomTodo: async (charId: string, date: string): Promise<RoomTodo | null> => {
       const db = await openDB();
@@ -627,6 +601,31 @@ export const DB = {
       transaction.objectStore(STORE_ROOM_NOTES).delete(id);
   },
 
+  // --- Courses (New) ---
+  getAllCourses: async (): Promise<StudyCourse[]> => {
+      const db = await openDB();
+      if (!db.objectStoreNames.contains(STORE_COURSES)) return [];
+      return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_COURSES, 'readonly');
+          const store = transaction.objectStore(STORE_COURSES);
+          const request = store.getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+      });
+  },
+
+  saveCourse: async (course: StudyCourse): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_COURSES, 'readwrite');
+      transaction.objectStore(STORE_COURSES).put(course);
+  },
+
+  deleteCourse: async (id: string): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_COURSES, 'readwrite');
+      transaction.objectStore(STORE_COURSES).delete(id);
+  },
+
   // --- Bulk Export/Import ---
   
   exportFullData: async (): Promise<Partial<FullBackupData>> => {
@@ -641,11 +640,11 @@ export const DB = {
               const store = tx.objectStore(storeName);
               const req = store.getAll();
               req.onsuccess = () => resolve(req.result || []);
-              req.onerror = () => resolve([]); // Fail safe
+              req.onerror = () => resolve([]); 
           });
       };
 
-      const [characters, messages, themes, emojis, assets, galleryImages, userProfiles, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, journalStickers, socialPosts] = await Promise.all([
+      const [characters, messages, themes, emojis, assets, galleryImages, userProfiles, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, journalStickers, socialPosts, courses] = await Promise.all([
           getAllFromStore(STORE_CHARACTERS),
           getAllFromStore(STORE_MESSAGES),
           getAllFromStore(STORE_THEMES),
@@ -661,6 +660,7 @@ export const DB = {
           getAllFromStore(STORE_GROUPS),
           getAllFromStore(STORE_JOURNAL_STICKERS),
           getAllFromStore(STORE_SOCIAL_POSTS),
+          getAllFromStore(STORE_COURSES), // Included Courses
       ]);
 
       const userProfile = userProfiles.length > 0 ? {
@@ -670,19 +670,18 @@ export const DB = {
       } : undefined;
 
       return {
-          characters, messages, customThemes: themes, savedEmojis: emojis, assets, galleryImages, userProfile, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, savedJournalStickers: journalStickers, socialPosts
+          characters, messages, customThemes: themes, savedEmojis: emojis, assets, galleryImages, userProfile, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, savedJournalStickers: journalStickers, socialPosts, courses
       };
   },
 
   importFullData: async (data: FullBackupData): Promise<void> => {
       const db = await openDB();
       
-      // Filter out stores that don't exist in the current DB version to prevent transaction errors
       const availableStores = [
           STORE_CHARACTERS, STORE_MESSAGES, STORE_THEMES, STORE_EMOJIS, 
           STORE_ASSETS, STORE_GALLERY, STORE_USER, STORE_DIARIES, 
           STORE_TASKS, STORE_ANNIVERSARIES, STORE_ROOM_TODOS, STORE_ROOM_NOTES,
-          STORE_GROUPS, STORE_JOURNAL_STICKERS, STORE_SOCIAL_POSTS
+          STORE_GROUPS, STORE_JOURNAL_STICKERS, STORE_SOCIAL_POSTS, STORE_COURSES
       ].filter(name => db.objectStoreNames.contains(name));
 
       const tx = db.transaction(availableStores, 'readwrite');
@@ -695,7 +694,6 @@ export const DB = {
       };
 
       if (data.characters) {
-          // Normal Data Backup Import Logic
           if (data.mediaAssets) {
               data.characters = data.characters.map(c => {
                   const media = data.mediaAssets?.find(m => m.charId === c.id);
@@ -721,11 +719,8 @@ export const DB = {
           }
           clearAndAdd(STORE_CHARACTERS, data.characters);
       } else if (data.mediaAssets && availableStores.includes(STORE_CHARACTERS)) {
-          // Media Only Backup Import Logic (Merge into existing DB characters)
           const charStore = tx.objectStore(STORE_CHARACTERS);
-          // Note: getAll() is async within the transaction context
           const request = charStore.getAll();
-          
           request.onsuccess = () => {
               const existingChars = request.result as CharacterProfile[];
               if (existingChars && existingChars.length > 0) {
@@ -734,7 +729,7 @@ export const DB = {
                       if (media) {
                           return {
                               ...c,
-                              sprites: media.sprites || c.sprites, // Restore Sprites!
+                              sprites: media.sprites || c.sprites, 
                               chatBackground: media.backgrounds?.chat || c.chatBackground,
                               dateBackground: media.backgrounds?.date || c.dateBackground,
                               roomConfig: c.roomConfig ? {
@@ -750,8 +745,6 @@ export const DB = {
                       }
                       return c;
                   });
-                  
-                  // Update Store
                   updatedChars.forEach(c => charStore.put(c));
               }
           };
@@ -776,6 +769,7 @@ export const DB = {
       if (data.groups) clearAndAdd(STORE_GROUPS, data.groups);
       if (data.savedJournalStickers) clearAndAdd(STORE_JOURNAL_STICKERS, data.savedJournalStickers);
       if (data.socialPosts) clearAndAdd(STORE_SOCIAL_POSTS, data.socialPosts);
+      if (data.courses) clearAndAdd(STORE_COURSES, data.courses); // Import Courses
       
       if (data.userProfile) {
           if (availableStores.includes(STORE_USER)) {

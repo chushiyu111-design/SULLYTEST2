@@ -1,8 +1,4 @@
 
-
-
-
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile } from '../types';
 import { DB } from '../utils/db';
@@ -598,6 +594,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           // --- NEW: Include Social Posts ---
           backup.socialPosts = dbData.socialPosts || [];
 
+          // --- FIX: Include Courses as requested ---
+          backup.courses = dbData.courses || []; 
+
           // --- NEW: Include Social App Local Data ---
           try {
               backup.socialAppData = {
@@ -651,6 +650,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           backup.anniversaries = undefined;
           backup.savedJournalStickers = undefined;
           backup.socialPosts = undefined; // Media backup doesn't need text posts, images inside posts are usually URLs or generic
+          backup.courses = undefined; // Media backup doesn't need study texts
       }
 
       try { return JSON.stringify(backup); } catch (e: any) { throw new Error("导出失败: 数据量过大"); }

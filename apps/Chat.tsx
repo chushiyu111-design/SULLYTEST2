@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB, ScheduledMessage } from '../utils/db';
@@ -307,11 +309,11 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
                 />
             )}
 
-            {/* Layer 3: Reply/Quote Block */}
+            {/* Layer 3: Reply/Quote Block - UPDATED LAYOUT */}
             {m.replyTo && (
-                <div className="relative z-10 mb-2 text-xs bg-black/5 p-2 rounded-lg border-l-2 border-current opacity-70 max-w-full flex flex-col gap-0.5">
-                    <span className="font-bold opacity-90">{m.replyTo.name}:</span>
-                    <span className="truncate opacity-80 italic">"{m.replyTo.content}"</span>
+                <div className="relative z-10 mb-1 text-[10px] bg-black/5 p-1.5 rounded-md border-l-2 border-current opacity-60 flex flex-col gap-0.5 max-w-full overflow-hidden">
+                    <span className="font-bold opacity-90 truncate">{m.replyTo.name}</span>
+                    <span className="truncate italic">"{m.replyTo.content}"</span>
                 </div>
             )}
 
@@ -349,7 +351,7 @@ const Chat: React.FC = () => {
     // Stats
     const [lastTokenUsage, setLastTokenUsage] = useState<number | null>(null);
 
-    const [modalType, setModalType] = useState<'none' | 'transfer' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji'>('none');
+    const [modalType, setModalType] = useState<'none' | 'transfer' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji' | 'history-manager'>('none');
     const [transferAmt, setTransferAmt] = useState('');
     const [emojiImportText, setEmojiImportText] = useState('');
     const [settingsContextLimit, setSettingsContextLimit] = useState(500);
@@ -457,7 +459,6 @@ const Chat: React.FC = () => {
     // --- AI Logic ---
 
     const triggerAI = async (currentMsgs: Message[]) => {
-        // ... (AI Logic remains unchanged) ...
         if (isTyping || !char) return;
         if (!apiConfig.baseUrl) { alert("请先在设置中配置 API URL"); return; }
 
@@ -553,12 +554,15 @@ ${groupLogStr}
             }
 
             const limit = char.contextLimit || 500;
-            const historySlice = currentMsgs.slice(-limit);
+            
+            // HISTORY FILTERING: Only include messages AFTER the hideBeforeMessageId
+            const effectiveHistory = currentMsgs.filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId);
+            const historySlice = effectiveHistory.slice(-limit);
             
             let timeGapHint = "";
             if (historySlice.length >= 2) {
-                const lastMsg = currentMsgs[currentMsgs.length - 2];
-                const currentMsg = currentMsgs[currentMsgs.length - 1];
+                const lastMsg = historySlice[historySlice.length - 2];
+                const currentMsg = historySlice[historySlice.length - 1];
                 if (lastMsg && currentMsg) timeGapHint = getTimeGapHint(lastMsg, currentMsg.timestamp);
             }
 
@@ -900,6 +904,17 @@ ${groupLogStr}
         setModalType('none');
     };
 
+    // HISTORY MANAGEMENT
+    const handleSetHistoryStart = (messageId: number | undefined) => {
+        updateCharacter(char.id, { hideBeforeMessageId: messageId });
+        setModalType('none');
+        if (messageId) {
+            addToast('已隐藏历史消息 (仅显示此条及之后)', 'success');
+        } else {
+            addToast('已恢复全部历史记录', 'success');
+        }
+    };
+
     const handleReroll = async () => {
         if (isTyping || messages.length === 0) return;
         
@@ -1109,7 +1124,9 @@ ${rawLog.substring(0, 10000)}
     }, []);
 
     const displayMessages = messages
-        .filter(m => m.metadata?.source !== 'date') 
+        .filter(m => m.metadata?.source !== 'date')
+        // Hide messages before the cut-off ID if set
+        .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
         .filter(m => {
             // Apply Hide System Logs Filter
             if (char.hideSystemLogs && m.role === 'system') return false;
@@ -1170,6 +1187,15 @@ ${rawLog.substring(0, 10000)}
                              开启后，将不再显示 Date/App 产生的上下文提示文本（转账、戳一戳、图片发送提示除外）。
                          </p>
                      </div>
+
+                     {/* History Manager Button */}
+                     <div className="pt-2 border-t border-slate-100">
+                         <button onClick={() => setModalType('history-manager')} className="w-full py-3 bg-slate-50 text-slate-600 font-bold rounded-2xl border border-slate-200 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.9v5.25c0 .414.336.75.75.75h6.75a.75.75 0 0 0 .75-.75v-9.21a.75.75 0 0 0-.213-.53l-2.25-2.25a.75.75 0 0 0-.53-.22h-3.75a.75.75 0 0 0-.75.75v5.25Z" /></svg>
+                             管理上下文 / 隐藏历史
+                         </button>
+                         <p className="text-[10px] text-slate-400 mt-2 text-center">可选择从某条消息开始显示，隐藏之前的记录（不被 AI 读取）。</p>
+                     </div>
                      
                      <div className="pt-2 border-t border-slate-100">
                          <label className="text-xs font-bold text-red-400 uppercase mb-3 block">危险区域 (Danger Zone)</label>
@@ -1184,6 +1210,26 @@ ${rawLog.substring(0, 10000)}
                              执行清空
                          </button>
                      </div>
+                </div>
+            </Modal>
+
+            {/* History Manager Modal */}
+            <Modal
+                isOpen={modalType === 'history-manager'} title="历史记录断点" onClose={() => setModalType('none')}
+                footer={<><button onClick={() => handleSetHistoryStart(undefined)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl">恢复全部</button><button onClick={() => setModalType('none')} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">完成</button></>}
+            >
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto no-scrollbar p-1">
+                    <p className="text-xs text-slate-400 text-center mb-2">点击某条消息，将其设为“新的起点”。此条之前的消息将被隐藏且不发送给 AI。</p>
+                    {messages.slice().reverse().map(m => (
+                        <div key={m.id} onClick={() => handleSetHistoryStart(m.id)} className={`p-3 rounded-xl border cursor-pointer text-xs flex gap-2 items-start ${char.hideBeforeMessageId === m.id ? 'bg-primary/10 border-primary ring-1 ring-primary' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
+                            <span className="text-slate-400 font-mono whitespace-nowrap pt-0.5">[{new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}]</span>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-slate-600 mb-0.5">{m.role === 'user' ? '我' : char.name}</div>
+                                <div className="text-slate-500 truncate">{m.content}</div>
+                            </div>
+                            {char.hideBeforeMessageId === m.id && <span className="text-primary font-bold text-[10px] bg-white px-2 rounded-full border border-primary/20">起点</span>}
+                        </div>
+                    ))}
                 </div>
             </Modal>
             

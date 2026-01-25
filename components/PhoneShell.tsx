@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useEffect } from 'react';
 import { useOS } from '../context/OSContext';
 import StatusBar from './os/StatusBar';
@@ -17,7 +19,8 @@ import JournalApp from '../apps/JournalApp';
 import ScheduleApp from '../apps/ScheduleApp'; 
 import RoomApp from '../apps/RoomApp'; 
 import CheckPhone from '../apps/CheckPhone';
-import SocialApp from '../apps/SocialApp'; // New
+import SocialApp from '../apps/SocialApp'; 
+import StudyApp from '../apps/StudyApp'; // New
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
 import { StatusBar as CapStatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
@@ -164,7 +167,8 @@ const PhoneShell: React.FC = () => {
       case AppID.Schedule: return <ScheduleApp />;
       case AppID.Room: return <RoomApp />; 
       case AppID.CheckPhone: return <CheckPhone />;
-      case AppID.Social: return <SocialApp />; // New App
+      case AppID.Social: return <SocialApp />;
+      case AppID.Study: return <StudyApp />; // New
       case AppID.Launcher:
       default: return <Launcher />;
     }

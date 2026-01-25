@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
@@ -39,7 +41,6 @@ const DateApp: React.FC = () => {
     
     const [currentText, setCurrentText] = useState<string>(''); 
     const [displayedText, setDisplayedText] = useState<string>(''); 
-    const [fullNovelText, setFullNovelText] = useState<string>(''); 
     const [isTextAnimating, setIsTextAnimating] = useState(false);
     const [showInputBox, setShowInputBox] = useState(false);
     
@@ -53,6 +54,13 @@ const DateApp: React.FC = () => {
     const [hasSavedOpening, setHasSavedOpening] = useState(false); // Track if opening is saved
     const [lastAiText, setLastAiText] = useState(''); // Track last AI response for reroll UI rollback
 
+    // --- NEW: Editing State ---
+    const [dateMessages, setDateMessages] = useState<Message[]>([]);
+    const [modalType, setModalType] = useState<'none' | 'message-options' | 'edit-message'>('none');
+    const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+    const [editContent, setEditContent] = useState('');
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const novelScrollRef = useRef<HTMLDivElement>(null);
     const [uploadTarget, setUploadTarget] = useState<'bg' | 'sprite'>('bg');
@@ -65,14 +73,29 @@ const DateApp: React.FC = () => {
     useEffect(() => {
         if (char) {
             setTempSpriteConfig(char.spriteConfig || DEFAULT_SPRITE_CONFIG);
+            // Load messages for Novel Mode
+            loadDateMessages();
         }
-    }, [char, mode]);
+    }, [char, mode]); // Reload on mode switch to keep fresh
+
+    const loadDateMessages = async () => {
+        if (char) {
+            const msgs = await DB.getMessagesByCharId(char.id);
+            const filtered = msgs.filter(m => m.metadata?.source === 'date').sort((a,b) => a.timestamp - b.timestamp);
+            setDateMessages(filtered);
+            
+            // Check if opening is already saved
+            if (filtered.length > 0) {
+                setHasSavedOpening(true);
+            }
+        }
+    };
 
     useEffect(() => {
         if (isNovelMode && novelScrollRef.current) {
             novelScrollRef.current.scrollTop = novelScrollRef.current.scrollHeight;
         }
-    }, [fullNovelText, isNovelMode, showInputBox]);
+    }, [dateMessages.length, isNovelMode, showInputBox]);
 
     useEffect(() => {
         if (!currentText || isNovelMode) {
@@ -117,7 +140,6 @@ const DateApp: React.FC = () => {
         setDialogueQueue([]);
         setDialogueBatch([]);
         setCurrentText('');
-        setFullNovelText('');
         setInput('');
         setIsNovelMode(false);
         setHasSavedOpening(false);
@@ -348,11 +370,15 @@ ${recentMsgs}
         setCurrentSprite(initialSprite);
         setTempSpriteConfig(char.spriteConfig || DEFAULT_SPRITE_CONFIG);
         
-        // Init Full Text
+        // Initial queue parsing from Local Preview if not saved
         const startText = peekStatus || "Waiting for connection...";
-        setFullNovelText(startText);
         
-        // Initial queue parsing
+        // IMPORTANT: Ensure messages are loaded from DB to support editing
+        loadDateMessages().then(() => {
+            // If we have messages, the last AI message sets the stage
+            // We use effect dependencies to handle this actually
+        });
+        
         const items = parseDialogue(startText, 'normal');
         setDialogueBatch(items); 
         setDialogueQueue(items);
@@ -503,11 +529,7 @@ ${recentMsgs}
             setHasSavedOpening(true);
         }
 
-        // 2. Append user text to novel view immediately
-        const userLog = `\n\n> ${userProfile.name}: ${userMsg}\n\n`;
-        setFullNovelText(prev => prev + userLog);
-
-        // 3. Save User Message
+        // 2. Save User Message
         await DB.saveMessage({ 
             charId: char.id, 
             role: 'user', 
@@ -516,6 +538,18 @@ ${recentMsgs}
             metadata: { source: 'date' } // HIDDEN IN CHAT APP
         });
         
+        // Update Local State for rendering immediately
+        const newMsgUser = { 
+            id: Date.now(), 
+            charId: char.id, 
+            role: 'user', 
+            type: 'text', 
+            content: userMsg, 
+            metadata: { source: 'date' }, 
+            timestamp: Date.now() 
+        } as Message;
+        setDateMessages(prev => [...prev, newMsgUser]);
+
         setIsTyping(true);
         
         try {
@@ -529,7 +563,7 @@ ${recentMsgs}
             setLastAiText(content); // Store for potential reroll
 
             // 4. Save AI Response
-            await DB.saveMessage({ 
+            const aiMsgId = await DB.saveMessage({ 
                 charId: char.id, 
                 role: 'assistant', 
                 type: 'text', 
@@ -537,17 +571,20 @@ ${recentMsgs}
                 metadata: { source: 'date' }
             });
             
-            // 5. Update UI
-            // Filter noise before displaying
-            let cleanText = content.replace(/\[.*?\]/g, '');
-            // Clean common leaks from Full Text
-            cleanText = cleanText.split('\n').filter(l => !isContextNoise(l)).join('\n');
+            // Update Local State
+            const newMsgAI = { 
+                id: aiMsgId, 
+                charId: char.id, 
+                role: 'assistant', 
+                type: 'text', 
+                content: content, 
+                metadata: { source: 'date' }, 
+                timestamp: Date.now() 
+            } as Message;
+            setDateMessages(prev => [...prev, newMsgAI]);
             
-            setFullNovelText(prev => prev + cleanText);
-            
-            // Use the new Line-Based Parser
+            // 5. Update VN View
             const items = parseDialogue(content, 'normal'); 
-            
             setDialogueBatch(items);
             setDialogueQueue(items);
             
@@ -587,16 +624,8 @@ ${recentMsgs}
             // Delete DB record
             await DB.deleteMessage(lastMsg.id);
             
-            // Remove text from Full Novel View
-            if (lastAiText) {
-                setFullNovelText(prev => {
-                    const cleanLast = lastAiText.replace(/\[.*?\]/g, '');
-                    // Also attempt to clean noise if it was present
-                    const cleanLastNoNoise = cleanLast.split('\n').filter(l => !isContextNoise(l)).join('\n');
-                    // Try removing exact match first, if fails, simple replace might leave artifacts but it's acceptable for reroll edge case
-                    return prev.replace(cleanLastNoNoise, '').replace(cleanLast, '');
-                });
-            }
+            // Update Local State
+            setDateMessages(prev => prev.filter(m => m.id !== lastMsg.id));
 
             // 4. Re-call API using the PREVIOUS message (User input)
             const userMsgObj = msgs[msgs.length - 2];
@@ -612,7 +641,7 @@ ${recentMsgs}
             setLastAiText(content);
 
             // 5. Save New AI Response
-            await DB.saveMessage({ 
+            const newId = await DB.saveMessage({ 
                 charId: char.id, 
                 role: 'assistant', 
                 type: 'text', 
@@ -620,12 +649,19 @@ ${recentMsgs}
                 metadata: { source: 'date' }
             });
 
+            // Update Local State
+            const newMsgAI = { 
+                id: newId, 
+                charId: char.id, 
+                role: 'assistant', 
+                type: 'text', 
+                content: content, 
+                metadata: { source: 'date' }, 
+                timestamp: Date.now() 
+            } as Message;
+            setDateMessages(prev => [...prev, newMsgAI]);
+
             // 6. Update UI
-            let cleanText = content.replace(/\[.*?\]/g, '');
-            cleanText = cleanText.split('\n').filter(l => !isContextNoise(l)).join('\n');
-            
-            setFullNovelText(prev => prev + cleanText);
-            
             const items = parseDialogue(content, 'normal'); 
             setDialogueBatch(items);
             setDialogueQueue(items);
@@ -671,6 +707,51 @@ ${recentMsgs}
             addToast(e.message, 'error');
         } finally {
             if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    // --- EDITING HANDLERS ---
+    const handleTouchStart = (msg: Message) => {
+        longPressTimer.current = setTimeout(() => {
+            setSelectedMessage(msg);
+            setModalType('message-options');
+        }, 600);
+    };
+
+    const handleTouchEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    const handleDeleteMessage = async () => {
+        if (!selectedMessage) return;
+        await DB.deleteMessage(selectedMessage.id);
+        setDateMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
+        setModalType('none');
+        addToast('记录已删除', 'success');
+    };
+
+    const handleStartEdit = () => {
+        if (!selectedMessage) return;
+        setEditContent(selectedMessage.content);
+        setModalType('edit-message');
+    };
+
+    const handleConfirmEdit = async () => {
+        if (!selectedMessage) return;
+        await DB.updateMessage(selectedMessage.id, editContent);
+        setDateMessages(prev => prev.map(m => m.id === selectedMessage.id ? { ...m, content: editContent } : m));
+        setModalType('none');
+        addToast('已修改', 'success');
+        
+        // If editing the very last AI message, update the Visual Novel view too
+        if (dateMessages.length > 0 && selectedMessage.id === dateMessages[dateMessages.length - 1].id && selectedMessage.role === 'assistant') {
+             const items = parseDialogue(editContent);
+             setDialogueBatch(items);
+             setDialogueQueue(items);
+             if (items.length > 0) processNextDialogue(items[0], items.slice(1));
         }
     };
 
@@ -980,7 +1061,7 @@ ${recentMsgs}
 
             {/* 3. Content Layers */}
             
-            {/* 3a. Novel Mode Layer (Immersive Text) */}
+            {/* 3a. Novel Mode Layer (Immersive Text - UPDATED) */}
             {isNovelMode && (
                 <div 
                     ref={novelScrollRef}
@@ -989,10 +1070,43 @@ ${recentMsgs}
                 >
                     <div className="min-h-full flex flex-col justify-end">
                         <div className="max-w-2xl mx-auto animate-fade-in space-y-6">
-                             {fullNovelText.split('\n').map((line, idx) => line.trim() && (
-                                 <p key={idx} className="whitespace-pre-wrap font-serif text-[18px] text-slate-200 text-justify leading-loose tracking-wide drop-shadow-md border-l-2 border-white/10 pl-4">
-                                     {line}
-                                 </p>
+                             {/* Render Peek Status if no messages yet */}
+                             {dateMessages.length === 0 && !hasSavedOpening && peekStatus && (
+                                <div className="text-slate-200/50 italic text-center text-sm mb-8 px-4">
+                                    {peekStatus.split('\n').map((line, idx) => line.trim() && (
+                                        <p key={idx} className="whitespace-pre-wrap leading-relaxed tracking-wide my-2">
+                                            {line}
+                                        </p>
+                                    ))}
+                                </div>
+                             )}
+
+                             {/* Render Interactive Messages */}
+                             {dateMessages.map((msg) => (
+                                 <div 
+                                    key={msg.id} 
+                                    className="group relative rounded-xl transition-colors -mx-4 px-4 py-2 active:bg-white/5"
+                                    onTouchStart={() => handleTouchStart(msg)}
+                                    onTouchEnd={handleTouchEnd}
+                                    onMouseDown={() => handleTouchStart(msg)}
+                                    onMouseUp={handleTouchEnd}
+                                    onMouseLeave={handleTouchEnd}
+                                    onContextMenu={(e) => { e.preventDefault(); setSelectedMessage(msg); setModalType('message-options'); }}
+                                >
+                                     {msg.role === 'user' ? (
+                                         <p className="whitespace-pre-wrap font-serif text-[16px] text-slate-400 text-right leading-loose tracking-wide italic border-r-2 border-slate-600/50 pr-4">
+                                             {msg.content} <span className="text-[10px] uppercase font-sans not-italic ml-2 opacity-50">{userProfile.name}</span>
+                                         </p>
+                                     ) : (
+                                         <div>
+                                             {msg.content.split('\n').map((line, idx) => line.trim() && (
+                                                 <p key={idx} className="whitespace-pre-wrap font-serif text-[18px] text-slate-200 text-justify leading-loose tracking-wide drop-shadow-md border-l-2 border-white/10 pl-4 mb-4 last:mb-0">
+                                                     {line}
+                                                 </p>
+                                             ))}
+                                         </div>
+                                     )}
+                                 </div>
                              ))}
                         </div>
                     </div>
@@ -1098,6 +1212,36 @@ ${recentMsgs}
                 <div className="text-center text-slate-500 text-sm py-2">
                     离开后对话进度将不被保存，但记忆会留存。
                 </div>
+            </Modal>
+
+            {/* 6. Message Options Modal (Edit/Delete) */}
+            <Modal
+                isOpen={modalType === 'message-options'} title="消息操作" onClose={() => setModalType('none')}
+            >
+                <div className="space-y-3">
+                    {selectedMessage?.type === 'text' && (
+                        <button onClick={handleStartEdit} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+                            编辑内容
+                        </button>
+                    )}
+                    <button onClick={handleDeleteMessage} className="w-full py-3 bg-red-50 text-red-500 font-medium rounded-2xl active:bg-red-100 transition-colors flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                        删除消息
+                    </button>
+                </div>
+            </Modal>
+
+            {/* 7. Edit Message Modal */}
+            <Modal
+                isOpen={modalType === 'edit-message'} title="编辑内容" onClose={() => setModalType('none')}
+                footer={<><button onClick={() => setModalType('none')} className="flex-1 py-3 bg-slate-100 rounded-2xl">取消</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">保存</button></>}
+            >
+                <textarea 
+                    value={editContent} 
+                    onChange={e => setEditContent(e.target.value)} 
+                    className="w-full h-32 bg-slate-100 rounded-2xl p-4 resize-none focus:ring-1 focus:ring-primary/20 transition-all text-sm leading-relaxed" 
+                />
             </Modal>
 
         </div>
