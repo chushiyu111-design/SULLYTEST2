@@ -597,8 +597,7 @@ const Character: React.FC = () => {
             const dates = Object.keys(msgsByDate).sort();
             const newMemories: MemoryFragment[] = [];
 
-            // Build Context once (outside loop if static, but re-building inside ensures cleanliness)
-            // Actually it's static per character session
+            // Build Context once
             const baseContext = ContextBuilder.buildCoreContext(formData, userProfile);
 
             for (let i = 0; i < dates.length; i++) {
@@ -615,29 +614,29 @@ const Character: React.FC = () => {
 
 ### [System Instruction: Memory Archival]
 当前日期: ${date}
-任务: 请回顾今天的聊天记录，将其转化为一条**属于你自己的**“核心记忆”。
+任务: 请回顾今天的聊天记录，生成一份【高精度的事件日志】。
 
-### 核心撰写规则 (Review Protocols)
-1.  **绝对第一人称**: 
+### 核心撰写规则 (Strict Protocols)
+1.  **覆盖率 (Coverage)**:
+    - 必须包含今天聊过的**每一个**独立话题。
+    - **严禁**为了精简而合并不同的话题。哪怕只是聊了一句“天气不好”，如果这是一个独立的话题，也要单独列出。
+    - 不要忽略闲聊，那是生活的一部分。
+
+2.  **视角 (Perspective)**:
     - 你【就是】"${formData.name}"。这是【你】的私密日记。
-    - 必须用“我”来称呼自己，用“${userProfile.name}”称呼对方。
-    - **严禁**使用第三人称。
-    - **严禁**使用死板的AI总结语气。
+    - 每一条都必须是“我”的视角。用“${userProfile.name}”称呼对方。
 
-2.  **保持人设语气**: 
-    - 你的语气、口癖、态度必须与平时聊天完全一致。
-    - 包含当时的情绪波动。
+3.  **格式 (Format)**:
+    - 不要写成一整段。
+    - **必须**使用 Markdown 无序列表 ( - ... )。
+    - 每一行对应一个具体的事件或话题。
 
-3.  **内容**:
-    - 每一件事你都必须总结到位，
-    - **不丢失任意一件事**，每一件你认为的小事都是用户希望你记住的事，尤其是【关键事件】、【情感转折】和【重要信息】，内容的逻辑要连贯且符合原意。
-
-4.  **输出要求**:
-    - 输出一段精简的文本（yaml格式也可以，不需要 JSON）。
-    - 就像你在写日记一样，直接写内容。
+4.  **去水 (Conciseness)**:
+    - 不要写“今天我和xx聊了...”，直接写发生了什么。
+    - 示例: "- 早上和${userProfile.name}讨论早餐，我想吃小笼包。"
 
 ### 待处理的聊天日志 (Chat Logs)
-${rawLog.substring(0, 10000)}
+${rawLog.substring(0, 200000)}
 `;
 
                 const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -646,7 +645,7 @@ ${rawLog.substring(0, 10000)}
                     body: JSON.stringify({
                         model: apiConfig.model,
                         messages: [{ role: "user", content: prompt }],
-                        max_tokens: 4000, // Increased for stability
+                        max_tokens: 4000, 
                         temperature: 0.5
                     })
                 });
