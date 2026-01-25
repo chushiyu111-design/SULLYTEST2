@@ -7,5 +7,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    rollupOptions: {
+      // 关键修复：将这些包排除在打包之外，让浏览器通过 index.html 的 importmap 加载
+      external: ['pdfjs-dist', 'katex']
+    }
   }
 });
