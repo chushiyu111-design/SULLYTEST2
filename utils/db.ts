@@ -1,8 +1,4 @@
 
-
-
-
-
 import { 
     CharacterProfile, ChatTheme, Message, UserProfile, 
     Task, Anniversary, DiaryEntry, RoomTodo, RoomNote, 
@@ -11,7 +7,7 @@ import {
 
 const DB_NAME = 'AetherOS_Data';
 // CRITICAL FIX: Increment version to force `onupgradeneeded` for recent feature updates
-const DB_VERSION = 25; 
+const DB_VERSION = 26; 
 
 const STORE_CHARACTERS = 'characters';
 const STORE_MESSAGES = 'messages';
