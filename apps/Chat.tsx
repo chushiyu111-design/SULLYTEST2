@@ -945,7 +945,9 @@ ${groupLogStr}
         }
         
         const msgsByDate: Record<string, Message[]> = {};
-        messages.forEach(m => {
+        messages
+        .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId) // <--- 新增这行
+        .forEach(m => {
             const d = new Date(m.timestamp);
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');

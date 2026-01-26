@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useOS } from '../context/OSContext';
 import { AppID, CharacterProfile, MemoryFragment, Message, UserImpression, CharacterExportData } from '../types';
@@ -204,7 +203,7 @@ const ImpressionPanel: React.FC<ImpressionPanelProps> = ({ impression, isGenerat
             {/* Dimension 1: Values & Traits */}
             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
                 <h3 className="text-sm font-bold text-slate-700 mb-6 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 001.414 0l4-4a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     价值地图 (Value Map)
                 </h3>
                 
@@ -578,6 +577,8 @@ const Character: React.FC = () => {
         
         try {
             const msgs = await DB.getMessagesByCharId(formData.id);
+             // 【新增这行】：定义一个过滤后的列表
+        const validMsgs = msgs.filter(m => !formData.hideBeforeMessageId || m.id >= formData.hideBeforeMessageId);
             const msgsByDate: Record<string, Message[]> = {};
             
             msgs.forEach(m => {
@@ -607,7 +608,12 @@ const Character: React.FC = () => {
                 const dayMsgs = msgsByDate[date];
                 const rawLog = dayMsgs.map(m => {
                     const time = new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
-                    return `[${time}] ${m.role === 'user' ? userProfile.name : formData.name}: ${m.content}`;
+                    // FIX: Filter out heavy base64 data from logs sent to LLM
+                    let content = m.content;
+                    if (m.type === 'image') content = '[图片/Image]';
+                    if (m.type === 'emoji') content = `[表情包: ${m.content.split('/').pop() || 'sticker'}]`;
+                    
+                    return `[${time}] ${m.role === 'user' ? userProfile.name : formData.name}: ${content}`;
                 }).join('\n');
 
                 const prompt = `${baseContext}
@@ -699,7 +705,12 @@ ${rawLog.substring(0, 200000)}
           let messagesToAnalyze = "";
           const msgs = await DB.getMessagesByCharId(formData.id);
           const recentMsgs = msgs.slice(-50); // Reduced to 50 to focus on immediate context
-          const msgText = recentMsgs.map(m => `${m.role === 'user' ? boundUser.name : charName}: ${m.content}`).join('\n');
+          const msgText = recentMsgs.map(m => {
+              // Also filter images in impression generation to save tokens
+              let content = m.content;
+              if (m.type === 'image') content = '[图片]';
+              return `${m.role === 'user' ? boundUser.name : charName}: ${content}`;
+          }).join('\n');
           
           if (msgText) messagesToAnalyze += `\n【最近的聊天记录 (Recent Chats)】:\n${msgText}\n`;
           
@@ -1065,7 +1076,7 @@ ${messagesToAnalyze}
                    {detailTab === 'memory' && (
                        <div className="space-y-4 animate-fade-in">
                            <div className="flex justify-center gap-2 mb-4">
-                               <button onClick={() => setShowBatchModal(true)} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">批量总结（该功能检修中，暂时别用）</button>
+                               <button onClick={() => setShowBatchModal(true)} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">批量总结（可指定日期）</button>
                                <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">导入/清洗</button>
                                <button onClick={handleExportPreview} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">备份</button>
                            </div>
