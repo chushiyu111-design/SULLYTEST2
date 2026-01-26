@@ -20,6 +20,15 @@ export enum AppID {
   Study = 'study', // New App
 }
 
+export interface SystemLog {
+    id: string;
+    timestamp: number;
+    type: 'error' | 'network' | 'system';
+    source: string;
+    message: string;
+    detail?: string;
+}
+
 export interface AppConfig {
   id: AppID;
   name: string;

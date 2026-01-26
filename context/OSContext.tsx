@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile } from '../types';
+import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog } from '../types';
 import { DB } from '../utils/db';
 
 interface OSContextType {
@@ -60,6 +60,10 @@ interface OSContextType {
   exportSystem: (mode: 'data' | 'media') => Promise<string>;
   importSystem: (json: string) => Promise<void>;
   resetSystem: () => Promise<void>;
+
+  // Logs
+  systemLogs: SystemLog[];
+  clearLogs: () => void;
 }
 
 // ... (defaultTheme, defaultApiConfig, generateAvatar, defaultUserProfile, sullyV2 definitions remain same) ...
@@ -275,13 +279,123 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [toasts, setToasts] = useState<Toast[]>([]);
   
   const [lastMsgTimestamp, setLastMsgTimestamp] = useState<number>(0);
-  // NEW: Unread Messages State
   const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+  
+  // LOGS
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
 
   const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const interceptorsInitialized = useRef(false);
+
+  // --- Global Error Interception ---
+  useEffect(() => {
+      if (interceptorsInitialized.current) return;
+      interceptorsInitialized.current = true;
+
+      // 1. Monkey Patch Fetch
+      const originalFetch = window.fetch;
+      const patchedFetch = async (...args: [RequestInfo | URL, RequestInit?]) => {
+          const [resource, config] = args;
+          
+          // Filter out benign requests if needed (e.g. assets)
+          // We mainly want to catch API calls to LLM services
+          const urlStr = String(resource);
+          
+          try {
+              const response = await originalFetch(...args);
+              
+              if (!response.ok) {
+                  // Only log if it's likely an API call (contains chat/completions or models)
+                  if (urlStr.includes('/chat/completions') || urlStr.includes('/models')) {
+                      try {
+                          const clone = response.clone();
+                          const text = await clone.text();
+                          setSystemLogs(prev => [{
+                              id: `log-${Date.now()}`,
+                              timestamp: Date.now(),
+                              type: 'network',
+                              source: 'API Request',
+                              message: `HTTP ${response.status} Error`,
+                              detail: `URL: ${urlStr}\nResponse: ${text.substring(0, 500)}`
+                          }, ...prev.slice(0, 49)]); // Keep last 50
+                      } catch (e) {
+                          setSystemLogs(prev => [{
+                              id: `log-${Date.now()}`,
+                              timestamp: Date.now(),
+                              type: 'network',
+                              source: 'API Request',
+                              message: `HTTP ${response.status} (Unreadable Body)`,
+                              detail: `URL: ${urlStr}`
+                          }, ...prev.slice(0, 49)]);
+                      }
+                  }
+              }
+              return response;
+          } catch (err: any) {
+              // Network Failure
+              setSystemLogs(prev => [{
+                  id: `log-${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: 'network',
+                  source: 'Network',
+                  message: err.message || 'Fetch Failed',
+                  detail: `URL: ${urlStr}`
+              }, ...prev.slice(0, 49)]);
+              throw err;
+          }
+      };
+
+      // Safely apply the fetch patch
+      try {
+          window.fetch = patchedFetch;
+      } catch (e) {
+          // If simple assignment fails (e.g. read-only property), try Object.defineProperty
+          try {
+              Object.defineProperty(window, 'fetch', {
+                  value: patchedFetch,
+                  writable: true,
+                  configurable: true
+              });
+          } catch (e2) {
+              console.warn("Failed to install network interceptor (window.fetch is read-only). Logs will be limited.", e2);
+          }
+      }
+
+      // 2. Monkey Patch Console.error
+      // Apps use console.error inside try/catch blocks for logic errors
+      const originalConsoleError = console.error;
+      console.error = (...args) => {
+          originalConsoleError(...args);
+          
+          // Try to extract useful info
+          const msg = args.map(a => (a instanceof Error ? a.message : String(a))).join(' ');
+          const detail = args.map(a => (a instanceof Error ? a.stack : '')).join('\n');
+
+          // Ignore specific benign errors if needed
+          if (msg.includes('Warning:')) return;
+
+          setSystemLogs(prev => [{
+              id: `log-${Date.now()}-${Math.random()}`,
+              timestamp: Date.now(),
+              type: 'error',
+              source: 'Application',
+              message: msg.substring(0, 100),
+              detail: detail || msg
+          }, ...prev.slice(0, 49)]);
+      };
+
+      return () => {
+          // Ideally we restore, but in a SPA specifically for this OS simulation, persisting is fine.
+          // window.fetch = originalFetch;
+          // console.error = originalConsoleError;
+      };
+  }, []);
+
+  const clearLogs = () => setSystemLogs([]);
 
   useEffect(() => {
     const loadSettings = async () => {
+        // ... (existing load logic)
         const savedThemeStr = localStorage.getItem('os_theme');
         const savedApi = localStorage.getItem('os_api_config');
         const savedModels = localStorage.getItem('os_available_models');
@@ -329,6 +443,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setCustomIcons(loadedIcons);
             }
         } catch (e) {
+            // Error loading DB is a critical system error
             console.error("Failed to load assets from DB", e);
         }
 
@@ -349,11 +464,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         let finalChars = dbChars;
 
         if (!finalChars.some(c => c.id === sullyV2.id)) {
-            console.log("Injecting Sully V2 Preset...");
+            // console.log("Injecting Sully V2 Preset..."); 
             await DB.saveCharacter(sullyV2);
             finalChars = [...finalChars, sullyV2];
         } else {
-            // REPAIR LOGIC: Fix corrupted sprites or default props
+            // REPAIR LOGIC
             const existingSully = finalChars.find(c => c.id === sullyV2.id);
             if (existingSully) {
                  const currentSprites = existingSully.sprites || {};
@@ -364,7 +479,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                  if (isCorrupted || !existingSully.roomConfig || needsWallUpdate) {
                      const restoredSprites = { ...sullyV2.sprites, ...currentSprites };
                      
-                     // Restore sprite defaults if missing
                      if (!restoredSprites['normal']) restoredSprites['normal'] = sullyV2.sprites!['normal'];
                      if (!restoredSprites['happy']) restoredSprites['happy'] = sullyV2.sprites!['happy'];
                      if (!restoredSprites['sad']) restoredSprites['sad'] = sullyV2.sprites!['sad'];
@@ -372,10 +486,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                      if (!restoredSprites['shy']) restoredSprites['shy'] = sullyV2.sprites!['shy'];
                      if (!restoredSprites['chibi']) restoredSprites['chibi'] = sullyV2.sprites!['chibi'];
 
-                     // Update Room Config (Background force update if default)
                      const updatedRoomConfig = existingSully.roomConfig ? {
                          ...existingSully.roomConfig,
-                         // Only update wall if it was the OLD default or empty, otherwise keep user's custom wall
                          wallImage: (existingSully.roomConfig.wallImage?.includes('radial-gradient') || !existingSully.roomConfig.wallImage) 
                                     ? sullyV2.roomConfig?.wallImage 
                                     : existingSully.roomConfig.wallImage
@@ -452,7 +564,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                           newUnreadState[char.id] = (newUnreadState[char.id] || 0) + dueMessages.length;
 
                           // [NEW] Web Notification Logic
-                          // Check for Browser Support and Permission
                           if (window.Notification && Notification.permission === 'granted') {
                               try {
                                   const notif = new Notification(char.name, {
@@ -468,13 +579,13 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                                       setActiveCharacterId(char.id);
                                   };
                               } catch (e) {
-                                  console.error("Web Notification failed", e);
+                                  // console.error("Web Notification failed", e);
                               }
                           }
                       }
                   }
               } catch (e) {
-                  console.error("Schedule check failed for", char.name, e);
+                  // console.error("Schedule check failed for", char.name, e);
               }
           }
           if (hasNewMessage) {
@@ -724,7 +835,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         groups, createGroup, deleteGroup,
         userProfile, updateUserProfile, availableModels, setAvailableModels: saveModels,
         apiPresets, addApiPreset, removeApiPreset, customThemes, addCustomTheme, removeCustomTheme, toasts, addToast, customIcons, setCustomIcon,
-        lastMsgTimestamp, unreadMessages, clearUnread, exportSystem, importSystem, resetSystem
+        lastMsgTimestamp, unreadMessages, clearUnread, exportSystem, importSystem, resetSystem,
+        systemLogs, clearLogs // Added Logs
       }}
     >
       {children}
