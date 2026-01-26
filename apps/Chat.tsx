@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB, ScheduledMessage } from '../utils/db';
@@ -35,9 +36,24 @@ interface MessageItemProps {
     charName: string;
     userAvatar: string; 
     onLongPress: (m: Message) => void;
+    selectionMode: boolean;
+    isSelected: boolean;
+    onToggleSelect: (id: number) => void;
 }
 
-const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeTheme, charAvatar, charName, userAvatar, onLongPress }: MessageItemProps) => {
+const MessageItem = React.memo(({ 
+    msg: m, 
+    isFirstInGroup, 
+    isLastInGroup, 
+    activeTheme, 
+    charAvatar, 
+    charName, 
+    userAvatar, 
+    onLongPress,
+    selectionMode,
+    isSelected,
+    onToggleSelect
+}: MessageItemProps) => {
     const isUser = m.role === 'user';
     const isSystem = m.role === 'system';
     const marginBottom = isLastInGroup ? 'mb-6' : 'mb-1.5';
@@ -54,7 +70,11 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
             startPos.current = { x: e.clientX, y: e.clientY };
         }
         
-        longPressTimer.current = setTimeout(() => onLongPress(m), 600);
+        longPressTimer.current = setTimeout(() => {
+            if (!selectionMode) {
+                onLongPress(m);
+            }
+        }, 600);
     };
 
     const handleTouchEnd = () => {
@@ -87,6 +107,14 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
         }
     };
 
+    const handleClick = (e: React.MouseEvent) => {
+        if (selectionMode) {
+            e.stopPropagation();
+            e.preventDefault();
+            onToggleSelect(m.id);
+        }
+    };
+
     const interactionProps = {
         onMouseDown: handleTouchStart,
         onMouseUp: handleTouchEnd,
@@ -98,8 +126,9 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
         onTouchCancel: handleTouchEnd, // Handle system interruptions
         onContextMenu: (e: React.MouseEvent) => {
             e.preventDefault();
-            onLongPress(m);
-        }
+            if (!selectionMode) onLongPress(m);
+        },
+        onClick: handleClick
     };
 
     const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -140,13 +169,22 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
         const displayText = m.content.replace(/^\[(System|系统|System Log|系统记录)\s*[:：]?\s*/i, '').replace(/\]$/, '').trim();
         
         return (
-            <div className="flex justify-center my-6 px-10 animate-fade-in" {...interactionProps}>
-                <div className="flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
-                    {/* Optional Icon based on content */}
-                    {displayText.includes('任务') ? '✨' : 
-                     displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
-                     displayText.includes('转账') ? '💰' : '🔔'}
-                    <span className="text-[10px] font-medium tracking-wide">{displayText}</span>
+            <div className={`flex items-center w-full ${selectionMode ? 'pl-8' : ''} animate-fade-in relative transition-all duration-300`}>
+                {selectionMode && (
+                    <div className="absolute left-2 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
+                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                        </div>
+                    </div>
+                )}
+                <div className="flex justify-center my-6 px-10 w-full" {...interactionProps}>
+                    <div className="flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
+                        {/* Optional Icon based on content */}
+                        {displayText.includes('任务') ? '✨' : 
+                        displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
+                        displayText.includes('转账') ? '💰' : '🔔'}
+                        <span className="text-[10px] font-medium tracking-wide">{displayText}</span>
+                    </div>
                 </div>
             </div>
         );
@@ -154,7 +192,14 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
 
     if (m.type === 'interaction') {
         return (
-            <div className={`flex flex-col items-center ${marginBottom} w-full animate-fade-in`}>
+            <div className={`flex flex-col items-center ${marginBottom} w-full animate-fade-in relative transition-all duration-300 ${selectionMode ? 'pl-8' : ''}`}>
+                {selectionMode && (
+                    <div className="absolute left-2 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
+                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                        </div>
+                    </div>
+                )}
                 <div className="text-[10px] text-slate-400 mb-1 opacity-70">{formatTime(m.timestamp)}</div>
                 <div className="group relative cursor-pointer active:scale-95 transition-transform" {...interactionProps}>
                         <div className="text-[11px] text-slate-500 bg-slate-200/50 backdrop-blur-sm px-4 py-1.5 rounded-full flex items-center gap-1.5 border border-white/40 shadow-sm select-none">
@@ -169,11 +214,21 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
     }
 
     const commonLayout = (content: React.ReactNode) => (
-            <div className={`flex items-end ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative`}>
+            <div className={`flex items-end ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative transition-all duration-300 ${selectionMode ? 'pl-12' : ''}`}>
+                {selectionMode && (
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
+                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                        </div>
+                    </div>
+                )}
+
                 {!isUser && <div className="mr-3">{renderAvatar(charAvatar)}</div>}
                 
                 <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[75%]`} {...interactionProps}>
-                    {content}
+                    <div className={selectionMode ? 'pointer-events-none' : ''}>
+                        {content}
+                    </div>
                     {isLastInGroup && <div className="text-[9px] text-slate-400/80 px-1 mt-1 font-medium">{formatTime(m.timestamp)}</div>}
                 </div>
 
@@ -357,7 +412,9 @@ const MessageItem = React.memo(({ msg: m, isFirstInGroup, isLastInGroup, activeT
            prev.msg.content === next.msg.content &&
            prev.isFirstInGroup === next.isFirstInGroup &&
            prev.isLastInGroup === next.isLastInGroup &&
-           prev.activeTheme === next.activeTheme;
+           prev.activeTheme === next.activeTheme &&
+           prev.selectionMode === next.selectionMode && 
+           prev.isSelected === next.isSelected;
 });
 
 
@@ -392,6 +449,10 @@ const Chat: React.FC = () => {
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isSummarizing, setIsSummarizing] = useState(false);
 
+    // --- Multi-Select State ---
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedMsgIds, setSelectedMsgIds] = useState<Set<number>>(new Set());
+
     const char = characters.find(c => c.id === activeCharacterId) || characters[0];
     const currentThemeId = char?.bubbleStyle || 'default';
     const activeTheme = useMemo(() => customThemes.find(t => t.id === currentThemeId) || PRESET_THEMES[currentThemeId] || PRESET_THEMES.default, [currentThemeId, customThemes]);
@@ -415,6 +476,8 @@ const Chat: React.FC = () => {
             setVisibleCount(30);
             setLastTokenUsage(null);
             setReplyTarget(null); // Reset reply on char switch
+            setSelectionMode(false);
+            setSelectedMsgIds(new Set());
         }
     }, [activeCharacterId]);
 
@@ -437,16 +500,16 @@ const Chat: React.FC = () => {
     };
 
     useLayoutEffect(() => {
-        if (scrollRef.current) {
+        if (scrollRef.current && !selectionMode) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [messages.length, activeCharacterId]);
+    }, [messages.length, activeCharacterId, selectionMode]);
 
     useEffect(() => {
-        if (isTyping && scrollRef.current) {
+        if (isTyping && scrollRef.current && !selectionMode) {
              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
         }
-    }, [messages, isTyping, recallStatus]);
+    }, [messages, isTyping, recallStatus, selectionMode]);
 
     const formatTime = (ts: number) => {
         return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -855,8 +918,10 @@ ${groupLogStr}
     const handleTouchStart = (item: Message | {name: string, url: string}, type: 'message' | 'emoji') => {
         longPressTimer.current = setTimeout(() => {
             if (type === 'message') {
-                setSelectedMessage(item as Message);
-                setModalType('message-options');
+                if (!selectionMode) {
+                    setSelectedMessage(item as Message);
+                    setModalType('message-options');
+                }
             } else {
                 setSelectedEmoji(item as any);
                 setModalType('delete-emoji');
@@ -1155,6 +1220,36 @@ ${rawLog.substring(0, 200000)}
         setModalType('message-options');
     }, []);
 
+    // --- Batch Selection Logic ---
+    const handleEnterSelectionMode = () => {
+        if (selectedMessage) {
+            setSelectedMsgIds(new Set([selectedMessage.id]));
+            setSelectionMode(true);
+            setModalType('none');
+            setSelectedMessage(null);
+        }
+    };
+
+    const toggleMessageSelection = (id: number) => {
+        const next = new Set(selectedMsgIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedMsgIds(next);
+    };
+
+    const handleBatchDelete = async () => {
+        if (selectedMsgIds.size === 0) return;
+        
+        await DB.deleteMessages(Array.from(selectedMsgIds));
+        setMessages(prev => prev.filter(m => !selectedMsgIds.has(m.id)));
+        
+        addToast(`已删除 ${selectedMsgIds.size} 条消息`, 'success');
+        
+        // Exit selection mode
+        setSelectionMode(false);
+        setSelectedMsgIds(new Set());
+    };
+
     const displayMessages = messages
         .filter(m => m.metadata?.source !== 'date')
         // Hide messages before the cut-off ID if set
@@ -1269,6 +1364,10 @@ ${rawLog.substring(0, 200000)}
                 isOpen={modalType === 'message-options'} title="消息操作" onClose={() => setModalType('none')}
             >
                 <div className="space-y-3">
+                    <button onClick={handleEnterSelectionMode} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        多选 / 批量删除
+                    </button>
                     <button onClick={handleReplyMessage} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg>
                         引用 / 回复
@@ -1309,25 +1408,33 @@ ${rawLog.substring(0, 200000)}
 
             {/* Header */}
             <div className="h-24 bg-white/80 backdrop-blur-xl px-5 flex items-end pb-4 border-b border-slate-200/60 shrink-0 z-30 sticky top-0 shadow-sm relative">
-                <div className="flex items-center gap-3 w-full">
-                    <button onClick={closeApp} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-</svg></button>
-                    <div onClick={() => setShowPanel('chars')} className="flex-1 min-w-0 flex items-center gap-3 cursor-pointer">
-                        <img src={char.avatar} className="w-10 h-10 rounded-xl object-cover shadow-sm" alt="a" />
-                        <div>
-                            <div className="font-bold text-slate-800">{char.name}</div>
-                            <div className="flex items-center gap-2">
-                                <div className="text-[10px] text-slate-400 uppercase">Online</div>
-                                {lastTokenUsage && (
-                                    <div className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-mono border border-slate-200">
-                                        ⚡ {lastTokenUsage}
-                                    </div>
-                                )}
+                {selectionMode ? (
+                    <div className="flex items-center justify-between w-full">
+                        <button onClick={() => { setSelectionMode(false); setSelectedMsgIds(new Set()); }} className="text-sm font-bold text-slate-500 px-2 py-1">取消</button>
+                        <span className="text-sm font-bold text-slate-800">已选 {selectedMsgIds.size} 项</span>
+                        <div className="w-10"></div>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-3 w-full">
+                        <button onClick={closeApp} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+    </svg></button>
+                        <div onClick={() => setShowPanel('chars')} className="flex-1 min-w-0 flex items-center gap-3 cursor-pointer">
+                            <img src={char.avatar} className="w-10 h-10 rounded-xl object-cover shadow-sm" alt="a" />
+                            <div>
+                                <div className="font-bold text-slate-800">{char.name}</div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-[10px] text-slate-400 uppercase">Online</div>
+                                    {lastTokenUsage && (
+                                        <div className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-mono border border-slate-200">
+                                            ⚡ {lastTokenUsage}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
+                        <button onClick={() => triggerAI(messages)} disabled={isTyping} className={`p-2 rounded-full ${isTyping ? 'bg-slate-100' : 'bg-primary/10 text-primary'}`}><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg></button>
                     </div>
-                    <button onClick={() => triggerAI(messages)} disabled={isTyping} className={`p-2 rounded-full ${isTyping ? 'bg-slate-100' : 'bg-primary/10 text-primary'}`}><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg></button>
-                </div>
+                )}
                 {isSummarizing && (
                     <div className="absolute top-full left-0 w-full bg-indigo-50 border-b border-indigo-100 p-2 flex items-center justify-center gap-2">
                         <div className="w-3 h-3 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div>
@@ -1364,11 +1471,14 @@ ${rawLog.substring(0, 200000)}
                             charName={char.name}
                             userAvatar={userProfile.avatar} // Pass User Avatar
                             onLongPress={handleMessageLongPress}
+                            selectionMode={selectionMode}
+                            isSelected={selectedMsgIds.has(m.id)}
+                            onToggleSelect={toggleMessageSelection}
                         />
                     );
                 })}
                 
-                {(isTyping || recallStatus) && (
+                {(isTyping || recallStatus) && !selectionMode && (
                     <div className="flex items-end gap-3 px-3 mb-6 animate-fade-in">
                         <img src={char.avatar} className="w-9 h-9 rounded-[10px] object-cover" />
                         <div className="bg-white px-4 py-3 rounded-2xl shadow-sm">
@@ -1400,17 +1510,29 @@ ${rawLog.substring(0, 200000)}
                     </div>
                 )}
 
-                <div className="p-3 px-4 flex gap-3 items-end">
-                    <button onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')} className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg></button>
-                    <div className="flex-1 bg-slate-100 rounded-[24px] flex items-center px-1 border border-transparent focus-within:bg-white focus-within:border-primary/30 transition-all">
-                        <textarea rows={1} value={input} onChange={handleInputChange} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(); }}} className="flex-1 bg-transparent px-4 py-3 text-[15px] resize-none max-h-24" placeholder="Message..." style={{ height: 'auto' }} />
-                        <button onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')} className="p-2 text-slate-400 hover:text-primary"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg></button>
+                {selectionMode ? (
+                    <div className="p-3 flex justify-center bg-white/50 backdrop-blur-md">
+                        <button 
+                            onClick={handleBatchDelete} 
+                            className="w-full py-3 bg-red-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                            删除选中 ({selectedMsgIds.size})
+                        </button>
                     </div>
-                    <button onClick={() => handleSendText()} disabled={!input.trim()} className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${input.trim() ? 'bg-primary text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" /></svg></button>
-                </div>
+                ) : (
+                    <div className="p-3 px-4 flex gap-3 items-end">
+                        <button onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')} className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg></button>
+                        <div className="flex-1 bg-slate-100 rounded-[24px] flex items-center px-1 border border-transparent focus-within:bg-white focus-within:border-primary/30 transition-all">
+                            <textarea rows={1} value={input} onChange={handleInputChange} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(); }}} className="flex-1 bg-transparent px-4 py-3 text-[15px] resize-none max-h-24" placeholder="Message..." style={{ height: 'auto' }} />
+                            <button onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')} className="p-2 text-slate-400 hover:text-primary"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg></button>
+                        </div>
+                        <button onClick={() => handleSendText()} disabled={!input.trim()} className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${input.trim() ? 'bg-primary text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" /></svg></button>
+                    </div>
+                )}
                 
                 {/* ... Panel Content (Kept same) ... */}
-                {showPanel !== 'none' && (
+                {showPanel !== 'none' && !selectionMode && (
                     <div className="bg-slate-50 h-72 border-t border-slate-200/60 overflow-y-auto no-scrollbar relative z-0">
                          {showPanel === 'actions' && (
                              <div className="p-6 grid grid-cols-4 gap-8">
