@@ -1,8 +1,4 @@
 
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
@@ -244,6 +240,8 @@ const DateApp: React.FC = () => {
 
     // --- Optimized Visual Novel Parser (Line-based State Machine) ---
     const parseDialogue = (fullText: string, initialEmotion: string = 'normal'): DialogueItem[] => {
+        if (!fullText) return [];
+        
         // 1. Split by newlines. Filter empty lines.
         const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         
@@ -757,6 +755,17 @@ ${recentMsgs}
         }
     };
 
+    // --- History Deletion Logic ---
+    const handleDeleteMessageInHistory = async (id: number) => {
+        await DB.deleteMessage(id);
+        // Update history sessions locally
+        setHistorySessions(prev => prev.map(session => ({
+            ...session,
+            msgs: session.msgs.filter(m => m.id !== id)
+        })).filter(s => s.msgs.length > 0)); 
+        addToast('记录已删除', 'success');
+    };
+
     // --- Renderers ---
 
     if (mode === 'select' || !char) {
@@ -816,18 +825,28 @@ ${recentMsgs}
                                 </div>
                                 <div className="p-4 space-y-4">
                                     {session.msgs.map(m => {
-                                        let text = m.content;
+                                        const rawContent = m.content || ''; // Safe guard against null
+                                        // Truncate for safety in rendering list if super long
+                                        const safeContent = rawContent.length > 500 ? rawContent.substring(0, 500) + '...' : rawContent;
                                         // Clean up visual tags for better readability in history (e.g. [happy])
-                                        text = text.replace(/\[.*?\]/g, '').trim();
+                                        let text = safeContent.replace(/\[.*?\]/g, '').trim();
+                                        
                                         return (
-                                            <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                            <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} relative group`}>
                                                 <div className={`max-w-[90%] text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'text-slate-500 text-right italic' : 'text-slate-800'}`}>
                                                     {m.role === 'user' ? (
                                                         <span className="bg-slate-100 px-3 py-2 rounded-xl rounded-tr-none inline-block">{text}</span>
                                                     ) : (
-                                                        <span>{text}</span>
+                                                        <span>{text || '(无内容)'}</span>
                                                     )}
                                                 </div>
+                                                {/* DELETE BUTTON for History Items */}
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteMessageInHistory(m.id); }}
+                                                    className="text-[10px] text-red-300 hover:text-red-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity px-2"
+                                                >
+                                                    删除此条
+                                                </button>
                                             </div>
                                         );
                                     })}
@@ -1101,9 +1120,9 @@ ${recentMsgs}
                                          </p>
                                      ) : (
                                          <div>
-                                             {msg.content.split('\n').map((line, idx) => line.trim() && (
+                                             {(msg.content || '').split('\n').map((line, idx) => line.trim() && (
                                                  <p key={idx} className="whitespace-pre-wrap font-serif text-[18px] text-slate-200 text-justify leading-loose tracking-wide drop-shadow-md border-l-2 border-white/10 pl-4 mb-4 last:mb-0">
-                                                     {line}
+                                                     {line.length > 1000 ? line.substring(0, 1000) + '...(过长截断)' : line}
                                                  </p>
                                              ))}
                                          </div>

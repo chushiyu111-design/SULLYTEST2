@@ -1230,12 +1230,14 @@ ${rawLog.substring(0, 200000)}
         }
     };
 
-    const toggleMessageSelection = (id: number) => {
-        const next = new Set(selectedMsgIds);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        setSelectedMsgIds(next);
-    };
+    const toggleMessageSelection = useCallback((id: number) => {
+        setSelectedMsgIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
 
     const handleBatchDelete = async () => {
         if (selectedMsgIds.size === 0) return;
