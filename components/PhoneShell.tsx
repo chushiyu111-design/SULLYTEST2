@@ -166,7 +166,7 @@ const PhoneShell: React.FC = () => {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-pink-200 via-purple-200 to-indigo-200 text-slate-900 font-sans select-none">
-       {/* Optimized Background Layer with Hardware Acceleration Hints */}
+       {/* Optimized Background Layer */}
        <div 
          className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
          style={{ 
@@ -182,11 +182,16 @@ const PhoneShell: React.FC = () => {
        
        <div className={`absolute inset-0 transition-all duration-500 ${activeApp === AppID.Launcher ? 'bg-transparent' : 'bg-white/50 backdrop-blur-3xl'}`} />
        
-       <div className="relative z-10 w-full h-full flex flex-col pt-[env(safe-area-inset-top)]">
+       {/* 
+          FIX: Removed 'pt-[env(safe-area-inset-top)]' from main container.
+          Apps must handle their own top/bottom spacing to allow full-screen immersive backgrounds (like Game/Date modes) 
+          to reach the edges without gaps revealing the underlying desktop wallpaper.
+       */}
+       <div className="relative z-10 w-full h-full flex flex-col">
           <StatusBar />
-          <div className="flex-1 relative overflow-hidden flex flex-col">{renderApp()}</div>
+          <div className="flex-1 relative w-full overflow-hidden flex flex-col">{renderApp()}</div>
           
-          <div className="absolute bottom-0 left-0 w-full h-6 flex justify-center items-end pb-2 z-50 pointer-events-none">
+          <div className="absolute bottom-0 left-0 w-full h-6 flex justify-center items-end pb-2 mb-[env(safe-area-inset-bottom)] z-50 pointer-events-none">
              <div className="w-32 h-1 bg-slate-900/10 rounded-full backdrop-blur-md"></div>
           </div>
        </div>

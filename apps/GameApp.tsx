@@ -129,7 +129,9 @@ const GameApp: React.FC = () => {
     const [isTyping, setIsTyping] = useState(false);
     const [diceResult, setDiceResult] = useState<number | null>(null);
     const [isRolling, setIsRolling] = useState(false);
-    const logsEndRef = useRef<HTMLDivElement>(null);
+    
+    // [FIX] Use Container Ref instead of Element Ref for safer scrolling
+    const logsContainerRef = useRef<HTMLDivElement>(null);
 
     // UI Toggles
     const [showSystemMenu, setShowSystemMenu] = useState(false);
@@ -142,11 +144,20 @@ const GameApp: React.FC = () => {
         loadGames();
     }, []);
 
+    // [FIX] Updated Auto-scroll logic: Use scrollTop on container
     useEffect(() => {
-        if (view === 'play' && logsEndRef.current) {
-            logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (view === 'play' && logsContainerRef.current) {
+            // Use setTimeout to ensure render is complete, allowing smooth scroll to new bottom
+            setTimeout(() => {
+                if (logsContainerRef.current) {
+                    logsContainerRef.current.scrollTo({
+                        top: logsContainerRef.current.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
         }
-    }, [activeGame?.logs, view]);
+    }, [activeGame?.logs, view, isTyping]);
 
     const loadGames = async () => {
         const list = await DB.getAllGames();
@@ -745,8 +756,9 @@ Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆
     const theme = GAME_THEMES[activeGame.theme];
     const activePlayers = characters.filter(c => activeGame.playerCharIds.includes(c.id));
 
+    // [FIX] Changed from absolute inset-0 to h-full relative to fix overscroll and height layout issues
     return (
-        <div className={`h-full w-full flex flex-col ${theme.bg} ${theme.text} ${theme.font} transition-colors duration-500 relative`}>
+        <div className={`h-full w-full relative flex flex-col ${theme.bg} ${theme.text} ${theme.font} transition-colors duration-500 overflow-hidden`}>
             
             {/* Header */}
             <div className={`h-20 flex items-end justify-between px-4 pb-3 border-b ${theme.border} shrink-0 bg-opacity-90 backdrop-blur z-20 relative`}>
@@ -811,7 +823,10 @@ Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆
             </div>
 
             {/* Stage / Log Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar relative">
+            <div 
+                ref={logsContainerRef} // [FIX] Attach Ref to scrollable container
+                className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar relative animate-fade-in"
+            >
                 {activeGame.logs.map((log, i) => {
                     const isGM = log.role === 'gm';
                     const isSystem = log.role === 'system';
@@ -869,12 +884,14 @@ Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆
                         </div>
                     );
                 })}
-                {isTyping && <div className="text-xs opacity-50 animate-pulse pl-2 font-mono">DM 正在计算结果...</div>}
-                <div ref={logsEndRef} />
+                {isTyping && <div className="text-xs opacity-50 animate-pulse pl-2 font-mono">GM 正在计算结果...</div>}
+                
+                {/* [FIX] Removed logsEndRef usage */}
             </div>
 
             {/* Controls */}
-            <div className={`p-4 border-t ${theme.border} bg-opacity-90 backdrop-blur shrink-0 z-20`}>
+            {/* Added pb-[env(safe-area-inset-bottom)] to ensure content clears home bar on full screen devices */}
+            <div className={`p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t ${theme.border} bg-opacity-90 backdrop-blur shrink-0 z-20 transition-colors duration-500`}>
                 
                 {/* AI Suggested Options Area */}
                 {activeGame.suggestedActions && activeGame.suggestedActions.length > 0 && !isTyping && (

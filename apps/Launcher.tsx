@@ -357,8 +357,8 @@ const Launcher: React.FC = () => {
           ))}
       </div>
 
-      {/* Floating Dock */}
-      <div className="mt-auto pt-4 flex justify-center w-full px-4 mb-4 relative z-30">
+      {/* Floating Dock - Updated Margin and Safe Area handling */}
+      <div className="mt-auto flex justify-center w-full px-4 mb-2 pb-[env(safe-area-inset-bottom)] relative z-30">
            <div className="bg-white/20 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.2)] px-4 py-3 flex gap-3 sm:gap-6 items-center mx-auto max-w-full justify-between overflow-x-auto no-scrollbar transform-gpu">
                {dockAppsConfig.map(app => (
                    <div key={app.id} className="relative">
