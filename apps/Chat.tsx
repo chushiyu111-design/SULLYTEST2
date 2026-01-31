@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
@@ -176,8 +175,7 @@ const Chat: React.FC = () => {
         setMessages(updatedMsgs);
         setShowPanel('none');
         
-        // Trigger Hook
-        triggerAI(updatedMsgs);
+        // Manual trigger only: Removed auto triggerAI call
     };
 
     const handleReroll = async () => {
