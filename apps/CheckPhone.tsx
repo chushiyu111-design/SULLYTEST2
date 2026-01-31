@@ -423,64 +423,66 @@ Format:
         );
     };
 
-    const renderChatDetail = () => {
-        if (!selectedChatRecord || !targetChar) return null;
+  const renderChatDetail = () => {
+    if (!selectedChatRecord || !targetChar) return null;
 
-        // Parse logic: look for "Me:" or "我:" vs others
-        const lines = selectedChatRecord.detail.split('\n').filter(l => l.trim());
-        const parsedLines = lines.map(line => {
-            const isMe = line.startsWith('我') || line.startsWith('Me') || line.startsWith('Me:') || line.startsWith('我:');
-            const content = line.replace(/^(我|Me|对方|Them|[\w\u4e00-\u9fa5]+)[:：]\s*/, '');
-            return { isMe, content };
-        });
+    // Parse logic: look for "Me:" or "我:" vs others
+    const lines = selectedChatRecord.detail.split('\n').filter(l => l.trim());
+    const parsedLines = lines.map(line => {
+        const isMe = line.startsWith('我') || line.startsWith('Me') || line.startsWith('Me:') || line.startsWith('我:');
+        const content = line.replace(/^(我|Me|对方|Them|[\w\u4e00-\u9fa5]+)[:：]\s*/, '');
+        return { isMe, content };
+    });
 
-        return (
-            // FIX: Use absolute inset-0 to stay within the safe area padding provided by PhoneShell
-            <div className="absolute inset-0 w-full h-full flex flex-col bg-[#f2f2f2] z-50">
-                {renderHeader(selectedChatRecord.title, () => setActiveAppId('chat'))}
-                
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar overscroll-contain">
-                    {parsedLines.map((msg, idx) => (
-                        <div key={idx} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                            {!msg.isMe && (
-                                <div className="w-9 h-9 rounded-md bg-gray-300 flex items-center justify-center text-xs text-gray-500 mr-2 shrink-0">
-                                    {selectedChatRecord.title[0]}
-                                </div>
-                            )}
-                            <div className={`px-3 py-2 rounded-lg max-w-[75%] text-sm leading-relaxed shadow-sm break-words relative ${msg.isMe ? 'bg-[#95ec69] text-black' : 'bg-white text-black'}`}>
-                                {msg.isMe && <div className="absolute top-2 -right-1.5 w-3 h-3 bg-[#95ec69] rotate-45"></div>}
-                                {!msg.isMe && <div className="absolute top-3 -left-1 w-2.5 h-2.5 bg-white rotate-45"></div>}
-                                <span className="relative z-10">{msg.content}</span>
+    return (
+        // 关键修复：添加不透明背景色，确保完全覆盖
+      <div className="fixed inset-0 flex flex-col bg-[#f2f2f2] z-[100] overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+            {renderHeader(selectedChatRecord.title, () => setActiveAppId('chat'))}
+            
+            {/* 聊天内容区域 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar overscroll-contain min-h-0">
+                {parsedLines.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
+                        {!msg.isMe && (
+                            <div className="w-9 h-9 rounded-md bg-gray-300 flex items-center justify-center text-xs text-gray-500 mr-2 shrink-0">
+                                {selectedChatRecord.title[0]}
                             </div>
-                            {msg.isMe && (
-                                <img src={targetChar.avatar} className="w-9 h-9 rounded-md object-cover ml-2 shrink-0 shadow-sm" />
-                            )}
+                        )}
+                        <div className={`px-3 py-2 rounded-lg max-w-[75%] text-sm leading-relaxed shadow-sm break-words relative ${msg.isMe ? 'bg-[#95ec69] text-black' : 'bg-white text-black'}`}>
+                            {msg.isMe && <div className="absolute top-2 -right-1.5 w-3 h-3 bg-[#95ec69] rotate-45"></div>}
+                            {!msg.isMe && <div className="absolute top-3 -left-1 w-2.5 h-2.5 bg-white rotate-45"></div>}
+                            <span className="relative z-10">{msg.content}</span>
                         </div>
-                    ))}
-                    {isLoading && (
-                        <div className="flex justify-center py-4">
-                            <div className="flex gap-1">
-                                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
-                                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-100"></div>
-                                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-200"></div>
-                            </div>
+                        {msg.isMe && (
+                            <img src={targetChar.avatar} className="w-9 h-9 rounded-md object-cover ml-2 shrink-0 shadow-sm" />
+                        )}
+                    </div>
+                ))}
+                {isLoading && (
+                    <div className="flex justify-center py-4">
+                        <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-100"></div>
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-200"></div>
                         </div>
-                    )}
-                    <div ref={chatEndRef} />
-                </div>
-
-                <div className="shrink-0 w-full p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-[#f7f7f7] border-t border-gray-200 z-30">
-                    <button 
-                        onClick={handleContinueChat} 
-                        disabled={isLoading}
-                        className="w-full py-3 bg-white border border-gray-300 rounded-xl text-sm font-bold text-slate-600 shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                    >
-                        {isLoading ? '对方正在输入...' : '👀 偷看后续 / 拱火'}
-                    </button>
-                </div>
+                    </div>
+                )}
+                <div ref={chatEndRef} />
             </div>
-        );
-    };
+
+            {/* 底部按钮 - 关键修复：移除复杂的 env() 计算，使用固定 padding */}
+            <div className="shrink-0 w-full p-4 bg-[#f7f7f7] border-t border-gray-200">
+                <button 
+                    onClick={handleContinueChat} 
+                    disabled={isLoading}
+                    className="w-full py-3 bg-white border border-gray-300 rounded-xl text-sm font-bold text-slate-600 shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                    {isLoading ? '对方正在输入...' : '👀 偷看后续 / 拱火'}
+                </button>
+            </div>
+        </div>
+    );
+};
 
     const renderCallList = () => {
         const list = records.filter(r => r.type === 'call').sort((a,b) => b.timestamp - a.timestamp);
@@ -683,7 +685,7 @@ Format:
     // Phone View Container
     // FIXED: Use absolute inset-0 to force fill parent container properly
     return (
-        <div className="relative w-full h-full bg-slate-900 overflow-hidden font-sans overscroll-none">
+        <div className="absolute inset-0 bg-slate-900 overflow-hidden font-sans overscroll-none">
             {showDebug && <LayoutInspector />}
             {activeAppId === 'home' ? renderDesktop() : (
                 <>
