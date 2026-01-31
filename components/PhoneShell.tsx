@@ -21,7 +21,8 @@ import StudyApp from '../apps/StudyApp';
 import FAQApp from '../apps/FAQApp'; 
 import GameApp from '../apps/GameApp'; 
 import WorldbookApp from '../apps/WorldbookApp';
-import NovelApp from '../apps/NovelApp'; // Added
+import NovelApp from '../apps/NovelApp'; 
+import BankApp from '../apps/BankApp'; // Import BankApp
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
 import { StatusBar as CapStatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
@@ -209,7 +210,8 @@ const PhoneShell: React.FC = () => {
       case AppID.FAQ: return <FAQApp />; 
       case AppID.Game: return <GameApp />; 
       case AppID.Worldbook: return <WorldbookApp />;
-      case AppID.Novel: return <NovelApp />; // Added
+      case AppID.Novel: return <NovelApp />; 
+      case AppID.Bank: return <BankApp />; // Added Case
       case AppID.Launcher:
       default: return <Launcher />;
     }
@@ -239,17 +241,19 @@ const PhoneShell: React.FC = () => {
           REMOVED 'flex flex-col' to fix layout issues in CheckPhone (gap) and SocialApp (jumping).
           Now it acts as a pure container for full-screen apps.
        */}
-       <div 
-         className="absolute inset-0 z-10 w-full h-full overflow-hidden bg-transparent overscroll-none"
-         style={{ 
-             paddingTop: activeApp !== AppID.Launcher ? 'env(safe-area-inset-top)' : 0 
-         }}
-       >
-          
+      <div 
+  className="absolute inset-0 z-10 w-full h-full overflow-hidden bg-transparent overscroll-none flex flex-col"
+  style={{ 
+      paddingTop: activeApp !== AppID.Launcher ? 'env(safe-area-inset-top)' : 0,
+      paddingBottom: activeApp !== AppID.Launcher ? 'env(safe-area-inset-bottom)' : 0
+  }}
+> 
           {/* App Container */}
-          <AppErrorBoundary onCloseApp={closeApp}>
-              {renderApp()}
-          </AppErrorBoundary>
+         <div className="flex-1 relative overflow-hidden">
+    <AppErrorBoundary onCloseApp={closeApp}>
+        {renderApp()}
+    </AppErrorBoundary>
+</div>
 
           {/* Overlays: Status Bar (Top) */}
           <StatusBar />
