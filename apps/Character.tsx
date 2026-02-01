@@ -56,6 +56,9 @@ const Character: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardImportRef = useRef<HTMLInputElement>(null);
   
+  // Race Condition Guards
+  const editingIdRef = useRef<string | null>(null);
+  
   // Modals
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -76,6 +79,11 @@ const Character: React.FC = () => {
   // Impression State
   const [isGeneratingImpression, setIsGeneratingImpression] = useState(false);
 
+  // Sync Ref with State
+  useEffect(() => {
+      editingIdRef.current = editingId;
+  }, [editingId]);
+
   // CRITICAL FIX: Breaking the render loop.
   // We only sync from global 'characters' to local 'formData' when:
   // 1. We enter edit mode (view becomes detail)
@@ -89,13 +97,17 @@ const Character: React.FC = () => {
         }
     }
   }, [editingId, view]); 
-  // REMOVED 'characters' dependency to prevent infinite loop.
-  // The local 'formData' drives the UI. 'updateCharacter' pushes changes to global context.
-  // We don't need to re-pull from global context while editing unless we force a reload.
-
+  
+  // Auto-save Effect with Safety Guard
   useEffect(() => {
     if (formData && editingId) {
-        updateCharacter(editingId, formData);
+        // SAFETY GUARD: Only save if the formData ID matches the currently active editing ID.
+        // This prevents overwriting Character B with Character A's data if a delayed async call updates formData.
+        if (formData.id === editingId) {
+            updateCharacter(editingId, formData);
+        } else {
+            console.warn(`Race condition prevented: Tried to save data for ${formData.id} into slot ${editingId}`);
+        }
     }
   }, [formData]);
 
@@ -107,8 +119,11 @@ const Character: React.FC = () => {
   };
 
   const handleChange = (field: keyof CharacterProfile, value: any) => {
-      if (!formData) return;
-      setFormData({ ...formData, [field]: value });
+      // Functional update to prevent stale state issues in simple closures
+      setFormData(prev => {
+          if (!prev) return null;
+          return { ...prev, [field]: value };
+      });
   };
 
   // Worldbook Logic
@@ -200,7 +215,11 @@ const Character: React.FC = () => {
   
   const handleRefineMonth = async (year: string, month: string, rawText: string) => {
       if (!apiConfig.apiKey) { addToast('请先配置 API Key', 'error'); return; }
+      if (!formData) return;
+      
+      const targetId = formData.id; // LOCK ID
       const prompt = `Task: Summarize the following logs (${year}-${month}) into a concise memory. Language: Same as logs (Chinese). ${rawText.substring(0, 5000)}`;
+      
       try {
           const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
@@ -211,10 +230,21 @@ const Character: React.FC = () => {
           const data = await response.json();
           const summary = data.choices[0].message.content.trim();
           const key = `${year}-${month}`;
-          handleChange('refinedMemories', { ...(formData?.refinedMemories || {}), [key]: summary });
-          addToast(`${year}年${month}月记忆精炼完成`, 'success');
+          
+          // CHECK IF USER SWITCHED
+          if (editingIdRef.current === targetId) {
+              // Still on same page
+              handleChange('refinedMemories', { ...(formData.refinedMemories || {}), [key]: summary });
+              addToast(`${year}年${month}月记忆精炼完成`, 'success');
+          } else {
+              // Switched page - Save to DB directly
+              const currentRefined = characters.find(c => c.id === targetId)?.refinedMemories || {};
+              updateCharacter(targetId, { refinedMemories: { ...currentRefined, [key]: summary } });
+              addToast('后台任务完成：记忆已保存到原角色', 'success');
+          }
       } catch (e: any) { addToast(`精炼失败: ${e.message}`, 'error'); }
   };
+
   const handleDeleteMemories = (ids: string[]) => { if (!formData) return; handleChange('memories', (formData.memories || []).filter(m => !ids.includes(m.id))); addToast(`已删除 ${ids.length} 条记忆`, 'success'); };
   const handleUpdateMemory = (id: string, newSummary: string) => { if (!formData) return; handleChange('memories', (formData.memories || []).map(m => m.id === id ? { ...m, summary: newSummary } : m)); addToast('记忆已更新', 'success'); };
   
@@ -238,16 +268,55 @@ const Character: React.FC = () => {
   const handleExportPreview = () => { if (!formData) return; const mems = formData.memories as any[]; if (!mems || mems.length === 0) { addToast('暂无记忆数据可导出', 'info'); return; } const sortedMemories = [...mems].sort((a, b) => a.date.localeCompare(b.date)); let text = `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}\n\n`; if (formData.refinedMemories) { text += `=== 核心记忆 ===\n`; Object.entries(formData.refinedMemories).sort().forEach(([k, v]) => { text += `[${k}]: ${v}\n`; }); text += `\n=== 详细日志 ===\n`; } let currentYear = '', currentMonth = ''; sortedMemories.forEach(mem => { const match = mem.date.match(/(\d{4})[-/年](\d{1,2})/); if (match) { const y = match[1], m = match[2]; if (y !== currentYear) { text += `\n[ ${y}年 ]\n`; currentYear = y; currentMonth = ''; } if (m !== currentMonth) { text += `\n-- ${parseInt(m)}月 --\n\n`; currentMonth = m; } } text += `📅 ${mem.date} ${mem.mood ? `(#${mem.mood})` : ''}\n${mem.summary}\n\n--------------------------\n\n`; }); setExportText(text); setShowExportModal(true); navigator.clipboard.writeText(text).then(() => addToast('内容已自动复制到剪贴板', 'info')).catch(() => {}); };
   const handleNativeShare = async () => { if(!exportText) return; if (Capacitor.isNativePlatform()) { try { const fileName = `${formData?.name || 'character'}_memories.txt`; await Filesystem.writeFile({ path: fileName, data: exportText, directory: Directory.Cache, encoding: Encoding.UTF8 }); const uri = await Filesystem.getUri({ directory: Directory.Cache, path: fileName }); await Share.share({ title: '记忆档案', files: [uri.uri] }); } catch(e: any) { console.error("Native share failed", e); addToast('分享组件调起失败，请直接复制文本', 'error'); } } };
   const handleWebFileDownload = () => { const fileName = `${formData?.name || 'character'}_memories.txt`; const blob = new Blob([exportText], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); addToast('已触发浏览器下载', 'success'); };
-  const handleImportMemories = async () => { if (!importText.trim() || !apiConfig.apiKey) { addToast('请检查输入内容或 API 设置', 'error'); return; } setIsProcessingMemory(true); setImportStatus('正在链接神经云端进行清洗...'); try { const prompt = `Task: Convert this text log into a JSON array. Format: [{ "date": "YYYY-MM-DD", "summary": "...", "mood": "..." }] Text: ${importText.substring(0, 8000)}`; const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` }, body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.1 }) }); if (!response.ok) throw new Error(`HTTP Error: ${response.status}`); const data = await response.json(); let content = data.choices?.[0]?.message?.content || ''; content = content.replace(/```json/g, '').replace(/```/g, '').trim(); const firstBracket = content.indexOf('['); const lastBracket = content.lastIndexOf(']'); if (firstBracket !== -1 && lastBracket !== -1) { content = content.substring(firstBracket, lastBracket + 1); } let parsed; try { parsed = JSON.parse(content); } catch (e) { throw new Error('解析返回数据失败'); } let targetArray = Array.isArray(parsed) ? parsed : (parsed.memories || parsed.data); if (Array.isArray(targetArray)) { const newMems = targetArray.map((m: any) => ({ id: `mem-${Date.now()}-${Math.random()}`, date: m.date || '未知', summary: m.summary || '无内容', mood: m.mood || '记录' })); handleChange('memories', [...(formData?.memories || []), ...newMems]); addToast(`成功导入 ${newMems.length} 条记忆`, 'success'); setShowImportModal(false); } else { throw new Error('结构错误'); } } catch (e: any) { setImportStatus(`错误: ${e.message || '未知错误'}`); addToast('记忆清洗失败', 'error'); } finally { setIsProcessingMemory(false); } };
+  
+  const handleImportMemories = async () => { 
+      if (!importText.trim() || !apiConfig.apiKey) { addToast('请检查输入内容或 API 设置', 'error'); return; } 
+      if (!formData) return;
+      
+      const targetId = formData.id; // LOCK ID
+      setIsProcessingMemory(true); 
+      setImportStatus('正在链接神经云端进行清洗...'); 
+      
+      try { 
+          const prompt = `Task: Convert this text log into a JSON array. Format: [{ "date": "YYYY-MM-DD", "summary": "...", "mood": "..." }] Text: ${importText.substring(0, 8000)}`; 
+          const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` }, body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.1 }) }); 
+          if (!response.ok) throw new Error(`HTTP Error: ${response.status}`); 
+          const data = await response.json(); 
+          let content = data.choices?.[0]?.message?.content || ''; 
+          content = content.replace(/```json/g, '').replace(/```/g, '').trim(); 
+          const firstBracket = content.indexOf('['); 
+          const lastBracket = content.lastIndexOf(']'); 
+          if (firstBracket !== -1 && lastBracket !== -1) { content = content.substring(firstBracket, lastBracket + 1); } 
+          let parsed; try { parsed = JSON.parse(content); } catch (e) { throw new Error('解析返回数据失败'); } 
+          let targetArray = Array.isArray(parsed) ? parsed : (parsed.memories || parsed.data); 
+          
+          if (Array.isArray(targetArray)) { 
+              const newMems = targetArray.map((m: any) => ({ id: `mem-${Date.now()}-${Math.random()}`, date: m.date || '未知', summary: m.summary || '无内容', mood: m.mood || '记录' })); 
+              
+              if (editingIdRef.current === targetId) {
+                  handleChange('memories', [...(formData.memories || []), ...newMems]); 
+                  setShowImportModal(false); 
+                  addToast(`成功导入 ${newMems.length} 条记忆`, 'success'); 
+              } else {
+                  // Background update
+                  const currentMems = characters.find(c => c.id === targetId)?.memories || [];
+                  updateCharacter(targetId, { memories: [...currentMems, ...newMems] });
+                  addToast('后台任务完成：导入记忆已保存', 'success');
+              }
+          } else { throw new Error('结构错误'); } 
+      } catch (e: any) { setImportStatus(`错误: ${e.message || '未知错误'}`); addToast('记忆清洗失败', 'error'); } finally { setIsProcessingMemory(false); } 
+  };
   
   const handleBatchSummarize = async () => {
         if (!apiConfig.apiKey || !formData) return;
+        
+        const targetId = formData.id; // LOCK ID
         setIsBatchProcessing(true);
         setBatchProgress('Initializing...');
         
         try {
-            const msgs = await DB.getMessagesByCharId(formData.id);
-        const validMsgs = msgs.filter(m => !formData.hideBeforeMessageId || m.id >= formData.hideBeforeMessageId);
+            const msgs = await DB.getMessagesByCharId(targetId);
+            const validMsgs = msgs.filter(m => !formData.hideBeforeMessageId || m.id >= formData.hideBeforeMessageId);
             const msgsByDate: Record<string, any[]> = {};
             
             msgs.forEach(m => {
@@ -340,13 +409,29 @@ ${rawLog.substring(0, 200000)}
                 await new Promise(r => setTimeout(r, 500));
             }
 
-            handleChange('memories', [...(formData.memories || []), ...newMemories]);
-            setBatchProgress('Done!');
-            setTimeout(() => {
+            if (editingIdRef.current === targetId) {
+                handleChange('memories', [...(formData.memories || []), ...newMemories]);
+                setBatchProgress('Done!');
+                setTimeout(() => {
+                    setIsBatchProcessing(false);
+                    setShowBatchModal(false);
+                    addToast(`Processed ${newMemories.length} days`, 'success');
+                }, 1000);
+            } else {
+                // Background update
+                const currentMems = characters.find(c => c.id === targetId)?.memories || [];
+                updateCharacter(targetId, { memories: [...currentMems, ...newMemories] });
+                
+                // Cleanup UI state since we are elsewhere
                 setIsBatchProcessing(false);
-                setShowBatchModal(false);
-                addToast(`Processed ${newMemories.length} days`, 'success');
-            }, 1000);
+                setShowBatchModal(false); // Modal is on current view, but we are likely on another view. 
+                // Since this component is unmounted when view changes, this code block might not even run if unmounted.
+                // However, if we switched from Detail to List view, Character.tsx might still be mounted but hidden? 
+                // Actually Character.tsx unmounts detail view content if view changes.
+                // If view changed, this function probably aborted or memory leaked.
+                // Assuming component is still mounted (e.g. switched to Memory tab of another character in same app instance - wait, Character app only shows one at a time).
+                addToast(`后台任务完成：为 ${formData.name} 生成了 ${newMemories.length} 条记忆`, 'success');
+            }
 
         } catch (e: any) {
             setBatchProgress(`Error: ${e.message}`);
@@ -360,13 +445,14 @@ ${rawLog.substring(0, 200000)}
           return;
       }
       
+      const targetId = formData.id; // LOCK ID
       setIsGeneratingImpression(true);
       try {
           const charName = formData.name;
           const boundUser = userProfile;
           
           let messagesToAnalyze = "";
-          const msgs = await DB.getMessagesByCharId(formData.id);
+          const msgs = await DB.getMessagesByCharId(targetId);
           const recentMsgs = msgs.slice(-50); 
           const msgText = recentMsgs.map(m => {
               let content = m.content;
@@ -472,8 +558,13 @@ ${messagesToAnalyze}
           content = content.replace(/```json/g, '').replace(/```/g, '').trim();
           const parsed: UserImpression = JSON.parse(content);
           
-          handleChange('impression', parsed);
-          addToast(isInitialGeneration ? '印象档案已生成' : '印象档案已更新', 'success');
+          if (editingIdRef.current === targetId) {
+              handleChange('impression', parsed);
+              addToast(isInitialGeneration ? '印象档案已生成' : '印象档案已更新', 'success');
+          } else {
+              updateCharacter(targetId, { impression: parsed });
+              addToast('后台任务完成：印象已更新到原角色', 'success');
+          }
 
       } catch (e: any) {
           console.error(e);
