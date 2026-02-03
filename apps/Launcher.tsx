@@ -1,6 +1,3 @@
-
-
-
 import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { INSTALLED_APPS, DOCK_APPS } from '../constants';
@@ -105,11 +102,25 @@ const CharacterWidget = React.memo(({
 });
 
 // 3. Grid Page Component
-const AppGridPage = React.memo(({ apps, openApp }: { apps: typeof INSTALLED_APPS, openApp: (id: AppID) => void }) => {
+const AppGridPage = React.memo(({ 
+    apps, 
+    openApp 
+}: { 
+    apps: typeof INSTALLED_APPS, 
+    openApp: (id: AppID) => void
+}) => {
     return (
-        <div className="grid grid-cols-4 gap-y-6 gap-x-2 place-items-center animate-fade-in">
+        <div className="grid grid-cols-4 gap-y-6 gap-x-2 place-items-center animate-fade-in relative">
              {apps.map(app => (
-                 <AppIcon key={app.id} app={app} onClick={() => openApp(app.id)} />
+                 <div 
+                    key={app.id} 
+                    className="relative transition-transform duration-200 active:scale-95"
+                 >
+                     <AppIcon 
+                        app={app} 
+                        onClick={() => openApp(app.id)} 
+                     />
+                 </div>
              ))}
         </div>
     );
@@ -375,7 +386,10 @@ const Launcher: React.FC = () => {
                             contentColor={contentColor}
                         />
                         <div className="flex-1">
-                            <AppGridPage apps={pageApps} openApp={openApp} />
+                            <AppGridPage 
+                                apps={pageApps} 
+                                openApp={openApp}
+                            />
                         </div>
                       </>
                   ) : (
@@ -395,7 +409,10 @@ const Launcher: React.FC = () => {
                               <div className="h-20"></div>
                           )}
                           
-                          <AppGridPage apps={pageApps} openApp={openApp} />
+                          <AppGridPage 
+                                apps={pageApps} 
+                                openApp={openApp}
+                          />
                           <div className="flex-1"></div>
                       </div>
                   )}

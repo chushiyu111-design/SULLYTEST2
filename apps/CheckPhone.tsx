@@ -656,7 +656,7 @@ Format:
     if (view === 'select') {
         return (
             <div className="absolute inset-0 flex flex-col bg-slate-900 font-light overflow-hidden">
-                <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900/80 sticky top-0 z-10">
+                <div className="h-20 pt-4 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900/80 sticky top-0 z-10 shrink-0">
                     <button onClick={closeApp} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
                     </button>

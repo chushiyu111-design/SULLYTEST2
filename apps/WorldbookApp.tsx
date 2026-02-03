@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useOS } from '../context/OSContext';
 import { Worldbook } from '../types';
@@ -168,7 +167,7 @@ const WorldbookApp: React.FC = () => {
 
     // LIST VIEW
     return (
-        <div className="h-full w-full relative overflow-hidden font-sans bg-slate-100">
+        <div className="h-full w-full relative overflow-hidden font-sans bg-slate-100 flex flex-col">
             {/* Background Atmosphere */}
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-slate-100 to-violet-50 pointer-events-none"></div>
             <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-200/20 rounded-full blur-3xl pointer-events-none"></div>

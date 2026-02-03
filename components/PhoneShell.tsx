@@ -1,4 +1,6 @@
 
+
+
 import React, { useEffect, Component, ErrorInfo } from 'react';
 import { useOS } from '../context/OSContext';
 import StatusBar from './os/StatusBar';
@@ -22,7 +24,8 @@ import FAQApp from '../apps/FAQApp';
 import GameApp from '../apps/GameApp'; 
 import WorldbookApp from '../apps/WorldbookApp';
 import NovelApp from '../apps/NovelApp'; 
-import BankApp from '../apps/BankApp'; // Import BankApp
+import BankApp from '../apps/BankApp'; 
+import BrowserApp from '../apps/BrowserApp'; // Import BrowserApp
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
 import { StatusBar as CapStatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
@@ -211,7 +214,8 @@ const PhoneShell: React.FC = () => {
       case AppID.Game: return <GameApp />; 
       case AppID.Worldbook: return <WorldbookApp />;
       case AppID.Novel: return <NovelApp />; 
-      case AppID.Bank: return <BankApp />; // Added Case
+      case AppID.Bank: return <BankApp />; 
+      case AppID.Browser: return <BrowserApp />; // Added Browser Case
       case AppID.Launcher:
       default: return <Launcher />;
     }
