@@ -96,8 +96,22 @@ export const useChatAI = ({
             }
 
             // 2. Build Message History
+            // CRITICAL: Load full message history from DB up to contextLimit,
+            // not from React state which is capped at 200 for rendering performance
             const limit = char.contextLimit || 500;
-            const { apiMessages, historySlice } = ChatPrompts.buildMessageHistory(currentMsgs, limit, char, userProfile, emojis);
+            let contextMsgs = currentMsgs;
+            if (limit > currentMsgs.length && char.id) {
+                try {
+                    const fullHistory = await DB.getRecentMessagesByCharId(char.id, limit);
+                    if (fullHistory.length > currentMsgs.length) {
+                        console.log(`📊 [Context] Loaded ${fullHistory.length} msgs from DB (React state had ${currentMsgs.length}, contextLimit=${limit})`);
+                        contextMsgs = fullHistory;
+                    }
+                } catch (e) {
+                    console.error('Failed to load full history from DB, using React state:', e);
+                }
+            }
+            const { apiMessages, historySlice } = ChatPrompts.buildMessageHistory(contextMsgs, limit, char, userProfile, emojis);
 
             // 2.5 Strip translation content from previous messages to save tokens
             const cleanedApiMessages = apiMessages.map((msg: any) => {

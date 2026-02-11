@@ -554,7 +554,8 @@ ${isInitialGeneration ? `
   "observed_changes": [
     ${changesInstruction}
   ]
-}`;
+}
+注意：observed_changes 的每一项必须是纯字符串（string），例如 ["最近变得更开朗了", "开始主动分享日常"]。严禁使用对象格式如 {"period": "...", "description": "..."}。`;
 
           const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
@@ -573,7 +574,14 @@ ${isInitialGeneration ? `
           
           content = content.replace(/```json/g, '').replace(/```/g, '').trim();
           const parsed: UserImpression = JSON.parse(content);
-          
+
+          // Normalize observed_changes: convert objects to strings if AI returned wrong format
+          if (parsed.observed_changes && Array.isArray(parsed.observed_changes)) {
+              parsed.observed_changes = parsed.observed_changes.map((c: any) =>
+                  typeof c === 'string' ? c : c?.description ? `[${c.period || ''}] ${c.description}` : JSON.stringify(c)
+              );
+          }
+
           if (editingIdRef.current === targetId) {
               handleChange('impression', parsed);
               addToast(isInitialGeneration ? '印象档案已生成' : '印象档案已更新', 'success');

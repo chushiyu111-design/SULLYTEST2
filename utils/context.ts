@@ -70,7 +70,7 @@ export const ContextBuilder = {
             context += `- TA的喜好: ${imp.value_map.likes.join(', ')}\n`;
             context += `- 情绪雷区: ${imp.emotion_schema.triggers.negative.join(', ')}\n`;
             context += `- 舒适区: ${imp.emotion_schema.comfort_zone}\n`;
-            context += `- 最近观察到的变化: ${imp.observed_changes ? imp.observed_changes.join('; ') : '无'}\n\n`;
+            context += `- 最近观察到的变化: ${imp.observed_changes ? imp.observed_changes.map(c => typeof c === 'string' ? c : (c as any)?.description ? `[${(c as any).period}] ${(c as any).description}` : JSON.stringify(c)).join('; ') : '无'}\n\n`;
         }
 
         // 5. 记忆库 (Memory Bank)
@@ -126,6 +126,20 @@ export const ContextBuilder = {
             memoryContent = "(暂无特定记忆，请基于当前对话互动)";
         }
         context += `${memoryContent}\n\n`;
+
+        // Debug: warn about missing context sections
+        const missing: string[] = [];
+        if (!char.systemPrompt) missing.push('systemPrompt');
+        if (!char.impression) missing.push('impression');
+        if (!char.refinedMemories || Object.keys(char.refinedMemories).length === 0) missing.push('refinedMemories');
+        if (!char.activeMemoryMonths || char.activeMemoryMonths.length === 0) missing.push('activeMemoryMonths');
+        if (!char.mountedWorldbooks || char.mountedWorldbooks.length === 0) missing.push('worldbooks');
+        if (!char.worldview) missing.push('worldview');
+        if (missing.length > 0) {
+            console.log(`⚠️ [Context] Missing/empty fields: ${missing.join(', ')} | context_chars=${context.length}`);
+        } else {
+            console.log(`✅ [Context] All fields present | context_chars=${context.length}`);
+        }
 
         return context;
     }

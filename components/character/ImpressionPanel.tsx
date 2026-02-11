@@ -214,7 +214,7 @@ const ImpressionPanel: React.FC<ImpressionPanelProps> = ({ impression, isGenerat
                         {impression.observed_changes.map((c, i) => (
                             <li key={i} className="text-xs text-amber-900 flex items-start gap-2">
                                 <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                                <span className="opacity-90">{c}</span>
+                                <span className="opacity-90">{typeof c === 'string' ? c : (c as any)?.description ? `[${(c as any).period}] ${(c as any).description}` : JSON.stringify(c)}</span>
                             </li>
                         ))}
                     </ul>
