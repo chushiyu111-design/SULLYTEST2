@@ -14,6 +14,7 @@ import { useChatAI } from '../hooks/useChatAI';
 const Chat: React.FC = () => {
     const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig } = useOS();
     const [messages, setMessages] = useState<Message[]>([]);
+    const [totalMsgCount, setTotalMsgCount] = useState(0);
     const [visibleCount, setVisibleCount] = useState(30);
     const [input, setInput] = useState('');
     const [showPanel, setShowPanel] = useState<'none' | 'actions' | 'emojis' | 'chars'>('none');
@@ -69,7 +70,7 @@ const Chat: React.FC = () => {
     const draftKey = `chat_draft_${activeCharacterId}`;
 
     // --- Initialize Hook ---
-    const { isTyping, recallStatus, searchStatus, lastTokenUsage, setLastTokenUsage, triggerAI } = useChatAI({
+    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, setLastTokenUsage, triggerAI } = useChatAI({
         char,
         userProfile,
         apiConfig,
@@ -112,7 +113,10 @@ const Chat: React.FC = () => {
     useEffect(() => {
         if (activeCharacterId) {
             // Performance: Only load recent messages into state, not the entire history
-            DB.getRecentMessagesByCharId(activeCharacterId, MSG_MEMORY_LIMIT).then(setMessages);
+            DB.getRecentMessagesWithCount(activeCharacterId, MSG_MEMORY_LIMIT).then(({ messages: msgs, totalCount }) => {
+                setMessages(msgs);
+                setTotalMsgCount(totalCount);
+            });
             loadEmojiData();
             const savedDraft = localStorage.getItem(draftKey);
             setInput(savedDraft || '');
@@ -149,7 +153,10 @@ const Chat: React.FC = () => {
 
     useEffect(() => {
         if (activeCharacterId && lastMsgTimestamp > 0) {
-            DB.getRecentMessagesByCharId(activeCharacterId, MSG_MEMORY_LIMIT).then(setMessages);
+            DB.getRecentMessagesWithCount(activeCharacterId, MSG_MEMORY_LIMIT).then(({ messages: msgs, totalCount }) => {
+                setMessages(msgs);
+                setTotalMsgCount(totalCount);
+            });
             clearUnread(activeCharacterId);
         }
     }, [lastMsgTimestamp]);
@@ -170,7 +177,7 @@ const Chat: React.FC = () => {
         if (isTyping && scrollRef.current && !selectionMode) {
              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
         }
-    }, [messages, isTyping, recallStatus, searchStatus, selectionMode]);
+    }, [messages.length, isTyping, recallStatus, searchStatus, selectionMode]);
 
     const formatTime = (ts: number) => {
         return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -213,8 +220,9 @@ const Chat: React.FC = () => {
         }
 
         await DB.saveMessage(msgPayload);
-        const updatedMsgs = await DB.getMessagesByCharId(char.id);
+        const updatedMsgs = await DB.getRecentMessagesByCharId(char.id, MSG_MEMORY_LIMIT);
         setMessages(updatedMsgs);
+        setTotalMsgCount(prev => prev + 1);
         setShowPanel('none');
         
         // Manual trigger only: Removed auto triggerAI call
@@ -396,10 +404,12 @@ const Chat: React.FC = () => {
             }
             await DB.deleteMessages(toDelete.map(m => m.id));
             setMessages(messages.slice(-10));
+            setTotalMsgCount(prev => Math.max(0, prev - toDelete.length));
             addToast(`已清理 ${toDelete.length} 条历史，保留最近10条`, 'success');
         } else {
             await DB.clearMessages(char.id);
             setMessages([]);
+            setTotalMsgCount(0);
             addToast('已清空', 'success');
         }
         setModalType('none');
@@ -491,6 +501,7 @@ const Chat: React.FC = () => {
         if (!selectedMessage) return;
         await DB.deleteMessage(selectedMessage.id);
         setMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
+        setTotalMsgCount(prev => Math.max(0, prev - 1));
         setModalType('none');
         setSelectedMessage(null);
         addToast('消息已删除', 'success');
@@ -558,9 +569,11 @@ const Chat: React.FC = () => {
 
     const handleBatchDelete = async () => {
         if (selectedMsgIds.size === 0) return;
+        const deleteCount = selectedMsgIds.size;
         await DB.deleteMessages(Array.from(selectedMsgIds));
         setMessages(prev => prev.filter(m => !selectedMsgIds.has(m.id)));
-        addToast(`已删除 ${selectedMsgIds.size} 条消息`, 'success');
+        setTotalMsgCount(prev => Math.max(0, prev - deleteCount));
+        addToast(`已删除 ${deleteCount} 条消息`, 'success');
         setSelectionMode(false);
         setSelectedMsgIds(new Set());
     };
@@ -702,18 +715,19 @@ const Chat: React.FC = () => {
              />
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto pt-6 pb-6 no-scrollbar" style={{ backgroundImage: activeTheme.type === 'custom' && activeTheme.user.backgroundImage ? 'none' : undefined }}>
-                {messages.length > visibleCount && (
+                {totalMsgCount > visibleCount && (
                     <div className="flex justify-center mb-6">
                         <button onClick={async () => {
                             if (visibleCount + 30 >= messages.length && activeCharacterId) {
                                 // Load more messages from DB when nearing in-memory limit
-                                const allMsgs = await DB.getRecentMessagesByCharId(activeCharacterId, messages.length + 100);
-                                if (allMsgs.length > messages.length) {
-                                    setMessages(allMsgs);
+                                const { messages: moreMsgs, totalCount } = await DB.getRecentMessagesWithCount(activeCharacterId, messages.length + 100);
+                                if (moreMsgs.length > messages.length) {
+                                    setMessages(moreMsgs);
                                 }
+                                setTotalMsgCount(totalCount);
                             }
                             setVisibleCount(prev => prev + 30);
-                        }} className="px-4 py-2 bg-white/50 backdrop-blur-sm rounded-full text-xs text-slate-500 shadow-sm border border-white hover:bg-white transition-colors">加载历史消息 ({messages.length - visibleCount})</button>
+                        }} className="px-4 py-2 bg-white/50 backdrop-blur-sm rounded-full text-xs text-slate-500 shadow-sm border border-white hover:bg-white transition-colors">加载历史消息 ({totalMsgCount - visibleCount})</button>
                     </div>
                 )}
 
@@ -741,7 +755,7 @@ const Chat: React.FC = () => {
                     );
                 })}
                 
-                {(isTyping || recallStatus || searchStatus) && !selectionMode && (
+                {(isTyping || recallStatus || searchStatus || diaryStatus) && !selectionMode && (
                     <div className="flex items-end gap-3 px-3 mb-6 animate-fade-in">
                         <img src={char.avatar} className="w-9 h-9 rounded-[10px] object-cover" />
                         <div className="bg-white px-4 py-3 rounded-2xl shadow-sm">
@@ -754,6 +768,11 @@ const Chat: React.FC = () => {
                                 <div className="flex items-center gap-2 text-xs text-indigo-500 font-medium">
                                     <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                     {recallStatus}
+                                </div>
+                            ) : diaryStatus ? (
+                                <div className="flex items-center gap-2 text-xs text-amber-600 font-medium">
+                                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    📖 {diaryStatus}
                                 </div>
                             ) : (
                                 <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></div><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></div></div>

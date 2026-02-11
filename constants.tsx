@@ -136,4 +136,4 @@ export const INSTALLED_APPS: AppConfig[] = [
   { id: AppID.Settings, name: '设置', icon: 'Settings', color: 'slate' },
 ];
 
-export const DOCK_APPS = [AppID.Chat, AppID.GroupChat, AppID.Social]; // Removed Browser from Dock
+export const DOCK_APPS = [AppID.Chat, AppID.GroupChat, AppID.Social, AppID.Settings];

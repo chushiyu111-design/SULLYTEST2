@@ -204,6 +204,22 @@ export const DB = {
     });
   },
 
+  // Same as getRecentMessagesByCharId but also returns the total count (for UI display)
+  getRecentMessagesWithCount: async (charId: string, limit: number): Promise<{ messages: Message[], totalCount: number }> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_MESSAGES, 'readonly');
+      const store = transaction.objectStore(STORE_MESSAGES);
+      const index = store.index('charId');
+      const request = index.getAll(IDBKeyRange.only(charId));
+      request.onsuccess = () => {
+          const results = (request.result || []).filter((m: Message) => !m.groupId);
+          resolve({ messages: results.slice(-limit), totalCount: results.length });
+      };
+      request.onerror = () => reject(request.error);
+    });
+  },
+
   saveMessage: async (msg: Omit<Message, 'id' | 'timestamp'>): Promise<number> => {
     const db = await openDB();
     return new Promise((resolve, reject) => {
