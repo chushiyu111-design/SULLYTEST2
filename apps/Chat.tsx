@@ -70,7 +70,7 @@ const Chat: React.FC = () => {
     const draftKey = `chat_draft_${activeCharacterId}`;
 
     // --- Initialize Hook ---
-    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, setLastTokenUsage, triggerAI } = useChatAI({
+    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI } = useChatAI({
         char,
         userProfile,
         apiConfig,
@@ -709,6 +709,7 @@ const Chat: React.FC = () => {
                 isTyping={isTyping}
                 isSummarizing={isSummarizing}
                 lastTokenUsage={lastTokenUsage}
+                tokenBreakdown={tokenBreakdown}
                 onClose={closeApp}
                 onTriggerAI={() => triggerAI(messages)}
                 onShowCharsPanel={() => setShowPanel('chars')}

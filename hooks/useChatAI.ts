@@ -37,6 +37,22 @@ export const useChatAI = ({
     const [searchStatus, setSearchStatus] = useState<string>('');
     const [diaryStatus, setDiaryStatus] = useState<string>('');
     const [lastTokenUsage, setLastTokenUsage] = useState<number | null>(null);
+    const [tokenBreakdown, setTokenBreakdown] = useState<{ prompt: number; completion: number; total: number; msgCount: number; pass: string } | null>(null);
+
+    const updateTokenUsage = (data: any, msgCount: number, pass: string) => {
+        if (data.usage?.total_tokens) {
+            setLastTokenUsage(data.usage.total_tokens);
+            const breakdown = {
+                prompt: data.usage.prompt_tokens || 0,
+                completion: data.usage.completion_tokens || 0,
+                total: data.usage.total_tokens,
+                msgCount,
+                pass
+            };
+            setTokenBreakdown(breakdown);
+            console.log(`🔢 [Token Usage] pass=${pass} | prompt=${breakdown.prompt} completion=${breakdown.completion} total=${breakdown.total} | msgs_in_context=${msgCount}`);
+        }
+    };
 
     const triggerAI = async (currentMsgs: Message[]) => {
         if (isTyping || !char) return;
@@ -101,6 +117,12 @@ export const useChatAI = ({
 
             const fullMessages = [{ role: 'system', content: systemPrompt }, ...cleanedApiMessages];
 
+            // Debug: Log context composition
+            const systemPromptLength = systemPrompt.length;
+            const historyMsgCount = cleanedApiMessages.length;
+            const historyTotalChars = cleanedApiMessages.reduce((sum: number, m: any) => sum + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length), 0);
+            console.log(`📊 [Context Debug] system_prompt_chars=${systemPromptLength} | history_msgs=${historyMsgCount} | history_chars=${historyTotalChars} | total_msgs_in_array=${fullMessages.length} | contextLimit=${limit}`);
+
             // 2.6 Reinforce bilingual instruction at the end of messages for stronger compliance
             if (bilingualActive) {
                 fullMessages.push({ role: 'system', content: `[Reminder: 每句话必须用 <翻译><原文>...</原文><译文>...</译文></翻译> 标签包裹。一句一个标签。绝对不能省略。]` });
@@ -114,7 +136,7 @@ export const useChatAI = ({
 
             if (!response.ok) throw new Error(`API Error ${response.status}`);
             let data = await response.json();
-            if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+            updateTokenUsage(data, historyMsgCount, 'initial');
 
             // 4. Initial Cleanup
             let aiContent = data.choices?.[0]?.message?.content || '';
@@ -150,7 +172,7 @@ export const useChatAI = ({
                     });
                     if (response.ok) {
                         data = await response.json();
-                        if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                        updateTokenUsage(data, historyMsgCount, 'recall');
                         aiContent = data.choices?.[0]?.message?.content || '';
                         // Re-clean
                         aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
@@ -196,7 +218,7 @@ export const useChatAI = ({
 
                         if (response.ok) {
                             data = await response.json();
-                            if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                            updateTokenUsage(data, historyMsgCount, 'search');
                             aiContent = data.choices?.[0]?.message?.content || '';
                             console.log('🔍 [Search] AI基于搜索结果生成的新回复:', aiContent.slice(0, 100) + '...');
                             // Re-clean
@@ -325,7 +347,7 @@ export const useChatAI = ({
                     });
                     if (response.ok) {
                         data = await response.json();
-                        if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                        updateTokenUsage(data, historyMsgCount, 'diary-fallback');
                         aiContent = data.choices?.[0]?.message?.content || '';
                         aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
                         aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
@@ -403,7 +425,7 @@ export const useChatAI = ({
 
                                     if (response.ok) {
                                         data = await response.json();
-                                        if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                                        updateTokenUsage(data, historyMsgCount, 'read-diary-notion');
                                         aiContent = data.choices?.[0]?.message?.content || '';
                                         aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
                                         aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
@@ -431,7 +453,7 @@ export const useChatAI = ({
 
                                 if (response.ok) {
                                     data = await response.json();
-                                    if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                                    updateTokenUsage(data, historyMsgCount, 'no-diary-notion');
                                     aiContent = data.choices?.[0]?.message?.content || '';
                                     aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
                                     aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
@@ -578,7 +600,7 @@ export const useChatAI = ({
 
                                     if (response.ok) {
                                         data = await response.json();
-                                        if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                                        updateTokenUsage(data, historyMsgCount, 'read-diary-feishu');
                                         aiContent = data.choices?.[0]?.message?.content || '';
                                         aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
                                         aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
@@ -605,7 +627,7 @@ export const useChatAI = ({
 
                                 if (response.ok) {
                                     data = await response.json();
-                                    if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
+                                    updateTokenUsage(data, historyMsgCount, 'no-diary-feishu');
                                     aiContent = data.choices?.[0]?.message?.content || '';
                                     aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
                                     aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
@@ -821,6 +843,7 @@ export const useChatAI = ({
         searchStatus,
         diaryStatus,
         lastTokenUsage,
+        tokenBreakdown,
         setLastTokenUsage, // Allow manual reset if needed
         triggerAI
     };
