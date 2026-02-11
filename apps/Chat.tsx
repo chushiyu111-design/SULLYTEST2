@@ -109,6 +109,8 @@ const Chat: React.FC = () => {
 
     // How many messages to load per batch (initial load + each "load more" click)
     const LOAD_BATCH_SIZE = 30;
+    // Max messages to keep in React state after send/receive (display capped by visibleCount)
+    const MSG_MEMORY_LIMIT = 200;
 
     useEffect(() => {
         if (activeCharacterId) {
