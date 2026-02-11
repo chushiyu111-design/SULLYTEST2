@@ -2,6 +2,14 @@
 import React from 'react';
 import { CharacterProfile } from '../../types';
 
+interface TokenBreakdown {
+    prompt: number;
+    completion: number;
+    total: number;
+    msgCount: number;
+    pass: string;
+}
+
 interface ChatHeaderProps {
     selectionMode: boolean;
     selectedCount: number;
@@ -10,6 +18,7 @@ interface ChatHeaderProps {
     isTyping: boolean;
     isSummarizing: boolean;
     lastTokenUsage: number | null;
+    tokenBreakdown?: TokenBreakdown | null;
     onClose: () => void;
     onTriggerAI: () => void;
     onShowCharsPanel: () => void;
@@ -23,6 +32,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     isTyping,
     isSummarizing,
     lastTokenUsage,
+    tokenBreakdown,
     onClose,
     onTriggerAI,
     onShowCharsPanel
@@ -50,8 +60,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                             <div className="flex items-center gap-2">
                                 <div className="text-[10px] text-slate-400 uppercase">Online</div>
                                 {lastTokenUsage && (
-                                    <div className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-mono border border-slate-200">
-                                        ⚡ {lastTokenUsage}
+                                    <div className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-mono border border-slate-200" title={tokenBreakdown ? `prompt: ${tokenBreakdown.prompt} | completion: ${tokenBreakdown.completion} | msgs: ${tokenBreakdown.msgCount} | pass: ${tokenBreakdown.pass}` : ''}>
+                                        {tokenBreakdown ? `P${tokenBreakdown.prompt}+C${tokenBreakdown.completion}=${tokenBreakdown.total}` : `${lastTokenUsage}`}
                                     </div>
                                 )}
                             </div>
