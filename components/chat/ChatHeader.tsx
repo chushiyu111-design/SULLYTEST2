@@ -61,7 +61,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 <div className="text-[10px] text-slate-400 uppercase">Online</div>
                                 {lastTokenUsage && (
                                     <div className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-mono border border-slate-200" title={tokenBreakdown ? `prompt: ${tokenBreakdown.prompt} | completion: ${tokenBreakdown.completion} | msgs: ${tokenBreakdown.msgCount} | pass: ${tokenBreakdown.pass}` : ''}>
-                                        {tokenBreakdown ? `P${tokenBreakdown.prompt}+C${tokenBreakdown.completion}=${tokenBreakdown.total}` : `${lastTokenUsage}`}
+                                        ⚡ {lastTokenUsage}
                                     </div>
                                 )}
                             </div>
