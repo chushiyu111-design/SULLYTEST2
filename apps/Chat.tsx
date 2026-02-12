@@ -415,19 +415,24 @@ const Chat: React.FC = () => {
     const handleClearHistory = async () => {
         if (!char) return;
         if (preserveContext) {
-            const toDelete = messages.slice(0, -10);
+            // Load ALL messages from DB (not just React state which is partial)
+            const allMsgs = await DB.getMessagesByCharId(char.id);
+            const toKeep = allMsgs.slice(-10);
+            const toDelete = allMsgs.slice(0, -10);
             if (toDelete.length === 0) {
                 addToast('消息太少，无需清理', 'info');
                 return;
             }
             await DB.deleteMessages(toDelete.map(m => m.id));
-            setMessages(messages.slice(-10));
-            setTotalMsgCount(prev => Math.max(0, prev - toDelete.length));
+            setMessages(toKeep);
+            setTotalMsgCount(toKeep.length);
+            setVisibleCount(30);
             addToast(`已清理 ${toDelete.length} 条历史，保留最近10条`, 'success');
         } else {
             await DB.clearMessages(char.id);
             setMessages([]);
             setTotalMsgCount(0);
+            setVisibleCount(30);
             addToast('已清空', 'success');
         }
         setModalType('none');
