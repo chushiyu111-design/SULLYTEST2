@@ -358,6 +358,48 @@ export const ValentineSession: React.FC<ValentineSessionProps> = ({ charId, onCl
     const [showRecord, setShowRecord] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
 
+    // 长按删除
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleLongPressStart = (cId: string) => {
+        longPressTimer.current = setTimeout(() => {
+            setDeleteTargetId(cId);
+        }, 600);
+    };
+    const handleLongPressEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+    const handleDeleteRecord = async (cId: string) => {
+        try {
+            // 1. 删除角色上的 specialMomentRecords
+            const targetChar = characters.find(c => c.id === cId);
+            if (targetChar) {
+                const updatedRecords = { ...(targetChar.specialMomentRecords || {}) };
+                delete updatedRecords[VALENTINE_RECORD_KEY];
+                updateCharacter(cId, { specialMomentRecords: updatedRecords });
+            }
+            // 2. 删除聊天记录中的情人节消息
+            const msgs = await DB.getMessagesByCharId(cId);
+            const valentineIds = msgs
+                .filter(m => m.metadata?.valentineEvent)
+                .map(m => m.id)
+                .filter((id): id is number => id !== undefined);
+            if (valentineIds.length > 0) {
+                await DB.deleteMessages(valentineIds);
+            }
+            addToast(`已删除 ${targetChar?.name || ''} 的情人节记录`, 'success');
+        } catch (e) {
+            console.error('Delete valentine record failed:', e);
+            addToast('删除失败', 'error');
+        } finally {
+            setDeleteTargetId(null);
+        }
+    };
+
     const hydrateSessionFromContent = (content: string) => {
         setFullContent(content);
         const lines = parseValentineDialogue(content);
@@ -669,21 +711,57 @@ export const ValentineSession: React.FC<ValentineSessionProps> = ({ charId, onCl
 
                     <div className="grid grid-cols-2 gap-4">
                         {characters.map(c => {
-                            // 检查是否已经生成过
-                            const isCompleted = false; // 简化逻辑：允许重新生成
+                            const hasRecord = !!c.specialMomentRecords?.[VALENTINE_RECORD_KEY];
                             return (
                                 <button
                                     key={c.id}
                                     onClick={() => { setSelectedCharId(c.id); setPhase('loading'); }}
-                                    className="bg-white rounded-2xl p-4 shadow-sm border border-pink-100 active:scale-95 transition-transform flex flex-col items-center gap-3 hover:shadow-md hover:border-pink-200"
+                                    onTouchStart={() => handleLongPressStart(c.id)}
+                                    onTouchEnd={handleLongPressEnd}
+                                    onTouchCancel={handleLongPressEnd}
+                                    onContextMenu={(e) => { e.preventDefault(); setDeleteTargetId(c.id); }}
+                                    className="bg-white rounded-2xl p-4 shadow-sm border border-pink-100 active:scale-95 transition-transform flex flex-col items-center gap-3 hover:shadow-md hover:border-pink-200 relative"
                                 >
                                     <img src={c.avatar} className="w-16 h-16 rounded-full object-cover shadow-sm border-2 border-pink-100" alt={c.name} />
                                     <span className="font-bold text-slate-700 text-sm">{c.name}</span>
+                                    {hasRecord && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink-400" />}
                                 </button>
                             );
                         })}
                     </div>
+
+                    <p className="text-center text-[10px] text-slate-300 mt-4">长按角色可删除其情人节记录</p>
                 </div>
+
+                {/* 删除确认弹窗 */}
+                {deleteTargetId && (
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-fade-in">
+                        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTargetId(null)} />
+                        <div className="relative bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl">
+                            <div className="text-center mb-4">
+                                <div className="text-3xl mb-2">🗑️</div>
+                                <h3 className="font-bold text-slate-700 text-base">删除情人节记录</h3>
+                                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                                    将删除 <span className="font-bold text-slate-600">{characters.find(c => c.id === deleteTargetId)?.name}</span> 的情人节记录，包括存储的回忆和对应的聊天消息。此操作不可撤销。
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setDeleteTargetId(null)}
+                                    className="flex-1 py-2.5 bg-slate-100 text-slate-500 font-bold rounded-xl active:scale-95 transition-transform text-sm"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteRecord(deleteTargetId)}
+                                    className="flex-1 py-2.5 bg-red-500 text-white font-bold rounded-xl active:scale-95 transition-transform text-sm"
+                                >
+                                    确认删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -796,6 +874,16 @@ export const ValentineSession: React.FC<ValentineSessionProps> = ({ charId, onCl
             <div className="absolute top-0 left-0 right-0 pt-14 text-center z-20">
                 <div className="text-[10px] font-mono text-pink-400/40 tracking-[0.3em] uppercase mb-1 pointer-events-none">Valentine's Day Special</div>
                 <h2 className="text-2xl font-light text-white/80 tracking-[0.2em] pointer-events-none">{char?.name}</h2>
+                {/* 返回按钮 */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onClose(); }}
+                    className="absolute top-14 left-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 active:scale-90 transition-transform control-zone"
+                    title="返回"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-white/70">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                    </svg>
+                </button>
                 {/* 立绘调整按钮 */}
                 <button
                     onClick={(e) => { e.stopPropagation(); setShowSpriteSettings(s => !s); }}
@@ -1059,9 +1147,47 @@ export const ValentineController: React.FC<ValentineControllerProps> = ({ onClos
 // 特别时光 App（桌面第三页降级入口）
 // ============================================================
 export const SpecialMomentsApp: React.FC = () => {
-    const { closeApp, characters } = useOS();
+    const { closeApp, characters, addToast, updateCharacter } = useOS();
     const [showSession, setShowSession] = useState(false);
     const [selectedCharId, setSelectedCharId] = useState<string>('');
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleLongPressStart = (cId: string) => {
+        longPressTimer.current = setTimeout(() => {
+            setDeleteTargetId(cId);
+        }, 600);
+    };
+    const handleLongPressEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+    const handleDeleteRecord = async (cId: string) => {
+        try {
+            const targetChar = characters.find(c => c.id === cId);
+            if (targetChar) {
+                const updatedRecords = { ...(targetChar.specialMomentRecords || {}) };
+                delete updatedRecords[VALENTINE_RECORD_KEY];
+                updateCharacter(cId, { specialMomentRecords: updatedRecords });
+            }
+            const msgs = await DB.getMessagesByCharId(cId);
+            const valentineIds = msgs
+                .filter(m => m.metadata?.valentineEvent)
+                .map(m => m.id)
+                .filter((id): id is number => id !== undefined);
+            if (valentineIds.length > 0) {
+                await DB.deleteMessages(valentineIds);
+            }
+            addToast(`已删除 ${targetChar?.name || ''} 的情人节记录`, 'success');
+        } catch (e) {
+            console.error('Delete valentine record failed:', e);
+            addToast('删除失败', 'error');
+        } finally {
+            setDeleteTargetId(null);
+        }
+    };
 
     if (showSession && selectedCharId) {
         return (
@@ -1100,17 +1226,26 @@ export const SpecialMomentsApp: React.FC = () => {
                                 <div className="text-[10px] text-pink-200/60 mb-4">选择一位角色开始</div>
 
                                 <div className="grid grid-cols-3 gap-3">
-                                    {characters.map(c => (
-                                        <button
-                                            key={c.id}
-                                            onClick={() => { setSelectedCharId(c.id); setShowSession(true); }}
-                                            className="flex flex-col items-center gap-2 p-3 bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 active:scale-95 transition-transform hover:bg-white/25"
-                                        >
-                                            <img src={c.avatar} className="w-12 h-12 rounded-full object-cover border-2 border-white/30" alt={c.name} />
-                                            <span className="text-[11px] font-bold truncate w-full text-center">{c.name}</span>
-                                        </button>
-                                    ))}
+                                    {characters.map(c => {
+                                        const hasRecord = !!c.specialMomentRecords?.[VALENTINE_RECORD_KEY];
+                                        return (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => { setSelectedCharId(c.id); setShowSession(true); }}
+                                                onTouchStart={() => handleLongPressStart(c.id)}
+                                                onTouchEnd={handleLongPressEnd}
+                                                onTouchCancel={handleLongPressEnd}
+                                                onContextMenu={(e) => { e.preventDefault(); setDeleteTargetId(c.id); }}
+                                                className="flex flex-col items-center gap-2 p-3 bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 active:scale-95 transition-transform hover:bg-white/25 relative"
+                                            >
+                                                <img src={c.avatar} className="w-12 h-12 rounded-full object-cover border-2 border-white/30" alt={c.name} />
+                                                <span className="text-[11px] font-bold truncate w-full text-center">{c.name}</span>
+                                                {hasRecord && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-white/60" />}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                <p className="text-[10px] text-pink-200/40 mt-3 text-center">长按角色可删除记录</p>
                             </div>
                         </div>
                     </div>
@@ -1122,6 +1257,36 @@ export const SpecialMomentsApp: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* 删除确认弹窗 */}
+            {deleteTargetId && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTargetId(null)} />
+                    <div className="relative bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl">
+                        <div className="text-center mb-4">
+                            <div className="text-3xl mb-2">🗑️</div>
+                            <h3 className="font-bold text-slate-700 text-base">删除情人节记录</h3>
+                            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                                将删除 <span className="font-bold text-slate-600">{characters.find(c => c.id === deleteTargetId)?.name}</span> 的情人节记录，包括存储的回忆和对应的聊天消息。此操作不可撤销。
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteTargetId(null)}
+                                className="flex-1 py-2.5 bg-slate-100 text-slate-500 font-bold rounded-xl active:scale-95 transition-transform text-sm"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={() => handleDeleteRecord(deleteTargetId)}
+                                className="flex-1 py-2.5 bg-red-500 text-white font-bold rounded-xl active:scale-95 transition-transform text-sm"
+                            >
+                                确认删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
