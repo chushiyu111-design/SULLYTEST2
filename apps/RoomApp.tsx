@@ -6,6 +6,7 @@ import { RoomItem, CharacterProfile, RoomTodo, RoomNote } from '../types';
 import { ContextBuilder } from '../utils/context';
 import { processImage } from '../utils/file';
 import Modal from '../components/os/Modal';
+import { safeResponseJson } from '../utils/safeApi';
 
 // --- 1. 免版权贴纸素材库 (Sticker Library) ---
 const ASSET_LIBRARY = {
@@ -395,7 +396,7 @@ const RoomApp: React.FC = () => {
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let content = data.choices?.[0]?.message?.content || '{"welcomeMessage": "..."}';
                 content = content.replace(/```json/g, '').replace(/```/g, '').trim();
                 
@@ -546,7 +547,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let content = data.choices?.[0]?.message?.content || "";
                 
                 // CRITICAL FIX: Empty content check triggers fallback

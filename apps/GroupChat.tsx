@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 're
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { Message, GroupProfile, CharacterProfile, MessageType, ChatTheme, MemoryFragment, EmojiCategory } from '../types';
+import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import { ContextBuilder } from '../utils/context';
 import { processImage } from '../utils/file';
@@ -529,7 +530,7 @@ ${logText.substring(0, 10000)}
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const data = await safeResponseJson(response);
                     let content = data.choices[0].message.content.trim();
                     // Basic YAML extraction
                     const yamlMatch = content.match(/summary:\s*["']?([\s\S]*?)["']?$/);
@@ -672,20 +673,29 @@ ${recentPrivate || '(暂无私聊)'}
                 return `${name}: ${content}`;
             }).join('\n');
 
-            // NEW: Build Categorized Emoji Context
+            // NEW: Build Categorized Emoji Context (filtered by group member visibility)
             const emojiContextStr = (() => {
                 if (emojis.length === 0) return '无';
-                
+
+                const memberIds = activeGroup?.members || [];
+                // Filter categories: include if no restriction, or if at least one group member is allowed
+                const visibleCats = categories.filter(c => {
+                    if (!c.allowedCharacterIds || c.allowedCharacterIds.length === 0) return true;
+                    return c.allowedCharacterIds.some(id => memberIds.includes(id));
+                });
+                const hiddenCatIds = new Set(categories.filter(c => !visibleCats.some(vc => vc.id === c.id)).map(c => c.id));
+                const visibleEmojis = hiddenCatIds.size === 0 ? emojis : emojis.filter(e => !e.categoryId || !hiddenCatIds.has(e.categoryId));
+
                 const grouped: Record<string, string[]> = {};
                 const catMap: Record<string, string> = { 'default': '通用' };
-                categories.forEach(c => catMap[c.id] = c.name);
-                
-                emojis.forEach(e => {
+                visibleCats.forEach(c => catMap[c.id] = c.name);
+
+                visibleEmojis.forEach(e => {
                     const cid = e.categoryId || 'default';
                     if (!grouped[cid]) grouped[cid] = [];
                     grouped[cid].push(e.name);
                 });
-                
+
                 return Object.entries(grouped).map(([cid, names]) => {
                     const cName = catMap[cid] || '其他';
                     return `${cName}: [${names.join(', ')}]`;
@@ -743,8 +753,8 @@ ${recentGroupMsgs}
             });
 
             if (!response.ok) throw new Error('Director Failed');
-            
-            const data = await response.json();
+
+            const data = await safeResponseJson(response);
             let jsonStr = data.choices[0].message.content;
             
             jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();

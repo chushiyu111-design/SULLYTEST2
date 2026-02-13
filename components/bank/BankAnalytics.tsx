@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { BankTransaction, SavingsGoal, APIConfig } from '../../types';
+import { safeResponseJson } from '../../utils/safeApi';
 
 interface Props {
     transactions: BankTransaction[];
@@ -143,7 +144,7 @@ ${txList}
             });
 
             if (res.ok) {
-                const data = await res.json();
+                const data = await safeResponseJson(res);
                 let jsonStr = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(jsonStr);
 

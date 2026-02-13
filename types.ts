@@ -23,6 +23,7 @@ export enum AppID {
   Worldbook = 'worldbook', 
   Novel = 'novel', 
   Bank = 'bank', // New App
+  SpecialMoments = 'special_moments', // Valentine's Day & future events
 }
 
 export interface SystemLog {
@@ -323,6 +324,13 @@ export interface DateState {
     peekStatus: string; 
 }
 
+
+export interface SpecialMomentRecord {
+    content: string;
+    timestamp: number;
+    source?: 'generated' | 'migrated';
+}
+
 // --- BANK / SHOP GAME TYPES (NEW) ---
 export interface BankTransaction {
     id: string;
@@ -493,6 +501,7 @@ export interface CharacterProfile {
   customDateSprites?: string[]; // User-added custom emotion names for date mode (per-character)
 
   savedDateState?: DateState;
+  specialMomentRecords?: Record<string, SpecialMomentRecord>;
 
   socialProfile?: {
       handle: string; 
@@ -721,7 +730,8 @@ export interface Message {
 export interface EmojiCategory {
     id: string;
     name: string;
-    isSystem?: boolean; 
+    isSystem?: boolean;
+    allowedCharacterIds?: string[]; // If set, only these characters can see this category
 }
 
 export interface Emoji {

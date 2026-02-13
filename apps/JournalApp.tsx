@@ -6,6 +6,7 @@ import { CharacterProfile, DiaryEntry, StickerData, MemoryFragment, DiaryPage } 
 import { ContextBuilder } from '../utils/context';
 import { processImage } from '../utils/file';
 import Modal from '../components/os/Modal';
+import { safeResponseJson } from '../utils/safeApi';
 
 // --- Assets & Constants ---
 
@@ -356,7 +357,7 @@ Structure:
             });
 
             if (!response.ok) throw new Error('API Error');
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             let content = data.choices[0].message.content.trim();
             content = content.replace(/```json/g, '').replace(/```/g, '').trim();
             
@@ -434,7 +435,7 @@ Structure:
             });
             
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let summary = data.choices[0].message.content;
                 summary = summary.replace(/^["']|["']$/g, '').trim();
                 

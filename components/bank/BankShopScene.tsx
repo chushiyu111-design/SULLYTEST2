@@ -5,6 +5,7 @@ import { SHOP_RECIPES } from './BankGameConstants';
 import { ContextBuilder } from '../../utils/context';
 import { useOS } from '../../context/OSContext';
 import { DB } from '../../utils/db';
+import { safeResponseJson } from '../../utils/safeApi';
 
 interface Props {
     shopState: BankShopState;
@@ -158,7 +159,7 @@ Language: Chinese.`;
             });
 
             if (res.ok) {
-                const data = await res.json();
+                const data = await safeResponseJson(res);
                 let jsonStr = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(jsonStr);
                 const comment = result.comment || '来逛逛~';

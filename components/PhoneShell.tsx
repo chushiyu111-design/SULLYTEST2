@@ -26,6 +26,7 @@ import WorldbookApp from '../apps/WorldbookApp';
 import NovelApp from '../apps/NovelApp'; 
 import BankApp from '../apps/BankApp'; 
 import BrowserApp from '../apps/BrowserApp'; // Import BrowserApp
+import { SpecialMomentsApp, ValentineController, shouldShowValentinePopup } from './ValentineEvent';
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
 import { StatusBar as CapStatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
@@ -151,6 +152,23 @@ const PhoneShell: React.FC = () => {
     } catch { /* ignore */ }
     setShowDisclaimer(false);
   };
+
+  // Valentine's Day popup (only on 2026-02-14, first visit)
+  const [showValentine, setShowValentine] = useState(() => {
+    try {
+      // Only show after disclaimer is accepted
+      return !!(localStorage.getItem(DISCLAIMER_KEY)) && shouldShowValentinePopup();
+    } catch { return false; }
+  });
+
+  // Re-check valentine popup after disclaimer is accepted
+  useEffect(() => {
+    if (!showDisclaimer && !showValentine) {
+      if (shouldShowValentinePopup()) {
+        setShowValentine(true);
+      }
+    }
+  }, [showDisclaimer]);
 
   // Capacitor Native Handling
   useEffect(() => {
@@ -289,6 +307,7 @@ const PhoneShell: React.FC = () => {
       case AppID.Novel: return <NovelApp />; 
       case AppID.Bank: return <BankApp />; 
       case AppID.Browser: return <BrowserApp />; // Added Browser Case
+      case AppID.SpecialMoments: return <SpecialMomentsApp />;
       case AppID.Launcher:
       default: return <Launcher />;
     }
@@ -349,6 +368,9 @@ const PhoneShell: React.FC = () => {
 
        {/* First-time disclaimer popup */}
        {showDisclaimer && <DisclaimerPopup onAccept={handleAcceptDisclaimer} />}
+
+       {/* Valentine's Day popup (2026-02-14) */}
+       {!showDisclaimer && showValentine && <ValentineController onClose={() => setShowValentine(false)} />}
     </div>
   );
 };

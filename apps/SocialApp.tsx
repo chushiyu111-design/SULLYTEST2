@@ -6,6 +6,7 @@ import { CharacterProfile, SocialPost, SocialComment, SubAccount, SocialAppProfi
 import { ContextBuilder } from '../utils/context';
 import { processImage } from '../utils/file';
 import Modal from '../components/os/Modal';
+import { safeResponseJson } from '../utils/safeApi';
 
 // --- Constants & Styles ---
 const BRAND_COLOR = '#ff2442'; // Premium Red
@@ -395,7 +396,7 @@ ${charContexts}
                 body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.95, max_tokens: 8000 })
             });
             if (!response.ok) throw new Error('API Error');
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const json = safeParseJSON(data.choices[0].message.content);
             if (!Array.isArray(json)) throw new Error('Parsed data is not an array');
             
@@ -488,7 +489,7 @@ ${contextPrompt}
                 body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.8 })
             });
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 const json = safeParseJSON(data.choices[0].message.content);
                 if (Array.isArray(json)) {
                     const comments: SocialComment[] = json.map((c: any) => {
@@ -538,7 +539,7 @@ ${identityMap}
                 body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.9 })
             });
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 const json = safeParseJSON(data.choices[0].message.content);
                 if (Array.isArray(json)) {
                     const newReplies: SocialComment[] = json.map((c: any) => {

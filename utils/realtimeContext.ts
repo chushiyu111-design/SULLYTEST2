@@ -3,6 +3,8 @@
  * Real-time Context Manager - Give AI characters awareness of the real world
  */
 
+import { safeResponseJson } from './safeApi';
+
 export interface WeatherData {
     temp: number;
     feelsLike: number;
@@ -105,7 +107,7 @@ export const RealtimeContextManager = {
                 return null;
             }
 
-            const data = await response.json();
+            const data = await safeResponseJson(response);
 
             const weather: WeatherData = {
                 temp: Math.round(data.main.temp),
@@ -147,7 +149,7 @@ export const RealtimeContextManager = {
                 return [];
             }
 
-            const data = await response.json();
+            const data = await safeResponseJson(response);
 
             // Brave News API 返回结构
             if (data.results && data.results.length > 0) {
@@ -208,13 +210,13 @@ export const RealtimeContextManager = {
             const response = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
             if (!response.ok) return [];
 
-            const ids = await response.json();
+            const ids = await safeResponseJson(response);
             const topIds = ids.slice(0, 5);
 
             const stories = await Promise.all(
                 topIds.map(async (id: number) => {
                     const storyRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
-                    return storyRes.json();
+                    return safeResponseJson(storyRes);
                 })
             );
 

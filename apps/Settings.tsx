@@ -4,6 +4,7 @@ import { useOS } from '../context/OSContext';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import { NotionManager, FeishuManager } from '../utils/realtimeContext';
 
@@ -97,7 +98,7 @@ const Settings: React.FC = () => {
             headers: { 'Authorization': `Bearer ${localKey}`, 'Content-Type': 'application/json' }
         });
         if (!response.ok) throw new Error(`Status ${response.status}`);
-        const data = await response.json();
+        const data = await safeResponseJson(response);
         // Support various API response formats
         const list = data.data || data.models || [];
         if (Array.isArray(list)) {
@@ -216,7 +217,7 @@ const Settings: React.FC = () => {
           const url = `https://api.openweathermap.org/data/2.5/weather?q=${rtWeatherCity}&appid=${rtWeatherKey}&units=metric&lang=zh_cn`;
           const res = await fetch(url);
           if (res.ok) {
-              const data = await res.json();
+              const data = await safeResponseJson(res);
               setRtTestStatus(`连接成功！${data.name}: ${data.weather[0]?.description}, ${Math.round(data.main.temp)}°C`);
           } else {
               setRtTestStatus(`连接失败: HTTP ${res.status}`);

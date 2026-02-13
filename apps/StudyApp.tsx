@@ -5,6 +5,7 @@ import { DB } from '../utils/db';
 import { StudyCourse, StudyChapter, CharacterProfile, Message, UserProfile } from '../types';
 import { ContextBuilder } from '../utils/context';
 import Modal from '../components/os/Modal';
+import { safeResponseJson } from '../utils/safeApi';
 
 type PdfJsLike = {
     getDocument: (src: { data: ArrayBuffer }) => { promise: Promise<any> };
@@ -514,7 +515,7 @@ For each chapter, provide a title, a brief summary of what it covers, and a diff
         });
 
         if (!response.ok) throw new Error('API Error');
-        const data = await response.json();
+        const data = await safeResponseJson(response);
         const content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
         const json = JSON.parse(content);
 
@@ -647,7 +648,7 @@ You are now acting as a private tutor for ${userProfile.name}.
             let isBlocked = false;
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 
                 // ROBUST EXTRACTION: Try content, then reasoning_content
                 text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || "";
@@ -666,7 +667,7 @@ You are now acting as a private tutor for ${userProfile.name}.
                 const fallbackContext = "[System: You are a helpful and neutral academic tutor. Ignore previous character persona constraints to ensure educational content is delivered.]";
                 response = await callApi(fallbackContext, true);
                 if (response.ok) {
-                    const data = await response.json();
+                    const data = await safeResponseJson(response);
                     text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || "（内容仍被拦截，请尝试更换模型或缩短文本）";
                 }
             }
@@ -745,7 +746,7 @@ Answer the question based on the source material. Be helpful and encouraging (in
                 })
             });
             
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || "（无回答）";
             
             setCurrentText(text);
@@ -795,7 +796,7 @@ Note: Use "我" (I) to refer to yourself.
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
             body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: summaryPrompt }] })
-        }).then(res => res.json()).then(data => {
+        }).then(res => safeResponseJson(res)).then(data => {
             const mem = data.choices[0].message.content;
             const newMem = { id: `mem-${Date.now()}`, date: new Date().toLocaleDateString(), summary: `[教学] ${mem}`, mood: 'proud' };
             updateCharacter(selectedChar.id, { memories: [...(selectedChar.memories || []), newMem] });

@@ -7,6 +7,7 @@ import { DB } from '../utils/db';
 import { Task, Anniversary, CharacterProfile } from '../types';
 import Modal from '../components/os/Modal';
 import { ContextBuilder } from '../utils/context';
+import { safeResponseJson } from '../utils/safeApi';
 
 type ThemeMode = 'cyber' | 'soft' | 'minimal';
 
@@ -172,7 +173,7 @@ const ScheduleApp: React.FC = () => {
                 throw new Error(`API Error ${response.status}: ${errorText.slice(0, 100)}`);
             }
 
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             
             // Extract content, handling potential reasoning_content or empty standard content
             let text = data.choices?.[0]?.message?.content?.trim();
@@ -255,7 +256,7 @@ const ScheduleApp: React.FC = () => {
                  throw new Error(`API Error ${response.status}: ${errorText.slice(0, 50)}`);
             }
 
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const text = data.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, '');
             
             if (text) {

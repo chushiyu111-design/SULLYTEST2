@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { BankFullState, BankTransaction, SavingsGoal, ShopStaff, BankGuestbookItem, DollhouseState } from '../types';
+import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import BankShopScene from '../components/bank/BankShopScene';
 import BankDollhouse from '../components/bank/BankDollhouse';
@@ -549,7 +550,7 @@ ${previousGuestbook}
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let jsonStr = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(jsonStr);
 

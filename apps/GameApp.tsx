@@ -4,6 +4,7 @@ import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { GameSession, GameTheme, CharacterProfile, GameLog, GameActionOption } from '../types';
 import { ContextBuilder } from '../utils/context';
+import { extractContent, extractJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 
 // --- Themes Configuration (Enhanced) ---
@@ -194,26 +195,27 @@ const GameApp: React.FC = () => {
         if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
 
         const text = await response.text();
-        const json = await (async () => {
+        let json: any;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            // Try stripping "data: " prefix (common in proxy misconfigurations)
+            const cleaned = text.replace(/^data: /, '').trim();
             try {
-                // 1. Try standard JSON parse
-                return JSON.parse(text);
-            } catch (e) {
-                // 2. If failed, try stripping "data: " prefix (common in proxy misconfigurations)
-                const cleaned = text.replace(/^data: /, '').trim();
-                try {
-                    return JSON.parse(cleaned);
-                } catch (e2) {
-                    console.error("Failed to parse API response", text);
-                    throw new Error("Invalid API Response Format (Not JSON)");
+                json = JSON.parse(cleaned);
+            } catch {
+                // Detect HTML responses
+                if (text.trimStart().startsWith('<')) {
+                    throw new Error('API返回了HTML而非JSON，请检查API地址是否正确');
                 }
+                throw new Error(`API返回了无法解析的格式: ${text.slice(0, 100)}`);
             }
-        })();
-        
+        }
+
         if (json.usage?.total_tokens) {
             setLastTokenUsage(json.usage.total_tokens);
         }
-        
+
         return json;
     };
 
@@ -331,33 +333,46 @@ ${playerContext}
 }`;
 
             const data = await fetchGameAPI(prompt);
-            let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
-            const res = JSON.parse(content);
+            const rawContent = extractContent(data);
+            if (!rawContent) throw new Error('AI 返回了空响应');
+
+            // Robust JSON extraction: handles code fences, trailing commas, extra prose
+            const res = extractJson(rawContent);
 
             const initialLogs: GameLog[] = [];
-            
-            // GM Log
-            initialLogs.push({
-                id: 'init-gm',
-                role: 'gm',
-                content: `### 📖 序章: ${newTitle}\n\n${res.gm_narrative || '冒险开始了...'}`,
-                timestamp: Date.now()
-            });
 
-            // Character Logs
-            if (res.characters && Array.isArray(res.characters)) {
-                for (const charAct of res.characters) {
-                    const char = players.find(p => p.id === charAct.charId);
-                    if (char) {
-                        initialLogs.push({
-                            id: `init-char-${char.id}`,
-                            role: 'character',
-                            speakerName: char.name,
-                            content: `*${charAct.action}* \n“${charAct.dialogue}”`,
-                            timestamp: Date.now()
-                        });
+            if (res) {
+                // Structured response - use parsed JSON
+                initialLogs.push({
+                    id: 'init-gm',
+                    role: 'gm',
+                    content: `### 📖 序章: ${newTitle}\n\n${res.gm_narrative || '冒险开始了...'}`,
+                    timestamp: Date.now()
+                });
+
+                if (Array.isArray(res.characters)) {
+                    for (const charAct of res.characters) {
+                        const char = players.find(p => p.id === charAct.charId || p.name === charAct.charId);
+                        if (char) {
+                            initialLogs.push({
+                                id: `init-char-${char.id}`,
+                                role: 'character',
+                                speakerName: char.name,
+                                content: `*${charAct.action || ''}* \n"${charAct.dialogue || ''}"`,
+                                timestamp: Date.now()
+                            });
+                        }
                     }
                 }
+            } else {
+                // JSON parse completely failed - use raw text as GM narrative anyway
+                console.warn('[GameApp] JSON extraction failed, using raw text as narrative');
+                initialLogs.push({
+                    id: 'init-gm',
+                    role: 'gm',
+                    content: `### 📖 序章: ${newTitle}\n\n${rawContent}`,
+                    timestamp: Date.now()
+                });
             }
 
             const newGame: GameSession = {
@@ -368,13 +383,13 @@ ${playerContext}
                 playerCharIds: Array.from(selectedPlayers),
                 logs: initialLogs,
                 status: {
-                    location: res.startLocation || 'Unknown',
+                    location: res?.startLocation || 'Unknown',
                     health: 100,
                     sanity: 100,
                     gold: 0,
                     inventory: []
                 },
-                suggestedActions: res.suggested_actions || [],
+                suggestedActions: res?.suggested_actions || [],
                 createdAt: Date.now(),
                 lastPlayedAt: Date.now()
             };
@@ -528,56 +543,64 @@ ${contextLogs.slice(-50).map(l => `[${l.role === 'gm' ? 'GM' : (l.speakerName ||
 }`;
 
             const data = await fetchGameAPI(prompt);
-            let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
-            const res = JSON.parse(content);
+            const rawContent = extractContent(data);
+            if (!rawContent) throw new Error('AI 返回了空响应');
+
+            // Robust JSON extraction
+            const res = extractJson(rawContent);
 
             const newLogs: GameLog[] = [];
-            
-            // 1. GM Narrative Log
-            if (res.gm_narrative) {
+            const newStatus = { ...updatedGame.status };
+
+            if (res) {
+                // Structured response - use parsed JSON
+                if (res.gm_narrative) {
+                    newLogs.push({
+                        id: `gm-${Date.now()}`,
+                        role: 'gm',
+                        content: res.gm_narrative,
+                        timestamp: Date.now()
+                    });
+                }
+
+                if (Array.isArray(res.characters)) {
+                    for (const charAct of res.characters) {
+                        const char = players.find(p => p.id === charAct.charId || p.name === charAct.charId);
+                        if (char) {
+                            const combinedContent = `*${charAct.action || ''}* \n"${charAct.dialogue || ''}"`;
+                            newLogs.push({
+                                id: `char-${Date.now()}-${Math.random()}`,
+                                role: 'character',
+                                speakerName: char.name,
+                                content: combinedContent,
+                                timestamp: Date.now()
+                            });
+                        }
+                    }
+                }
+
+                // Update State (Stats)
+                if (res.newLocation) newStatus.location = res.newLocation;
+                if (res.hpChange) newStatus.health = Math.max(0, Math.min(100, (newStatus.health || 100) + res.hpChange));
+                if (res.sanityChange) newStatus.sanity = Math.max(0, Math.min(100, (newStatus.sanity || 100) + res.sanityChange));
+                if (res.goldChange) newStatus.gold = Math.max(0, (newStatus.gold || 0) + res.goldChange);
+                if (res.newItem) newStatus.inventory = [...newStatus.inventory, res.newItem];
+            } else {
+                // JSON parse completely failed - still show the raw text as GM narrative
+                console.warn('[GameApp] JSON extraction failed, using raw text as narrative');
                 newLogs.push({
                     id: `gm-${Date.now()}`,
                     role: 'gm',
-                    content: res.gm_narrative,
+                    content: rawContent,
                     timestamp: Date.now()
                 });
             }
 
-            // 2. Character Reaction Logs
-            if (res.characters && Array.isArray(res.characters)) {
-                for (const charAct of res.characters) {
-                    const char = players.find(p => p.id === charAct.charId);
-                    if (char) {
-                        // Format: "*Action* \n“Dialogue”"
-                        const combinedContent = `*${charAct.action}* \n“${charAct.dialogue}”`;
-                        
-                        newLogs.push({
-                            id: `char-${Date.now()}-${Math.random()}`,
-                            role: 'character',
-                            speakerName: char.name, // Link name for UI lookup
-                            content: combinedContent,
-                            timestamp: Date.now()
-                        });
-                    }
-                }
-            }
-
-            // Update State (Stats)
-            const newStatus = { ...updatedGame.status };
-            if (res.newLocation) newStatus.location = res.newLocation;
-            
-            // Stat Updates
-            if (res.hpChange) newStatus.health = Math.max(0, Math.min(100, (newStatus.health || 100) + res.hpChange));
-            if (res.sanityChange) newStatus.sanity = Math.max(0, Math.min(100, (newStatus.sanity || 100) + res.sanityChange));
-            if (res.goldChange) newStatus.gold = Math.max(0, (newStatus.gold || 0) + res.goldChange);
-            
-            if (res.newItem) newStatus.inventory = [...newStatus.inventory, res.newItem];
-
             const finalGame = {
                 ...updatedGame,
-                logs: [...contextLogs, ...newLogs], // Append to correct context
+                logs: [...contextLogs, ...newLogs],
                 status: newStatus,
-                suggestedActions: res.suggested_actions || []
+                suggestedActions: res?.suggested_actions || []
             };
             
             setActiveGame(finalGame);
@@ -686,7 +709,7 @@ ${logText}
 Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆"). No preamble.`;
 
             const data = await fetchGameAPI(prompt);
-            let summary = data.choices[0].message.content.trim();
+            let summary = extractContent(data) || '进行了一场冒险';
             summary = summary.replace(/[。\.]$/, ''); // Remove trailing dot
 
             // Format: 【角色名们】和【用户名】一起玩了xxx，发生了xxxx

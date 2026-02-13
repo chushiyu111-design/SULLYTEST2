@@ -1,6 +1,7 @@
 
 import { CharacterProfile, NovelBook, NovelSegment, UserProfile } from '../types';
 import { ContextBuilder } from './context';
+import { safeResponseJson } from './safeApi';
 
 // --- Visual Themes ---
 export const NOVEL_THEMES = [
@@ -402,7 +403,7 @@ ${char.memories?.slice(-3).map(m => `- ${m.summary}`).join('\n') || '- 无记忆
         });
         
         if (response.ok) {
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const rawPersona = data.choices[0].message.content.trim();
             
             const formattedPersona = `

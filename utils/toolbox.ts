@@ -1,3 +1,5 @@
+import { safeResponseJson } from './safeApi';
+
 const TOOLBOX_BASE_URL = 'http://localhost:3001';
 
 export const toolbox = {
@@ -6,7 +8,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, ...options })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async fetch(url: string, maxChars?: number) {
@@ -14,7 +16,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, maxChars })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async read(path: string, limit?: number) {
@@ -22,7 +24,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, limit })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async write(path: string, content: string) {
@@ -30,7 +32,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, content })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async edit(path: string, oldText: string, newText: string) {
@@ -38,7 +40,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, oldText, newText })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async exec(command: string, timeout?: number) {
@@ -46,7 +48,7 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command, timeout })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   browser: {
@@ -55,27 +57,27 @@ export const toolbox = {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
       });
-      return await res.json();
+      return await safeResponseJson(res);
     },
     async screenshot(fullPage?: boolean) {
       const res = await fetch(`${TOOLBOX_BASE_URL}/toolbox/browser/screenshot`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullPage })
       });
-      return await res.json();
+      return await safeResponseJson(res);
     },
     async snapshot() {
       const res = await fetch(`${TOOLBOX_BASE_URL}/toolbox/browser/snapshot`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }
       });
-      return await res.json();
+      return await safeResponseJson(res);
     },
     async act(kind: string, params: any) {
       const res = await fetch(`${TOOLBOX_BASE_URL}/toolbox/browser/act`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind, ...params })
       });
-      return await res.json();
+      return await safeResponseJson(res);
     }
   },
 
@@ -84,13 +86,13 @@ export const toolbox = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel, target, message })
     });
-    return await res.json();
+    return await safeResponseJson(res);
   },
 
   async health() {
     try {
       const res = await fetch(`${TOOLBOX_BASE_URL}/toolbox/health`);
-      return await res.json();
+      return await safeResponseJson(res);
     } catch { return { ok: false }; }
   }
 };

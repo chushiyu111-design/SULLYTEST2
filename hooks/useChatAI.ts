@@ -5,6 +5,7 @@ import { DB } from '../utils/db';
 import { ChatPrompts } from '../utils/chatPrompts';
 import { ChatParser } from '../utils/chatParser';
 import { RealtimeContextManager, NotionManager, FeishuManager } from '../utils/realtimeContext';
+import { safeFetchJson, safeResponseJson } from '../utils/safeApi';
 
 interface UseChatAIProps {
     char: CharacterProfile | undefined;
@@ -142,14 +143,11 @@ export const useChatAI = ({
                 fullMessages.push({ role: 'system', content: `[Reminder: 每句话必须用 <翻译><原文>...</原文><译文>...</译文></翻译> 标签包裹。一句一个标签。绝对不能省略。]` });
             }
 
-            // 3. API Call
-            let response = await fetch(`${baseUrl}/chat/completions`, {
+            // 3. API Call (safe parsing: prevents "Unexpected token <" on HTML error pages)
+            let data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                 method: 'POST', headers,
                 body: JSON.stringify({ model: apiConfig.model, messages: fullMessages, temperature: 0.85, stream: false })
             });
-
-            if (!response.ok) throw new Error(`API Error ${response.status}`);
-            let data = await response.json();
             updateTokenUsage(data, historyMsgCount, 'initial');
 
             // 4. Initial Cleanup
@@ -180,12 +178,11 @@ export const useChatAI = ({
                 
                 if (detailedLogs) {
                     const recallMessages = [...fullMessages, { role: 'user', content: `[系统: 已成功调取 ${year}-${month} 的详细日志]\n${detailedLogs}\n[系统: 现在请结合这些细节回答用户。保持对话自然。]` }];
-                    response = await fetch(`${baseUrl}/chat/completions`, {
-                        method: 'POST', headers,
-                        body: JSON.stringify({ model: apiConfig.model, messages: recallMessages, temperature: 0.8, stream: false })
-                    });
-                    if (response.ok) {
-                        data = await response.json();
+                    try {
+                        data = await safeFetchJson(`${baseUrl}/chat/completions`, {
+                            method: 'POST', headers,
+                            body: JSON.stringify({ model: apiConfig.model, messages: recallMessages, temperature: 0.8, stream: false })
+                        });
                         updateTokenUsage(data, historyMsgCount, 'recall');
                         aiContent = data.choices?.[0]?.message?.content || '';
                         // Re-clean
@@ -193,6 +190,8 @@ export const useChatAI = ({
                         aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
                         aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
                         addToast(`已调用 ${year}-${month} 详细记忆`, 'info');
+                    } catch (recallErr: any) {
+                        console.error('Recall API failed:', recallErr.message);
                     }
                 }
             }
@@ -225,22 +224,18 @@ export const useChatAI = ({
                             { role: 'user', content: `[系统: 搜索完成！以下是关于"${searchQuery}"的搜索结果]\n\n${resultsStr}\n\n[系统: 现在请根据这些真实信息回复用户。用自然的语气分享，比如"我刚搜了一下发现..."、"诶我看到说..."。不要再输出[[SEARCH:...]]了。]` }
                         ];
 
-                        response = await fetch(`${baseUrl}/chat/completions`, {
+                        data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                             method: 'POST', headers,
                             body: JSON.stringify({ model: apiConfig.model, messages: searchMessages, temperature: 0.8, stream: false })
                         });
-
-                        if (response.ok) {
-                            data = await response.json();
-                            updateTokenUsage(data, historyMsgCount, 'search');
-                            aiContent = data.choices?.[0]?.message?.content || '';
-                            console.log('🔍 [Search] AI基于搜索结果生成的新回复:', aiContent.slice(0, 100) + '...');
-                            // Re-clean
-                            aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                            aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                            aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                            addToast(`🔍 搜索完成: ${searchQuery}`, 'success');
-                        }
+                        updateTokenUsage(data, historyMsgCount, 'search');
+                        aiContent = data.choices?.[0]?.message?.content || '';
+                        console.log('🔍 [Search] AI基于搜索结果生成的新回复:', aiContent.slice(0, 100) + '...');
+                        // Re-clean
+                        aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                        aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                        aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
+                        addToast(`🔍 搜索完成: ${searchQuery}`, 'success');
                     } else {
                         console.log('🔍 [Search] 搜索失败或无结果:', searchResult.message);
                         addToast(`搜索失败: ${searchResult.message}`, 'error');
@@ -355,18 +350,15 @@ export const useChatAI = ({
                     { role: 'user', content: `[系统: ${reason}。请你：\n1. 先正常回应用户刚才说的话（用户还在等你回复！）\n2. 可以自然地提一下，比如"日记好像打不开诶"、"嗯...好像没找到"\n3. 继续正常聊天，用多条消息回复\n4. 严禁再输出[[READ_DIARY:...]]或[[FS_READ_DIARY:...]]标记]` }
                 ];
                 try {
-                    response = await fetch(`${baseUrl}/chat/completions`, {
+                    data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                         method: 'POST', headers,
                         body: JSON.stringify({ model: apiConfig.model, messages: msgs, temperature: 0.8, stream: false })
                     });
-                    if (response.ok) {
-                        data = await response.json();
-                        updateTokenUsage(data, historyMsgCount, 'diary-fallback');
-                        aiContent = data.choices?.[0]?.message?.content || '';
-                        aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                        aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                        aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                    }
+                    updateTokenUsage(data, historyMsgCount, 'diary-fallback');
+                    aiContent = data.choices?.[0]?.message?.content || '';
+                    aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                    aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                    aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
                 } catch (fallbackErr) {
                     console.error('📖 [Diary Fallback] 也失败了:', fallbackErr);
                     aiContent = aiContent.replace(tagPattern, '').trim();
@@ -432,20 +424,16 @@ export const useChatAI = ({
                                         { role: 'user', content: `[系统: 你翻开了自己 ${targetDate} 的日记，以下是你当时写的内容]\n\n${diaryText}\n\n[系统: 你已经看完了日记。现在请你：\n1. 先正常回应用户刚才说的话（这是最重要的！用户还在等你回复）\n2. 自然地把日记中的回忆融入你的回复中，比如"我想起来了那天..."、"看了日记才发现..."等\n3. 可以分享日记中有趣的细节，表达当时的情绪\n4. 用多条消息回复，别只说一句话就结束\n5. 严禁再输出[[READ_DIARY:...]]标记]` }
                                     ];
 
-                                    response = await fetch(`${baseUrl}/chat/completions`, {
+                                    data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                                         method: 'POST', headers,
                                         body: JSON.stringify({ model: apiConfig.model, messages: diaryMessages, temperature: 0.8, stream: false })
                                     });
-
-                                    if (response.ok) {
-                                        data = await response.json();
-                                        updateTokenUsage(data, historyMsgCount, 'read-diary-notion');
-                                        aiContent = data.choices?.[0]?.message?.content || '';
-                                        aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                                        aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                                        aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                                        addToast(`📖 ${char.name}翻阅了${targetDate}的日记`, 'info');
-                                    }
+                                    updateTokenUsage(data, historyMsgCount, 'read-diary-notion');
+                                    aiContent = data.choices?.[0]?.message?.content || '';
+                                    aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                                    aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                                    aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
+                                    addToast(`📖 ${char.name}翻阅了${targetDate}的日记`, 'info');
                                 } else {
                                     console.log('📖 [ReadDiary] 日记内容为空');
                                     await diaryFallbackCall('你翻开了日记本但页面是空白的', /\[\[READ_DIARY:.*?\]\]/g);
@@ -460,19 +448,15 @@ export const useChatAI = ({
                                     { role: 'user', content: `[系统: 你翻了翻日记本，发现 ${targetDate} 那天没有写日记。请你：\n1. 先正常回应用户刚才说的话（用户还在等你回复！）\n2. 自然地提到没找到那天的日记，比如"嗯...那天好像没写日记"、"翻了翻没找到诶"\n3. 用多条消息回复，保持对话自然\n4. 严禁再输出[[READ_DIARY:...]]标记]` }
                                 ];
 
-                                response = await fetch(`${baseUrl}/chat/completions`, {
+                                data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                                     method: 'POST', headers,
                                     body: JSON.stringify({ model: apiConfig.model, messages: nodiaryMessages, temperature: 0.8, stream: false })
                                 });
-
-                                if (response.ok) {
-                                    data = await response.json();
-                                    updateTokenUsage(data, historyMsgCount, 'no-diary-notion');
-                                    aiContent = data.choices?.[0]?.message?.content || '';
-                                    aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                                    aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                                    aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                                }
+                                updateTokenUsage(data, historyMsgCount, 'no-diary-notion');
+                                aiContent = data.choices?.[0]?.message?.content || '';
+                                aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                                aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                                aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
                             }
                         } catch (e) {
                             console.error('📖 [ReadDiary] 读取异常:', e);
@@ -607,20 +591,16 @@ export const useChatAI = ({
                                         { role: 'user', content: `[系统: 你翻开了自己 ${targetDate} 的日记（飞书），以下是你当时写的内容]\n\n${diaryText}\n\n[系统: 你已经看完了日记。现在请你：\n1. 先正常回应用户刚才说的话（这是最重要的！用户还在等你回复）\n2. 自然地把日记中的回忆融入你的回复中，比如"我想起来了那天..."、"看了日记才发现..."等\n3. 可以分享日记中有趣的细节，表达当时的情绪\n4. 用多条消息回复，别只说一句话就结束\n5. 严禁再输出[[FS_READ_DIARY:...]]标记]` }
                                     ];
 
-                                    response = await fetch(`${baseUrl}/chat/completions`, {
+                                    data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                                         method: 'POST', headers,
                                         body: JSON.stringify({ model: apiConfig.model, messages: diaryMessages, temperature: 0.8, stream: false })
                                     });
-
-                                    if (response.ok) {
-                                        data = await response.json();
-                                        updateTokenUsage(data, historyMsgCount, 'read-diary-feishu');
-                                        aiContent = data.choices?.[0]?.message?.content || '';
-                                        aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                                        aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                                        aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                                        addToast(`📖 ${char.name}翻阅了${targetDate}的飞书日记`, 'info');
-                                    }
+                                    updateTokenUsage(data, historyMsgCount, 'read-diary-feishu');
+                                    aiContent = data.choices?.[0]?.message?.content || '';
+                                    aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                                    aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                                    aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
+                                    addToast(`📖 ${char.name}翻阅了${targetDate}的飞书日记`, 'info');
                                 } else {
                                     console.log('📖 [Feishu ReadDiary] 日记内容为空');
                                     await diaryFallbackCall('你翻开了飞书日记本但页面是空白的', /\[\[FS_READ_DIARY:.*?\]\]/g);
@@ -634,19 +614,15 @@ export const useChatAI = ({
                                     { role: 'user', content: `[系统: 你翻了翻飞书日记本，发现 ${targetDate} 那天没有写日记。请你：\n1. 先正常回应用户刚才说的话（用户还在等你回复！）\n2. 自然地提到没找到那天的日记，比如"嗯...那天好像没写日记"、"翻了翻没找到诶"\n3. 用多条消息回复，保持对话自然\n4. 严禁再输出[[FS_READ_DIARY:...]]标记]` }
                                 ];
 
-                                response = await fetch(`${baseUrl}/chat/completions`, {
+                                data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                                     method: 'POST', headers,
                                     body: JSON.stringify({ model: apiConfig.model, messages: nodiaryMessages, temperature: 0.8, stream: false })
                                 });
-
-                                if (response.ok) {
-                                    data = await response.json();
-                                    updateTokenUsage(data, historyMsgCount, 'no-diary-feishu');
-                                    aiContent = data.choices?.[0]?.message?.content || '';
-                                    aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-                                    aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
-                                    aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
-                                }
+                                updateTokenUsage(data, historyMsgCount, 'no-diary-feishu');
+                                aiContent = data.choices?.[0]?.message?.content || '';
+                                aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
+                                aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
+                                aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
                             }
                         } catch (e) {
                             console.error('📖 [Feishu ReadDiary] 读取异常:', e);

@@ -3,6 +3,7 @@ import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory } from '../types';
 import { processImage } from '../utils/file';
+import { safeResponseJson } from '../utils/safeApi';
 import MessageItem from '../components/chat/MessageItem';
 import { PRESET_THEMES, DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
 import ChatHeader from '../components/chat/ChatHeader';
@@ -26,11 +27,14 @@ const Chat: React.FC = () => {
     const [newCategoryName, setNewCategoryName] = useState('');
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const lastMsgIdRef = useRef<number | null>(null);
+    const scrollThrottleRef = useRef(0);
+    const visibleCountRef = useRef(30);
 
     // Reply Logic
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
 
-    const [modalType, setModalType] = useState<'none' | 'transfer' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji' | 'delete-category' | 'add-category' | 'history-manager' | 'archive-settings' | 'prompt-editor'>('none');
+    const [modalType, setModalType] = useState<'none' | 'transfer' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji' | 'delete-category' | 'add-category' | 'history-manager' | 'archive-settings' | 'prompt-editor' | 'category-options' | 'category-visibility'>('none');
     const [transferAmt, setTransferAmt] = useState('');
     const [emojiImportText, setEmojiImportText] = useState('');
     const [settingsContextLimit, setSettingsContextLimit] = useState(500);
@@ -69,14 +73,26 @@ const Chat: React.FC = () => {
     const activeTheme = useMemo(() => customThemes.find(t => t.id === currentThemeId) || PRESET_THEMES[currentThemeId] || PRESET_THEMES.default, [currentThemeId, customThemes]);
     const draftKey = `chat_draft_${activeCharacterId}`;
 
+    // Filter categories and emojis by active character's visibility (used for both AI prompt and UI)
+    const visibleCategories = useMemo(() => categories.filter(cat => {
+        if (!cat.allowedCharacterIds || cat.allowedCharacterIds.length === 0) return true;
+        return cat.allowedCharacterIds.includes(activeCharacterId);
+    }), [categories, activeCharacterId]);
+
+    const aiVisibleEmojis = useMemo(() => {
+        const hiddenIds = new Set(categories.filter(c => !visibleCategories.some(vc => vc.id === c.id)).map(c => c.id));
+        if (hiddenIds.size === 0) return emojis;
+        return emojis.filter(e => !e.categoryId || !hiddenIds.has(e.categoryId));
+    }, [emojis, categories, visibleCategories]);
+
     // --- Initialize Hook ---
     const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI } = useChatAI({
         char,
         userProfile,
         apiConfig,
         groups,
-        emojis,
-        categories,
+        emojis: aiVisibleEmojis,
+        categories: visibleCategories,
         addToast,
         setMessages,
         realtimeConfig,
@@ -109,25 +125,23 @@ const Chat: React.FC = () => {
 
     // How many messages to load per batch (initial load + each "load more" click)
     const LOAD_BATCH_SIZE = 30;
-    // Max messages to keep in React state after send/receive (display capped by visibleCount)
-    const MSG_MEMORY_LIMIT = 200;
+
+    const reloadMessages = useCallback(async (requestedVisibleCount: number) => {
+        if (!activeCharacterId) return;
+
+        const allMsgs = await DB.getMessagesByCharId(activeCharacterId);
+        const chatScopeMsgs = allMsgs
+            .filter(m => m.metadata?.source !== 'date')
+            .filter(m => !char?.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
+            .filter(m => !(char?.hideSystemLogs && m.role === 'system'));
+
+        setTotalMsgCount(chatScopeMsgs.length);
+        setMessages(chatScopeMsgs.slice(-requestedVisibleCount));
+    }, [activeCharacterId, char?.hideBeforeMessageId, char?.hideSystemLogs]);
 
     useEffect(() => {
         if (activeCharacterId) {
-            // Load messages: if hideBeforeMessageId is set, load all messages from that point forward
-            // Otherwise, load the most recent MSG_MEMORY_LIMIT messages for rendering performance
-            const loadMessages = async () => {
-                if (char?.hideBeforeMessageId) {
-                    const { messages: msgs, totalCount } = await DB.getMessagesFromId(activeCharacterId, char.hideBeforeMessageId);
-                    setMessages(msgs);
-                    setTotalMsgCount(totalCount);
-                } else {
-                    const { messages: msgs, totalCount } = await DB.getRecentMessagesWithCount(activeCharacterId, LOAD_BATCH_SIZE);
-                    setMessages(msgs);
-                    setTotalMsgCount(totalCount);
-                }
-            };
-            loadMessages();
+            reloadMessages(LOAD_BATCH_SIZE);
             loadEmojiData();
             const savedDraft = localStorage.getItem(draftKey);
             setInput(savedDraft || '');
@@ -141,13 +155,16 @@ const Chat: React.FC = () => {
                 setTranslationEnabled(JSON.parse(localStorage.getItem(`chat_translate_enabled_${activeCharacterId}`) || 'false'));
             } catch { setTranslationEnabled(false); }
             setVisibleCount(30);
+            visibleCountRef.current = 30;
+            lastMsgIdRef.current = null;
+            scrollThrottleRef.current = 0;
             setLastTokenUsage(null);
             setReplyTarget(null);
             setSelectionMode(false);
             setSelectedMsgIds(new Set());
             setShowingTargetIds(new Set());
         }
-    }, [activeCharacterId]);
+    }, [activeCharacterId, reloadMessages]);
 
     useEffect(() => {
         const savedPrompts = localStorage.getItem('chat_archive_prompts');
@@ -164,20 +181,14 @@ const Chat: React.FC = () => {
 
     useEffect(() => {
         if (activeCharacterId && lastMsgTimestamp > 0) {
-            if (char?.hideBeforeMessageId) {
-                DB.getMessagesFromId(activeCharacterId, char.hideBeforeMessageId).then(({ messages: msgs, totalCount }) => {
-                    setMessages(msgs);
-                    setTotalMsgCount(totalCount);
-                });
-            } else {
-                DB.getRecentMessagesWithCount(activeCharacterId, MSG_MEMORY_LIMIT).then(({ messages: msgs, totalCount }) => {
-                    setMessages(msgs);
-                    setTotalMsgCount(totalCount);
-                });
-            }
+            reloadMessages(visibleCountRef.current);
             clearUnread(activeCharacterId);
         }
-    }, [lastMsgTimestamp]);
+    }, [lastMsgTimestamp, activeCharacterId, reloadMessages, clearUnread]);
+
+    useEffect(() => {
+        visibleCountRef.current = visibleCount;
+    }, [visibleCount]);
 
     const handleInputChange = (val: string) => {
         setInput(val);
@@ -186,14 +197,23 @@ const Chat: React.FC = () => {
     };
 
     useLayoutEffect(() => {
-        if (scrollRef.current && !selectionMode) {
+        if (!scrollRef.current || selectionMode) return;
+        const currentLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
+        // Only auto-scroll when a new message is appended (ID changes),
+        // not when loading older history or updating existing messages in-place
+        if (currentLastId !== lastMsgIdRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            lastMsgIdRef.current = currentLastId;
         }
     }, [messages, activeCharacterId, selectionMode]);
 
     useEffect(() => {
         if (isTyping && scrollRef.current && !selectionMode) {
-             scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            const now = Date.now();
+            if (now - scrollThrottleRef.current > 150) {
+                scrollThrottleRef.current = now;
+                scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
         }
     }, [messages, isTyping, recallStatus, searchStatus, diaryStatus, selectionMode]);
 
@@ -238,9 +258,7 @@ const Chat: React.FC = () => {
         }
 
         await DB.saveMessage(msgPayload);
-        const updatedMsgs = await DB.getRecentMessagesByCharId(char.id, MSG_MEMORY_LIMIT);
-        setMessages(updatedMsgs);
-        setTotalMsgCount(prev => prev + 1);
+        await reloadMessages(visibleCountRef.current);
         setShowPanel('none');
         
         // Manual trigger only: Removed auto triggerAI call
@@ -290,6 +308,7 @@ const Chat: React.FC = () => {
             case 'delete-emoji-req': setSelectedEmoji(payload); setModalType('delete-emoji'); break;
             case 'add-category': setModalType('add-category'); break;
             case 'select-category': setActiveCategory(payload); break;
+            case 'category-options': setSelectedCategory(payload); setModalType('category-options'); break;
             case 'delete-category-req': setSelectedCategory(payload); setModalType('delete-category'); break;
         }
     };
@@ -339,6 +358,15 @@ const Chat: React.FC = () => {
         setModalType('none');
         setSelectedCategory(null);
         addToast('分类及包含表情已删除', 'success');
+    };
+
+    const handleSaveCategoryVisibility = async (categoryId: string, allowedCharacterIds: string[] | undefined) => {
+        const cat = categories.find(c => c.id === categoryId);
+        if (!cat) return;
+        await DB.saveEmojiCategory({ ...cat, allowedCharacterIds });
+        await loadEmojiData();
+        setSelectedCategory(null);
+        addToast(allowedCharacterIds ? `已设置 ${allowedCharacterIds.length} 个角色可见` : '已设为所有角色可见', 'success');
     };
 
     const handleSavePrompt = () => {
@@ -415,10 +443,10 @@ const Chat: React.FC = () => {
     const handleClearHistory = async () => {
         if (!char) return;
         if (preserveContext) {
-            // Load ALL messages from DB (not just React state which is partial)
-            const allMsgs = await DB.getMessagesByCharId(char.id);
-            const toKeep = allMsgs.slice(-10);
-            const toDelete = allMsgs.slice(0, -10);
+            const allMessages = await DB.getMessagesByCharId(char.id);
+            const toKeep = allMessages.slice(-10);
+            const toKeepIds = new Set(toKeep.map(m => m.id));
+            const toDelete = allMessages.filter(m => !toKeepIds.has(m.id));
             if (toDelete.length === 0) {
                 addToast('消息太少，无需清理', 'info');
                 return;
@@ -426,13 +454,15 @@ const Chat: React.FC = () => {
             await DB.deleteMessages(toDelete.map(m => m.id));
             setMessages(toKeep);
             setTotalMsgCount(toKeep.length);
-            setVisibleCount(30);
+            setVisibleCount(LOAD_BATCH_SIZE);
+            visibleCountRef.current = LOAD_BATCH_SIZE;
             addToast(`已清理 ${toDelete.length} 条历史，保留最近10条`, 'success');
         } else {
             await DB.clearMessages(char.id);
             setMessages([]);
             setTotalMsgCount(0);
-            setVisibleCount(30);
+            setVisibleCount(LOAD_BATCH_SIZE);
+            visibleCountRef.current = LOAD_BATCH_SIZE;
             addToast('已清空', 'success');
         }
         setModalType('none');
@@ -449,8 +479,9 @@ const Chat: React.FC = () => {
             addToast('请先配置 API Key', 'error');
             return;
         }
+        const allMessages = await DB.getMessagesByCharId(char.id);
         const msgsByDate: Record<string, Message[]> = {};
-        messages
+        allMessages
         .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
         .forEach(m => {
             const d = new Date(m.timestamp);
@@ -497,7 +528,7 @@ const Chat: React.FC = () => {
                 });
 
                 if (!response.ok) throw new Error(`API Error on ${dateStr}`);
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let summary = data.choices?.[0]?.message?.content || '';
                 summary = summary.trim().replace(/^["']|["']$/g, ''); 
 
@@ -656,7 +687,7 @@ const Chat: React.FC = () => {
                 content: `[转发了 ${selectedMsgs.length} 条聊天记录给 ${targetChar?.name || ''}]`,
             });
             // Refresh messages to show the forwarding system message
-            DB.getRecentMessagesByCharId(char.id, MSG_MEMORY_LIMIT).then(setMessages);
+            reloadMessages(visibleCountRef.current);
         }
 
         addToast(`已转发 ${selectedMsgs.length} 条记录给 ${targetChar?.name || ''}`, 'success');
@@ -672,11 +703,28 @@ const Chat: React.FC = () => {
         .slice(-visibleCount),
         [messages, char?.hideBeforeMessageId, char?.hideSystemLogs, visibleCount]);
 
+    const collapsedCount = Math.max(0, totalMsgCount - displayMessages.length);
+
+    // Reset active category if it becomes invisible for the current character
+    useEffect(() => {
+        if (activeCategory !== 'default' && visibleCategories.length > 0 && !visibleCategories.some(c => c.id === activeCategory)) {
+            setActiveCategory('default');
+        }
+    }, [visibleCategories, activeCategory]);
+
+    // Build a set of hidden category IDs for quick lookup
+    const hiddenCategoryIds = useMemo(() => {
+        const visible = new Set(visibleCategories.map(c => c.id));
+        return new Set(categories.filter(c => !visible.has(c.id)).map(c => c.id));
+    }, [categories, visibleCategories]);
+
     // Memoize filtered emojis for ChatInputArea
     const filteredEmojis = useMemo(() => emojis.filter(e => {
+        // Exclude emojis from hidden categories
+        if (e.categoryId && hiddenCategoryIds.has(e.categoryId)) return false;
         if (activeCategory === 'default') return !e.categoryId || e.categoryId === 'default';
         return e.categoryId === activeCategory;
-    }), [emojis, activeCategory]);
+    }), [emojis, activeCategory, hiddenCategoryIds]);
 
     // Memoize ChatInputArea callbacks
     const handleSendCallback = useCallback(() => handleSendText(), [char, input, replyTarget]);
@@ -684,7 +732,7 @@ const Chat: React.FC = () => {
 
     return (
         <div 
-            className="flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-all duration-500"
+            className="flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-[background-image] duration-500"
             style={{ 
                 backgroundImage: char.chatBackground ? `url(${char.chatBackground})` : 'none',
                 backgroundSize: 'cover',
@@ -709,13 +757,14 @@ const Chat: React.FC = () => {
                 selectedCategory={selectedCategory}
 
                 onTransfer={() => { if(transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt }); setModalType('none'); }}
-                onImportEmoji={handleImportEmoji} 
+                onImportEmoji={handleImportEmoji}
                 onSaveSettings={saveSettings} onBgUpload={handleBgUpload} onRemoveBg={() => updateCharacter(char.id, { chatBackground: undefined })}
                 onClearHistory={handleClearHistory} onArchive={handleFullArchive}
                 onCreatePrompt={createNewPrompt} onEditPrompt={editSelectedPrompt} onSavePrompt={handleSavePrompt} onDeletePrompt={handleDeletePrompt}
                 onSetHistoryStart={handleSetHistoryStart} onEnterSelectionMode={handleEnterSelectionMode}
                 onReplyMessage={handleReplyMessage} onEditMessageStart={() => { if (selectedMessage) { setEditContent(selectedMessage.content); setModalType('edit-message'); } }}
                 onConfirmEditMessage={confirmEditMessage} onDeleteMessage={handleDeleteMessage} onCopyMessage={handleCopyMessage} onDeleteEmoji={handleDeleteEmoji} onDeleteCategory={handleDeleteCategory}
+                allCharacters={characters} onSaveCategoryVisibility={handleSaveCategoryVisibility}
                 translationEnabled={translationEnabled}
                 onToggleTranslation={() => { const next = !translationEnabled; setTranslationEnabled(next); localStorage.setItem(`chat_translate_enabled_${activeCharacterId}`, JSON.stringify(next)); if (!next) { setShowingTargetIds(new Set()); } }}
                 translateSourceLang={translateSourceLang}
@@ -739,20 +788,14 @@ const Chat: React.FC = () => {
              />
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto pt-6 pb-6 no-scrollbar" style={{ backgroundImage: activeTheme.type === 'custom' && activeTheme.user.backgroundImage ? 'none' : undefined }}>
-                {(char?.hideBeforeMessageId ? messages.length > visibleCount : totalMsgCount > messages.length) && (
+                {collapsedCount > 0 && (
                     <div className="flex justify-center mb-6">
                         <button onClick={async () => {
-                            if (char?.hideBeforeMessageId) {
-                                // hideBeforeMessageId mode: all relevant messages already loaded, just show more
-                                setVisibleCount(prev => prev + LOAD_BATCH_SIZE);
-                            } else if (activeCharacterId) {
-                                // Normal mode: fetch next batch from DB
-                                const { messages: moreMsgs, totalCount } = await DB.getRecentMessagesWithCount(activeCharacterId, messages.length + LOAD_BATCH_SIZE);
-                                setMessages(moreMsgs);
-                                setTotalMsgCount(totalCount);
-                                setVisibleCount(moreMsgs.length);
-                            }
-                        }} className="px-4 py-2 bg-white/50 backdrop-blur-sm rounded-full text-xs text-slate-500 shadow-sm border border-white hover:bg-white transition-colors">加载历史消息 ({char?.hideBeforeMessageId ? messages.length - visibleCount : totalMsgCount - messages.length})</button>
+                            const nextVisibleCount = visibleCount + LOAD_BATCH_SIZE;
+                            visibleCountRef.current = nextVisibleCount;
+                            setVisibleCount(nextVisibleCount);
+                            await reloadMessages(nextVisibleCount);
+                        }} className="px-4 py-2 bg-white/50 backdrop-blur-sm rounded-full text-xs text-slate-500 shadow-sm border border-white hover:bg-white transition-colors">加载历史消息 ({collapsedCount})</button>
                     </div>
                 )}
 
@@ -831,7 +874,7 @@ const Chat: React.FC = () => {
                     onPanelAction={handlePanelAction}
                     onImageSelect={handleImageSelect}
                     isSummarizing={isSummarizing}
-                    categories={categories}
+                    categories={visibleCategories}
                     activeCategory={activeCategory}
                     onReroll={handleReroll}
                     canReroll={canReroll}

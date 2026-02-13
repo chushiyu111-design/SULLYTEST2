@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { GalleryImage, CharacterProfile } from '../types';
+import { safeResponseJson } from '../utils/safeApi';
 import ConfirmDialog from '../components/os/ConfirmDialog';
 
 const Gallery: React.FC = () => {
@@ -165,7 +166,7 @@ CRITICAL: Stay in character. If there's conversation context, your comment shoul
             if (!response.ok) {
                 let errorMsg = `HTTP Error ${response.status}`;
                 try {
-                    const errData = await response.json();
+                    const errData = await safeResponseJson(response);
                     errorMsg = errData.error?.message || JSON.stringify(errData.error) || errorMsg;
                     if (errorMsg.includes('vision') || errorMsg.includes('image')) {
                         errorMsg = '当前模型可能不支持图片识别(Vision)，请切换模型。';
@@ -177,7 +178,7 @@ CRITICAL: Stay in character. If there's conversation context, your comment shoul
                 throw new Error(errorMsg);
             }
 
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const choice = data.choices?.[0];
 
             if (choice?.finish_reason === 'content_filter') {

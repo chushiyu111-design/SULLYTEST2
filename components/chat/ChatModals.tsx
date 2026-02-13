@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Modal from '../os/Modal';
 import { CharacterProfile, Message, EmojiCategory } from '../../types';
 
@@ -61,6 +61,9 @@ interface ChatModalsProps {
     onCopyMessage: () => void;
     onDeleteEmoji: () => void;
     onDeleteCategory: () => void;
+    // Category Visibility
+    allCharacters?: CharacterProfile[];
+    onSaveCategoryVisibility?: (categoryId: string, allowedCharacterIds: string[] | undefined) => void;
     // Translation
     translationEnabled?: boolean;
     onToggleTranslation?: () => void;
@@ -86,9 +89,35 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     onBgUpload, onRemoveBg, onClearHistory,
     onArchive, onCreatePrompt, onEditPrompt, onSavePrompt, onDeletePrompt,
     onSetHistoryStart, onEnterSelectionMode, onReplyMessage, onEditMessageStart, onConfirmEditMessage, onDeleteMessage, onCopyMessage, onDeleteEmoji, onDeleteCategory,
+    allCharacters = [], onSaveCategoryVisibility,
     translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
+    const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
+
+    const openVisibilityModal = () => {
+        if (selectedCategory) {
+            setVisibilitySelection(new Set(selectedCategory.allowedCharacterIds || []));
+            setModalType('category-visibility');
+        }
+    };
+
+    const toggleVisibilityChar = (charId: string) => {
+        setVisibilitySelection(prev => {
+            const next = new Set(prev);
+            if (next.has(charId)) next.delete(charId);
+            else next.add(charId);
+            return next;
+        });
+    };
+
+    const handleSaveVisibility = () => {
+        if (selectedCategory && onSaveCategoryVisibility) {
+            const ids = Array.from(visibilitySelection);
+            onSaveCategoryVisibility(selectedCategory.id, ids.length > 0 ? ids : undefined);
+        }
+        setModalType('none');
+    };
 
     return (
         <>
@@ -334,6 +363,62 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                 <div className="py-4 text-center">
                     <p className="text-sm text-slate-600">确定要删除分类 <br/><span className="font-bold">"{selectedCategory?.name}"</span> 吗？</p>
                     <p className="text-[10px] text-red-400 mt-2">注意：分类下的所有表情也将被删除！</p>
+                </div>
+            </Modal>
+
+            {/* Category Options Modal (shown on long-press) */}
+            <Modal isOpen={modalType === 'category-options'} title="分类操作" onClose={() => setModalType('none')}>
+                <div className="space-y-3">
+                    <button onClick={openVisibilityModal} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        </svg>
+                        设置可见角色
+                    </button>
+                    {selectedCategory && !selectedCategory.isSystem && selectedCategory.id !== 'default' && (
+                        <button onClick={() => setModalType('delete-category')} className="w-full py-3 bg-red-50 text-red-500 font-medium rounded-2xl active:bg-red-100 transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                            删除分类
+                        </button>
+                    )}
+                </div>
+            </Modal>
+
+            {/* Category Visibility Modal */}
+            <Modal
+                isOpen={modalType === 'category-visibility'} title={`"${selectedCategory?.name}" 可见角色`} onClose={() => setModalType('none')}
+                footer={<button onClick={handleSaveVisibility} className="w-full py-3 bg-primary text-white font-bold rounded-2xl">保存设置</button>}
+            >
+                <div className="space-y-3">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                        选择哪些角色可以使用此表情分组。不勾选任何角色表示所有角色均可使用。
+                    </p>
+                    <div className="space-y-2 max-h-[40vh] overflow-y-auto no-scrollbar">
+                        {allCharacters.map(c => (
+                            <div
+                                key={c.id}
+                                onClick={() => toggleVisibilityChar(c.id)}
+                                className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${visibilitySelection.has(c.id) ? 'bg-primary/5 border-primary/30' : 'bg-white border-slate-100 hover:bg-slate-50'}`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${visibilitySelection.has(c.id) ? 'bg-primary border-primary' : 'bg-slate-100 border-slate-300'}`}>
+                                    {visibilitySelection.has(c.id) && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                                </div>
+                                <img src={c.avatar} className="w-9 h-9 rounded-xl object-cover" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-sm text-slate-700">{c.name}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">{c.description}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {visibilitySelection.size > 0 && (
+                        <div className="text-[11px] text-center text-slate-500 bg-slate-50 rounded-lg py-2">
+                            已选 <span className="font-bold text-primary">{visibilitySelection.size}</span> 个角色可使用此分组
+                        </div>
+                    )}
                 </div>
             </Modal>
 

@@ -1,9 +1,11 @@
 /**
  * 🎭 SullyOS Brain Client
- * 
+ *
  * 小手机端的外置大脑调用模块
  * 负责：判断是否需要外置大脑 + 调用API + 包装结果
  */
+
+import { safeResponseJson } from './safeApi';
 
 // ============================================
 // 类型定义（复制自 types.ts）
@@ -264,7 +266,7 @@ export class BrainAgent {
       throw new Error(`Brain API error: ${response.status}`);
     }
     
-    return await response.json();
+    return await safeResponseJson(response);
   }
 
   /**

@@ -45,7 +45,8 @@
               'pop-in': 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
               'float-up': 'floatUp 3s ease-out forwards',
               'wiggle': 'wiggle 0.5s ease-in-out infinite',
-              'bounce-slow': 'bounceSlow 2s ease-in-out infinite'
+              'bounce-slow': 'bounceSlow 2s ease-in-out infinite',
+              'float': 'floatDrift 4s ease-in-out infinite alternate'
             },
             keyframes: {
               fadeIn: {
@@ -76,6 +77,10 @@
               bounceSlow: {
                 '0%, 100%': { transform: 'translateY(0)' },
                 '50%': { transform: 'translateY(-10px)' },
+              },
+              floatDrift: {
+                '0%': { transform: 'translateY(0) scale(1)', opacity: '0.3' },
+                '100%': { transform: 'translateY(-30px) scale(1.1)', opacity: '0.6' },
               }
             }
           }

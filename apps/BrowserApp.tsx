@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { processImage } from '../utils/file';
+import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 
 // --- Simple Markdown Renderer for Web Content ---
@@ -242,7 +243,7 @@ const BrowserApp: React.FC = () => {
                     });
                     
                     if (res.ok) {
-                        const data = await res.json();
+                        const data = await safeResponseJson(res);
                         const results = data.web?.results || [];
                         
                         setSearchResults(results); // RAW RESULTS
@@ -309,7 +310,7 @@ Generate realistic results linking to hypothetical URLs.`;
 
             if (!response.ok) throw new Error('Network Error');
             
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const raw = data.choices[0].message.content;
             
             // Parse Title and Content

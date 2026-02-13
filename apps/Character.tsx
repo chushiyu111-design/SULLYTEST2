@@ -12,6 +12,7 @@ import { ContextBuilder } from '../utils/context';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
 import ImpressionPanel from '../components/character/ImpressionPanel';
 import MemoryArchivist from '../components/character/MemoryArchivist';
+import { safeResponseJson } from '../utils/safeApi';
 
 const CharacterCard: React.FC<{
     char: CharacterProfile;
@@ -248,7 +249,7 @@ const Character: React.FC = () => {
               body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.3 })
           });
           if (!response.ok) throw new Error('API Request failed');
-          const data = await response.json();
+          const data = await safeResponseJson(response);
           const summary = data.choices[0].message.content.trim();
           const key = `${year}-${month}`;
           
@@ -302,7 +303,7 @@ const Character: React.FC = () => {
           const prompt = `Task: Convert this text log into a JSON array. Format: [{ "date": "YYYY-MM-DD", "summary": "...", "mood": "..." }] Text: ${importText.substring(0, 8000)}`; 
           const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` }, body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.1 }) }); 
           if (!response.ok) throw new Error(`HTTP Error: ${response.status}`); 
-          const data = await response.json(); 
+          const data = await safeResponseJson(response); 
           let content = data.choices?.[0]?.message?.content || ''; 
           content = content.replace(/```json/g, '').replace(/```/g, '').trim(); 
           const firstBracket = content.indexOf('['); 
@@ -393,7 +394,7 @@ const Character: React.FC = () => {
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const data = await safeResponseJson(response);
                     let summary = data.choices?.[0]?.message?.content || '';
                     summary = summary.replace(/^["']|["']$/g, '').trim(); 
                     
@@ -568,7 +569,7 @@ ${isInitialGeneration ? `
           });
 
           if (!response.ok) throw new Error('API Request Failed');
-          const data = await response.json();
+          const data = await safeResponseJson(response);
           let content = data.choices[0].message.content;
           
           content = content.replace(/```json/g, '').replace(/```/g, '').trim();

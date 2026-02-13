@@ -4,6 +4,7 @@ import { DB } from '../utils/db';
 import { CharacterProfile, PhoneEvidence, PhoneCustomApp } from '../types';
 import { ContextBuilder } from '../utils/context';
 import Modal from '../components/os/Modal';
+import { safeResponseJson } from '../utils/safeApi';
 
 // --- Debug Component ---
 const LayoutInspector: React.FC = () => {
@@ -247,7 +248,7 @@ const CheckPhone: React.FC = () => {
             });
 
             if (!response.ok) throw new Error('API Error');
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             let content = data.choices[0].message.content;
             content = content.replace(/```json/g, '').replace(/```/g, '').trim();
             const firstBracket = content.indexOf('[');
@@ -346,7 +347,7 @@ Format:
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 let newLines = data.choices[0].message.content.trim();
                 
                 // Clean up any markdown

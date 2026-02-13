@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { NovelBook, NovelSegment, CharacterProfile, UserProfile } from '../../types';
-import { 
-    NOVEL_THEMES, GenerationOptions, extractWritingTags, 
-    analyzeWriterPersonaSimple, generateWriterPersonaDeep, 
-    buildPrompt, parsePersonaMarkdown 
+import {
+    NOVEL_THEMES, GenerationOptions, extractWritingTags,
+    analyzeWriterPersonaSimple, generateWriterPersonaDeep,
+    buildPrompt, parsePersonaMarkdown
 } from '../../utils/novelUtils';
 import Modal from '../os/Modal';
 import ConfirmDialog from '../os/ConfirmDialog';
 import { useOS } from '../../context/OSContext';
+import { safeResponseJson } from '../../utils/safeApi';
 
 interface NovelWriterProps {
     activeBook: NovelBook;
@@ -206,7 +207,7 @@ const NovelWriter: React.FC<NovelWriterProps> = ({
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 if (data.usage?.total_tokens) setLastTokenUsage(data.usage.total_tokens);
 
                 let content = data.choices[0].message.content.trim();
@@ -357,7 +358,7 @@ ${chapterText.substring(0, 200000)}
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = await safeResponseJson(response);
                 setSummaryContent(data.choices[0].message.content);
             } else { setSummaryContent('生成失败，请重试。'); }
         } catch (e: any) { setSummaryContent(`错误: ${e.message}`); } finally { setIsGeneratingSummary(false); }

@@ -4,6 +4,7 @@ import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { CharacterProfile, Message, DateState } from '../types';
 import { ContextBuilder } from '../utils/context';
+import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import DateSession from '../components/date/DateSession';
 import DateSettings from '../components/date/DateSettings';
@@ -196,7 +197,7 @@ const DateApp: React.FC = () => {
             });
 
             if (!response.ok) throw new Error('Failed to sense presence');
-            const data = await response.json();
+            const data = await safeResponseJson(response);
             const content = data.choices[0].message.content;
             setPeekStatus(content);
 
@@ -240,13 +241,31 @@ const DateApp: React.FC = () => {
 
         // Explicitly tell AI about the scene
         systemPrompt += `### [Visual Novel Mode: 视觉小说脚本模式]
-你正在与用户进行**面对面**的互动。
+你正在与用户进行**面对面**的互动。这不是聊天，是一场真实的见面。
 
 ### 核心规则：一行一念 (One Line per Beat)
 前端解析器基于**换行符**来分割气泡。
 1. **禁止混写**: 严禁在同一行里既写动作又写带引号的台词。
 2. **情绪标签**: \`[emotion]\` (放在行首)。**仅限使用以下情绪**: ${dateEmotions.join(', ')}。**不要使用任何不在此列表中的标签。**
-3. **格式**: 台词用双引号 **"..."**，动作直接写。
+3. **格式**: 台词用双引号 **"..."**，动作/叙述直接写（不加引号）。
+
+### ⭐ 动作与叙述行的写法
+你不是在列清单，你是在写一个正在发生的场景。每一行动作/叙述都应该让人感受到**此时此刻的空气**。
+
+**具体要求**：
+- 写出**感官**：光线怎么落的、空气什么味道、皮肤什么触感、周围什么声音
+- 写出**节奏**：动作之间有停顿、有犹豫、有呼吸，不要一口气做完三个动作
+- 写出**情绪的痕迹**：不要说"他很紧张"，而是写他的手指在桌面上画了一道看不见的线
+- 让每一行都有**画面**，像电影里的一个镜头
+
+❌ **不要这样写**（干巴巴的动作罗列）：
+把手放下，看向你。
+走到你身边，坐下来。
+拿起杯子，喝了一口水。
+
+✅ **要这样写**（有呼吸感的叙述）：
+指尖从发梢滑落，垂在身侧。视线转过来的时候并不急，像是刚好、又像是故意。
+脚步踩在木地板上的声音很轻。在你旁边坐下来，衣料带过一缕还没散尽的冷风。
 
 ### 场景上下文
 1. **Location**: 你们现在**面对面**。
@@ -261,14 +280,14 @@ const DateApp: React.FC = () => {
                 messages: [
                     { role: 'system', content: systemPrompt },
                     ...historyMsgs,
-                    { role: 'user', content: `${text}\n\n(System Note: 请严格遵守 VN 脚本格式。)` }
+                    { role: 'user', content: `${text}\n\n(System Note: 严格遵守 VN 格式。叙述行写出场景的呼吸感，不要罗列动作。)` }
                 ],
                 temperature: 0.85
             })
         });
 
         if (!response.ok) throw new Error('API Error');
-        const data = await response.json();
+        const data = await safeResponseJson(response);
         const content = data.choices[0].message.content;
 
         // 3. Save AI Response
@@ -307,7 +326,18 @@ const DateApp: React.FC = () => {
         let systemPrompt = ContextBuilder.buildCoreContext(char, userProfile);
         const REQUIRED_EMOTIONS_R = ['normal', 'happy', 'angry', 'sad', 'shy'];
         const dateEmotionsR = [...REQUIRED_EMOTIONS_R, ...(char.customDateSprites || [])];
-        systemPrompt += `### [Visual Novel Mode: 视觉小说脚本模式]\n(Same rules apply... **仅限使用以下情绪标签**: ${dateEmotionsR.join(', ')}。不要使用不在列表中的标签。)`;
+        systemPrompt += `### [Visual Novel Mode: 视觉小说脚本模式]
+你正在与用户进行**面对面**的互动。
+
+### 格式规则
+1. **禁止混写**: 严禁在同一行里既写动作又写带引号的台词。
+2. **情绪标签**: \`[emotion]\` (放在行首)。**仅限使用以下情绪**: ${dateEmotionsR.join(', ')}。不要使用不在列表中的标签。
+3. **格式**: 台词用双引号 **"..."**，动作/叙述直接写。
+
+### ⭐ 动作与叙述行的写法
+不要罗列动作。写出感官细节、停顿和呼吸感，让每一行都像电影镜头——有画面、有空气、有温度。
+用细微的肢体语言暗示情绪，不要直接说"开心""紧张"。
+`;
 
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
@@ -317,14 +347,14 @@ const DateApp: React.FC = () => {
                 messages: [
                     { role: 'system', content: systemPrompt },
                     ...historyMsgs,
-                    { role: 'user', content: `${lastUserMsg.content}\n\n(System Note: Reroll requested. Please generate a different response.)` }
+                    { role: 'user', content: `${lastUserMsg.content}\n\n(System Note: Reroll. 用不同的角度重写，叙述行保持场景感。)` }
                 ],
                 temperature: 0.9 
             })
         });
 
         if (!response.ok) throw new Error('API Error');
-        const data = await response.json();
+        const data = await safeResponseJson(response);
         const content = data.choices[0].message.content;
 
         await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: content, metadata: { source: 'date' } });

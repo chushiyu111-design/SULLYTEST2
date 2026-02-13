@@ -249,19 +249,17 @@ export const DB = {
       const store = transaction.objectStore(STORE_MESSAGES);
       const index = store.index('charId');
       const collected: Message[] = [];
-      let totalCount = 0;
       const cursorReq = index.openCursor(IDBKeyRange.only(charId));
       cursorReq.onsuccess = () => {
           const cursor = cursorReq.result;
           if (cursor) {
               const m = cursor.value as Message;
-              if (!m.groupId) {
-                  totalCount++;
-                  if (m.id >= fromId) collected.push(m);
+              if (!m.groupId && m.id >= fromId) {
+                  collected.push(m);
               }
               cursor.continue();
           } else {
-              resolve({ messages: collected, totalCount });
+              resolve({ messages: collected, totalCount: collected.length });
           }
       };
       cursorReq.onerror = () => reject(cursorReq.error);
@@ -318,24 +316,20 @@ export const DB = {
 
   clearMessages: async (charId: string): Promise<void> => {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_MESSAGES, 'readwrite');
-      const store = transaction.objectStore(STORE_MESSAGES);
-      const index = store.index('charId');
-      const request = index.openCursor(IDBKeyRange.only(charId));
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-            const m = cursor.value as Message;
-            if (!m.groupId) {
-                store.delete(cursor.primaryKey);
-            }
-            cursor.continue();
-        }
-      };
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
+    const transaction = db.transaction(STORE_MESSAGES, 'readwrite');
+    const store = transaction.objectStore(STORE_MESSAGES);
+    const index = store.index('charId');
+    const request = index.openCursor(IDBKeyRange.only(charId));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor) { 
+          const m = cursor.value as Message;
+          if (!m.groupId) { 
+              store.delete(cursor.primaryKey); 
+          }
+          cursor.continue(); 
+      }
+    };
   },
 
   getGroups: async (): Promise<GroupProfile[]> => {
