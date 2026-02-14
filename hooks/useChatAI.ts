@@ -657,21 +657,27 @@ export const useChatAI = ({
             // 6. Parse Actions (Poke, Transfer, Schedule, etc.)
             aiContent = await ChatParser.parseAndExecuteActions(aiContent, char.id, char.name, addToast);
 
-            // 7. Handle Quote/Reply Logic (Robust: handles [[QUOTE:...]], [QUOTE:...])
-            // Use separate patterns: [[...]] requires exact ]] close (safe with ] in content); [QUOTE:...] disallows ] in content
+            // 7. Handle Quote/Reply Logic (Robust: handles [[QUOTE:...]], [QUOTE:...], typos like QUATE/QOUTE, Chinese 引用)
+            const QUOTE_RE_DOUBLE = /\[\[(?:QU[OA]TE|引用)[：:]\s*([\s\S]*?)\]\]/;
+            const QUOTE_RE_SINGLE = /\[(?:QU[OA]TE|引用)[：:]\s*([^\]]*)\]/;
+            const QUOTE_CLEAN_DOUBLE = /\[\[(?:QU[OA]TE|引用)[：:][\s\S]*?\]\]/g;
+            const QUOTE_CLEAN_SINGLE = /\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g;
             let aiReplyTarget: { id: number, content: string, name: string } | undefined;
-            const firstQuoteMatch = aiContent.match(/\[\[QUOTE:\s*([\s\S]*?)\]\]/) || aiContent.match(/\[QUOTE:\s*([^\]]*)\]/);
+            const firstQuoteMatch = aiContent.match(QUOTE_RE_DOUBLE) || aiContent.match(QUOTE_RE_SINGLE);
             if (firstQuoteMatch) {
                 const quotedText = firstQuoteMatch[1].trim();
                 if (quotedText) {
                     // Try exact include first, then fuzzy match (first 10 chars)
                     const targetMsg = historySlice.slice().reverse().find((m: Message) => m.role === 'user' && m.content.includes(quotedText))
                         || (quotedText.length > 10 ? historySlice.slice().reverse().find((m: Message) => m.role === 'user' && m.content.includes(quotedText.slice(0, 10))) : undefined);
-                    if (targetMsg) aiReplyTarget = { id: targetMsg.id, content: targetMsg.content, name: userProfile.name };
+                    if (targetMsg) {
+                        const truncated = targetMsg.content.length > 10 ? targetMsg.content.slice(0, 10) + '...' : targetMsg.content;
+                        aiReplyTarget = { id: targetMsg.id, content: truncated, name: userProfile.name };
+                    }
                 }
             }
             // Clean all quote tag variants from content
-            aiContent = aiContent.replace(/\[\[QUOTE:\s*[\s\S]*?\]\]/g, '').replace(/\[QUOTE:\s*[^\]]*\]/g, '').trim();
+            aiContent = aiContent.replace(QUOTE_CLEAN_DOUBLE, '').replace(QUOTE_CLEAN_SINGLE, '').trim();
 
             // 8. Split and Stream (Simulate Typing)
             // Note: SEND_EMOJI tags are preserved through sanitize so splitResponse can interleave them with text
@@ -796,15 +802,18 @@ export const useChatAI = ({
                                 await new Promise(r => setTimeout(r, delay));
 
                                 let chunkReplyTarget: { id: number, content: string, name: string } | undefined;
-                                const chunkQuoteMatch = chunk.match(/\[\[QUOTE:\s*([\s\S]*?)\]\]/) || chunk.match(/\[QUOTE:\s*([^\]]*)\]/);
+                                const chunkQuoteMatch = chunk.match(QUOTE_RE_DOUBLE) || chunk.match(QUOTE_RE_SINGLE);
                                 if (chunkQuoteMatch) {
                                     const quotedText = chunkQuoteMatch[1].trim();
                                     if (quotedText) {
                                         const targetMsg = historySlice.slice().reverse().find((m: Message) => m.role === 'user' && m.content.includes(quotedText))
                                             || (quotedText.length > 10 ? historySlice.slice().reverse().find((m: Message) => m.role === 'user' && m.content.includes(quotedText.slice(0, 10))) : undefined);
-                                        if (targetMsg) chunkReplyTarget = { id: targetMsg.id, content: targetMsg.content, name: userProfile.name };
+                                        if (targetMsg) {
+                                            const truncated = targetMsg.content.length > 10 ? targetMsg.content.slice(0, 10) + '...' : targetMsg.content;
+                                            chunkReplyTarget = { id: targetMsg.id, content: truncated, name: userProfile.name };
+                                        }
                                     }
-                                    chunk = chunk.replace(/\[\[QUOTE:\s*[\s\S]*?\]\]/g, '').replace(/\[QUOTE:\s*[^\]]*\]/g, '').trim();
+                                    chunk = chunk.replace(QUOTE_CLEAN_DOUBLE, '').replace(QUOTE_CLEAN_SINGLE, '').trim();
                                 }
 
                                 const replyData = chunkReplyTarget || (globalMsgIndex === 0 ? aiReplyTarget : undefined);

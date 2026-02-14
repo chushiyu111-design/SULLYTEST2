@@ -86,8 +86,8 @@ export const ChatParser = {
             // Strip residual action/system tags that weren't caught earlier
             .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|FS_DIARY|FS_READ_DIARY|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END)[:\s][\s\S]*?\]\]/g, '')
             .replace(/\[schedule_message[^\]]*\]/g, '')
-            .replace(/\[\[QUOTE:\s*[\s\S]*?\]\]/g, '')
-            .replace(/\[QUOTE:\s*[^\]]*\]/g, '')
+            .replace(/\[\[(?:QU[OA]TE|引用)[：:][\s\S]*?\]\]/g, '')
+            .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')
             // Strip backtick-wrapped action tags and empty backtick pairs
             .replace(/`(\[\[[\s\S]*?\]\])`/g, '$1')
             .replace(/``+/g, '')
@@ -120,7 +120,7 @@ export const ChatParser = {
             .replace(/``+/g, '')
             .replace(/(^|\s)`(\s|$)/gm, '$1$2')
             .replace(/\[\[[\s\S]*?\]\]/g, '')
-            .replace(/\[QUOTE:[^\]]*\]/g, '')
+            .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')
             .replace(/^#{1,6}\s+/gm, '')
             .replace(/^\s*[-*+]\s*$/gm, '')
             .trim();
@@ -153,11 +153,25 @@ export const ChatParser = {
     },
 
     // Chunking text for typing effect - splits into separate chat bubbles
-    // Only splits on line breaks; the AI decides where to break bubbles.
-    // Handles all line break types: \n, \r\n, \r, and Unicode line/paragraph separators
+    // Primary: split on line breaks (AI decides where to break)
+    // Fallback: if no line breaks and text is long, split on spaces between CJK characters
+    //   (Chinese text normally has no spaces, so "汉字 汉字" means the AI intended a line break)
     chunkText: (text: string): string[] => {
-        return text.split(/(?:\r\n|\r|\n|\u2028|\u2029)+/)
+        // Try line breaks first
+        let chunks = text.split(/(?:\r\n|\r|\n|\u2028|\u2029)+/)
             .map(c => c.trim())
             .filter(c => c.length > 0);
+
+        // Fallback: no line breaks found and text is long enough
+        // Split on spaces that sit between CJK characters/punctuation (中文里不该有空格)
+        if (chunks.length <= 1 && text.trim().length > 50) {
+            // Match a CJK char/punct, then space(s), then CJK char
+            // Split AFTER the first CJK char + space boundary using lookbehind/lookahead
+            chunks = text.split(/(?<=[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef\u2000-\u206f\u2e80-\u2eff\u3001-\u3003\u2018-\u201f\u300a-\u300f\uff01-\uff0f\uff1a-\uff20])\s+(?=[\u4e00-\u9fff\u3400-\u4dbf])/)
+                .map(c => c.trim())
+                .filter(c => c.length > 0);
+        }
+
+        return chunks;
     }
 }
