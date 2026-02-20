@@ -4,6 +4,7 @@
  */
 
 import { safeResponseJson } from './safeApi';
+import { DB } from './db';
 
 export interface WeatherData {
     temp: number;
@@ -40,6 +41,18 @@ export interface RealtimeConfig {
     notionEnabled: boolean;
     notionApiKey: string;   // Notion Integration Token
     notionDatabaseId: string; // 日记数据库ID
+    notionNotesDatabaseId?: string; // 用户笔记数据库ID（可选）
+
+    // 飞书配置
+    feishuEnabled?: boolean;
+    feishuAppId?: string;
+    feishuAppSecret?: string;
+    feishuBaseId?: string;
+    feishuTableId?: string;
+
+    // 小红书配置 (MCP)
+    xhsEnabled?: boolean;
+    xhsMcpConfig?: { enabled: boolean; serverUrl: string };
 
     // 缓存配置
     cacheMinutes: number;   // 缓存时长（分钟）
@@ -55,6 +68,8 @@ export const defaultRealtimeConfig: RealtimeConfig = {
     notionEnabled: false,
     notionApiKey: '',
     notionDatabaseId: '',
+    xhsEnabled: false,
+    xhsMcpConfig: { enabled: false, serverUrl: 'http://localhost:18060/mcp' },
     cacheMinutes: 30
 };
 
@@ -755,6 +770,142 @@ export const NotionManager = {
         } catch (e: any) {
             console.error('Read diary content failed:', e);
             return { success: false, content: '', message: `读取失败: ${e.message}` };
+        }
+    },
+
+    /**
+     * 获取用户笔记列表（从用户的笔记数据库）
+     * 让角色能偶尔看到用户写的日常笔记，增加温馨感
+     */
+    getUserNotes: async (
+        apiKey: string,
+        notesDatabaseId: string,
+        limit: number = 5
+    ): Promise<{ success: boolean; entries: DiaryPreview[]; message: string }> => {
+        try {
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/query`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    database_id: notesDatabaseId,
+                    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+                    page_size: limit
+                })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                console.error('Query user notes failed:', response.status, text);
+                return { success: false, entries: [], message: `查询失败: ${response.status}` };
+            }
+
+            const data = JSON.parse(text);
+
+            if (!data.results || data.results.length === 0) {
+                return { success: true, entries: [], message: '暂无笔记' };
+            }
+
+            const entries: DiaryPreview[] = data.results.map((page: any) => {
+                const title = page.properties?.Name?.title?.[0]?.plain_text
+                    || page.properties?.['名称']?.title?.[0]?.plain_text
+                    || page.properties?.Title?.title?.[0]?.plain_text
+                    || '无标题';
+                // 尝试多种日期属性名
+                const date = page.properties?.Date?.date?.start
+                    || page.properties?.['日期']?.date?.start
+                    || page.last_edited_time?.split('T')[0]
+                    || '';
+                return {
+                    id: page.id,
+                    title,
+                    date,
+                    url: page.url || ''
+                };
+            });
+
+            return { success: true, entries, message: '获取成功' };
+        } catch (e: any) {
+            console.error('Get user notes failed:', e);
+            return { success: false, entries: [], message: `获取失败: ${e.message}` };
+        }
+    },
+
+    /**
+     * 读取用户笔记页面的完整内容
+     * 复用 readDiaryContent 的逻辑（都是通过 pageId 读 blocks）
+     */
+    readNoteContent: async (
+        apiKey: string,
+        pageId: string
+    ): Promise<{ success: boolean; content: string; message: string }> => {
+        // 和 readDiaryContent 一样，通过 blocks 端点读取
+        return NotionManager.readDiaryContent(apiKey, pageId);
+    },
+
+    /**
+     * 按关键词搜索用户笔记
+     */
+    searchUserNotes: async (
+        apiKey: string,
+        notesDatabaseId: string,
+        keyword: string,
+        limit: number = 5
+    ): Promise<{ success: boolean; entries: DiaryPreview[]; message: string }> => {
+        try {
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/query`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    database_id: notesDatabaseId,
+                    filter: {
+                        property: 'Name',
+                        title: { contains: keyword }
+                    },
+                    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+                    page_size: limit
+                })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                return { success: false, entries: [], message: `搜索失败: ${response.status}` };
+            }
+
+            const data = JSON.parse(text);
+
+            if (!data.results || data.results.length === 0) {
+                return { success: true, entries: [], message: `没有找到关于"${keyword}"的笔记` };
+            }
+
+            const entries: DiaryPreview[] = data.results.map((page: any) => {
+                const title = page.properties?.Name?.title?.[0]?.plain_text
+                    || page.properties?.['名称']?.title?.[0]?.plain_text
+                    || page.properties?.Title?.title?.[0]?.plain_text
+                    || '无标题';
+                const date = page.properties?.Date?.date?.start
+                    || page.properties?.['日期']?.date?.start
+                    || page.last_edited_time?.split('T')[0]
+                    || '';
+                return {
+                    id: page.id,
+                    title,
+                    date,
+                    url: page.url || ''
+                };
+            });
+
+            return { success: true, entries, message: `找到 ${entries.length} 篇笔记` };
+        } catch (e: any) {
+            console.error('Search user notes failed:', e);
+            return { success: false, entries: [], message: `搜索失败: ${e.message}` };
         }
     }
 };
@@ -1690,3 +1841,18 @@ export const FeishuManager = {
         }
     }
 };
+
+// ==================== 小红书 Types ====================
+
+export interface XhsNote {
+    noteId: string;
+    title: string;
+    desc: string;
+    likes: number;
+    author: string;
+    authorId: string;
+    xsecToken?: string;
+    coverUrl?: string;
+    type?: string;  // 'normal' | 'video'
+}
+// XhsManager removed — all XHS ops go through xhsMcpClient.ts

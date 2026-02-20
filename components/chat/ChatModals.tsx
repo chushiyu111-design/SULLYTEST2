@@ -72,6 +72,9 @@ interface ChatModalsProps {
     translateTargetLang?: string;
     onSetTranslateSourceLang?: (lang: string) => void;
     onSetTranslateLang?: (lang: string) => void;
+    // XHS toggle
+    xhsEnabled?: boolean;
+    onToggleXhs?: () => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -92,7 +95,8 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     onArchive, onCreatePrompt, onEditPrompt, onSavePrompt, onDeletePrompt,
     onSetHistoryStart, onEnterSelectionMode, onReplyMessage, onEditMessageStart, onConfirmEditMessage, onDeleteMessage, onCopyMessage, onDeleteEmoji, onDeleteCategory,
     allCharacters = [], onSaveCategoryVisibility,
-    translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang
+    translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang,
+    xhsEnabled, onToggleXhs
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
@@ -235,6 +239,19 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                                  </div>
                              </div>
                          )}
+                     </div>
+
+                     {/* XHS Toggle */}
+                     <div className="pt-2 border-t border-slate-100">
+                         <div className="flex justify-between items-center cursor-pointer" onClick={onToggleXhs}>
+                             <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">小红书</label>
+                             <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${xhsEnabled ? 'bg-red-400' : 'bg-slate-200'}`}>
+                                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${xhsEnabled ? 'translate-x-4' : ''}`}></div>
+                             </div>
+                         </div>
+                         <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                             开启后，角色在聊天中可以搜索、浏览、发帖、评论小红书。需要在全局设置中配置 MCP 或 Cookie。
+                         </p>
                      </div>
 
                      <div className="pt-2 border-t border-slate-100">

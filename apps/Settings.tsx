@@ -7,6 +7,7 @@ import { Share } from '@capacitor/share';
 import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import { NotionManager, FeishuManager } from '../utils/realtimeContext';
+import { XhsMcpClient } from '../utils/xhsMcpClient';
 
 const Settings: React.FC = () => {
   const {
@@ -39,11 +40,17 @@ const Settings: React.FC = () => {
   const [rtNotionEnabled, setRtNotionEnabled] = useState(realtimeConfig.notionEnabled);
   const [rtNotionKey, setRtNotionKey] = useState(realtimeConfig.notionApiKey);
   const [rtNotionDbId, setRtNotionDbId] = useState(realtimeConfig.notionDatabaseId);
+  const [rtNotionNotesDbId, setRtNotionNotesDbId] = useState(realtimeConfig.notionNotesDatabaseId || '');
   const [rtFeishuEnabled, setRtFeishuEnabled] = useState(realtimeConfig.feishuEnabled);
   const [rtFeishuAppId, setRtFeishuAppId] = useState(realtimeConfig.feishuAppId);
   const [rtFeishuAppSecret, setRtFeishuAppSecret] = useState(realtimeConfig.feishuAppSecret);
   const [rtFeishuBaseId, setRtFeishuBaseId] = useState(realtimeConfig.feishuBaseId);
   const [rtFeishuTableId, setRtFeishuTableId] = useState(realtimeConfig.feishuTableId);
+  const [rtXhsEnabled, setRtXhsEnabled] = useState(realtimeConfig.xhsEnabled);
+  const [rtXhsMcpEnabled, setRtXhsMcpEnabled] = useState(realtimeConfig.xhsMcpConfig?.enabled || false);
+  const [rtXhsMcpUrl, setRtXhsMcpUrl] = useState(realtimeConfig.xhsMcpConfig?.serverUrl || 'http://localhost:18060/mcp');
+  const [rtXhsNickname, setRtXhsNickname] = useState(realtimeConfig.xhsMcpConfig?.loggedInNickname || '');
+  const [rtXhsUserId, setRtXhsUserId] = useState(realtimeConfig.xhsMcpConfig?.loggedInUserId || '');
   const [rtTestStatus, setRtTestStatus] = useState('');
   
   // For web download link
@@ -196,11 +203,19 @@ const Settings: React.FC = () => {
           notionEnabled: rtNotionEnabled,
           notionApiKey: rtNotionKey,
           notionDatabaseId: rtNotionDbId,
+          notionNotesDatabaseId: rtNotionNotesDbId || undefined,
           feishuEnabled: rtFeishuEnabled,
           feishuAppId: rtFeishuAppId,
           feishuAppSecret: rtFeishuAppSecret,
           feishuBaseId: rtFeishuBaseId,
-          feishuTableId: rtFeishuTableId
+          feishuTableId: rtFeishuTableId,
+          xhsEnabled: rtXhsEnabled,
+          xhsMcpConfig: {
+              enabled: rtXhsMcpEnabled,
+              serverUrl: rtXhsMcpUrl,
+              loggedInNickname: rtXhsNickname || undefined,
+              loggedInUserId: rtXhsUserId || undefined,
+          }
       });
       addToast('实时感知配置已保存', 'success');
       setShowRealtimeModal(false);
@@ -257,9 +272,44 @@ const Settings: React.FC = () => {
       }
   };
 
+  // 测试小红书 MCP 连接
+  const testXhsMcp = async () => {
+      if (!rtXhsMcpUrl) {
+          setRtTestStatus('请填写 MCP Server URL');
+          return;
+      }
+      setRtTestStatus('正在连接 MCP Server...');
+      try {
+          const result = await XhsMcpClient.testConnection(rtXhsMcpUrl);
+          if (result.connected) {
+              const toolCount = result.tools?.length || 0;
+              const loginInfo = result.loggedIn
+                  ? ` | ${result.nickname ? `账号: ${result.nickname}` : '已登录'}${result.userId ? ` (ID: ${result.userId})` : ''}`
+                  : ' | ⚠️ 未登录，请先在浏览器中登录小红书';
+              setRtTestStatus(`✅ MCP 连接成功! ${toolCount} 个工具可用${loginInfo}`);
+              // 自动填充昵称和userId（如果用户还没手动填过）
+              if (result.nickname && !rtXhsNickname) setRtXhsNickname(result.nickname);
+              if (result.userId && !rtXhsUserId) setRtXhsUserId(result.userId);
+              // 保存登录信息
+              updateRealtimeConfig({
+                  xhsMcpConfig: {
+                      enabled: rtXhsMcpEnabled,
+                      serverUrl: rtXhsMcpUrl,
+                      loggedInNickname: rtXhsNickname || result.nickname,
+                      loggedInUserId: rtXhsUserId || result.userId,
+                  }
+              });
+          } else {
+              setRtTestStatus(`❌ 连接失败: ${result.error}`);
+          }
+      } catch (e: any) {
+          setRtTestStatus(`网络错误: ${e.message}`);
+      }
+  };
+
   return (
     <div className="h-full w-full bg-slate-50/50 flex flex-col font-light relative">
-      
+
       {/* GLOBAL PROGRESS OVERLAY */}
       {sysOperation.status === 'processing' && (
           <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center animate-fade-in">
@@ -424,7 +474,7 @@ const Settings: React.FC = () => {
                 让AI角色感知真实世界：天气、新闻热点、当前时间。角色可以根据天气关心你、聊聊最近的热点话题。
             </p>
 
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-5 gap-2 text-center">
                 <div className={`py-3 rounded-xl text-xs font-bold ${rtWeatherEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
                     <div className="text-lg mb-1">{rtWeatherEnabled ? '☀️' : '🌫️'}</div>
                     天气
@@ -440,6 +490,10 @@ const Settings: React.FC = () => {
                 <div className={`py-3 rounded-xl text-xs font-bold ${rtFeishuEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
                     <div className="text-lg mb-1">{rtFeishuEnabled ? '📒' : '📋'}</div>
                     飞书
+                </div>
+                <div className={`py-3 rounded-xl text-xs font-bold ${rtXhsEnabled ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400'}`}>
+                    <div className="text-lg mb-1">{rtXhsEnabled ? '📕' : '📋'}</div>
+                    小红书
                 </div>
             </div>
         </section>
@@ -570,6 +624,13 @@ const Settings: React.FC = () => {
                               <input type="text" value={rtNotionDbId} onChange={e => setRtNotionDbId(e.target.value)} className="w-full bg-white/80 border border-orange-200 rounded-xl px-3 py-2 text-sm font-mono" placeholder="从数据库URL复制" />
                           </div>
                           <button onClick={testNotionApi} className="w-full py-2 bg-orange-100 text-orange-600 text-xs font-bold rounded-xl active:scale-95 transition-transform">测试Notion连接</button>
+                          <div className="border-t border-orange-200/50 pt-2 mt-2">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">笔记数据库 ID（可选）</label>
+                              <input type="text" value={rtNotionNotesDbId} onChange={e => setRtNotionNotesDbId(e.target.value)} className="w-full bg-white/80 border border-orange-200 rounded-xl px-3 py-2 text-sm font-mono" placeholder="用户日常笔记的数据库ID" />
+                              <p className="text-[10px] text-orange-500/60 leading-relaxed mt-1">
+                                  填写后角色可以偶尔看到你的笔记标题，温馨地提起你写的内容。留空则不启用。
+                              </p>
+                          </div>
                           <p className="text-[10px] text-orange-500/70 leading-relaxed">
                               1. 在 <a href="https://www.notion.so/my-integrations" target="_blank" className="underline">Notion开发者</a> 创建Integration<br/>
                               2. 创建一个日记数据库，添加"Name"(标题)和"Date"(日期)属性<br/>
@@ -619,6 +680,48 @@ const Settings: React.FC = () => {
                               2. 在应用权限中添加「多维表格」相关权限<br/>
                               3. 创建一个多维表格，添加字段: 标题(文本)、内容(文本)、日期(日期)、心情(文本)、角色(文本)<br/>
                               4. 从多维表格 URL 中获取 App Token 和 Table ID
+                          </p>
+                      </div>
+                  )}
+              </div>
+
+              {/* 小红书 MCP */}
+              <div className="bg-red-50/50 p-4 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                          <span className="text-lg">📕</span>
+                          <span className="text-sm font-bold text-red-700">小红书 MCP</span>
+                          <span className="text-[9px] bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full">浏览器自动化</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" checked={rtXhsMcpEnabled} onChange={e => { setRtXhsMcpEnabled(e.target.checked); setRtXhsEnabled(e.target.checked); }} className="sr-only peer" />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                      </label>
+                  </div>
+                  <p className="text-[10px] text-red-500/70 leading-relaxed">
+                      通过 MCP Server（浏览器自动化）操作小红书。角色可以搜索、浏览、发帖、评论。
+                  </p>
+                  {rtXhsMcpEnabled && (
+                      <div className="space-y-2">
+                          <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">MCP Server URL</label>
+                              <input value={rtXhsMcpUrl} onChange={e => setRtXhsMcpUrl(e.target.value)} className="w-full bg-white/80 border border-red-200 rounded-xl px-3 py-2 text-[11px] font-mono" placeholder="http://localhost:18060/mcp" />
+                          </div>
+                          <button onClick={testXhsMcp} className="w-full py-2 bg-red-100 text-red-600 text-xs font-bold rounded-xl active:scale-95 transition-transform">测试 MCP 连接</button>
+                          <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">小红书昵称</label>
+                                  <input value={rtXhsNickname} onChange={e => setRtXhsNickname(e.target.value)} className="w-full bg-white/80 border border-red-200 rounded-xl px-3 py-2 text-[11px]" placeholder="手动填写（MCP检测可能不准）" />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">用户 ID</label>
+                                  <input value={rtXhsUserId} onChange={e => setRtXhsUserId(e.target.value)} className="w-full bg-white/80 border border-red-200 rounded-xl px-3 py-2 text-[11px] font-mono" placeholder="可选，用于查看主页" />
+                              </div>
+                          </div>
+                          <p className="text-[10px] text-red-500/70 leading-relaxed">
+                              需要部署 xiaohongshu-mcp 并保持登录。在角色聊天设置中单独开关小红书。<br/>
+                              昵称和用户ID用于"查看自己的主页"功能。MCP自动检测可能不准，建议手动填写。<br/>
+                              项目: github.com/xpzouying/xiaohongshu-mcp
                           </p>
                       </div>
                   )}

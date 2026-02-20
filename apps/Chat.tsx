@@ -4,6 +4,7 @@ import { DB } from '../utils/db';
 import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory } from '../types';
 import { processImage } from '../utils/file';
 import { safeResponseJson } from '../utils/safeApi';
+import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
 import MessageItem from '../components/chat/MessageItem';
 import { PRESET_THEMES, DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
 import ChatHeader from '../components/chat/ChatHeader';
@@ -30,6 +31,7 @@ const Chat: React.FC = () => {
     const lastMsgIdRef = useRef<number | null>(null);
     const scrollThrottleRef = useRef(0);
     const visibleCountRef = useRef(30);
+    const activeCharIdRef = useRef(activeCharacterId);
 
     // Reply Logic
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
@@ -130,7 +132,13 @@ const Chat: React.FC = () => {
     const reloadMessages = useCallback(async (requestedVisibleCount: number) => {
         if (!activeCharacterId) return;
 
+        const charIdAtStart = activeCharacterId;
         const allMsgs = await DB.getMessagesByCharId(activeCharacterId);
+
+        // Guard against stale async results: if the user switched characters
+        // while the DB query was in flight, discard this result.
+        if (activeCharIdRef.current !== charIdAtStart) return;
+
         const chatScopeMsgs = allMsgs
             .filter(m => m.metadata?.source !== 'date')
             .filter(m => !char?.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
@@ -142,6 +150,10 @@ const Chat: React.FC = () => {
 
     useEffect(() => {
         if (activeCharacterId) {
+            // Update ref BEFORE any async work so stale reloadMessages calls
+            // from a previous character can detect the switch and bail out.
+            activeCharIdRef.current = activeCharacterId;
+
             reloadMessages(LOAD_BATCH_SIZE);
             loadEmojiData();
             const savedDraft = localStorage.getItem(draftKey);
@@ -271,9 +283,34 @@ const Chat: React.FC = () => {
         }
 
         await DB.saveMessage(msgPayload);
+
+        // Detect XHS link in user text and create xhs_card via MCP
+        if (type === 'text') {
+            const xhsUrlMatch = text.match(/xiaohongshu\.com\/(?:discovery\/item|explore)\/([a-f0-9]{24})/);
+            const mcpUrl = realtimeConfig?.xhsMcpConfig?.serverUrl;
+            if (xhsUrlMatch && mcpUrl && realtimeConfig?.xhsMcpConfig?.enabled) {
+                const noteUrl = `https://www.xiaohongshu.com/explore/${xhsUrlMatch[1]}`;
+                try {
+                    const result = await XhsMcpClient.getNoteDetail(mcpUrl, noteUrl);
+                    if (result.success && result.data) {
+                        const note = normalizeNote(result.data);
+                        await DB.saveMessage({
+                            charId: char.id,
+                            role: 'user',
+                            type: 'xhs_card',
+                            content: note.title || '小红书笔记',
+                            metadata: { xhsNote: note }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('XHS link fetch via MCP failed:', e);
+                }
+            }
+        }
+
         await reloadMessages(visibleCountRef.current);
         setShowPanel('none');
-        
+
         // Manual trigger only: Removed auto triggerAI call
     };
 
@@ -785,6 +822,8 @@ const Chat: React.FC = () => {
                 translateTargetLang={translateTargetLang}
                 onSetTranslateSourceLang={(lang: string) => { setTranslateSourceLang(lang); localStorage.setItem('chat_translate_source_lang', lang); setShowingTargetIds(new Set()); }}
                 onSetTranslateLang={(lang: string) => { setTranslateTargetLang(lang); localStorage.setItem('chat_translate_lang', lang); setShowingTargetIds(new Set()); }}
+                xhsEnabled={!!char.xhsEnabled}
+                onToggleXhs={() => updateCharacter(char.id, { xhsEnabled: !char.xhsEnabled })}
              />
              
              <ChatHeader 

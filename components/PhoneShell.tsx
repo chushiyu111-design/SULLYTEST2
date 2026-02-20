@@ -24,8 +24,10 @@ import FAQApp from '../apps/FAQApp';
 import GameApp from '../apps/GameApp'; 
 import WorldbookApp from '../apps/WorldbookApp';
 import NovelApp from '../apps/NovelApp'; 
-import BankApp from '../apps/BankApp'; 
-import BrowserApp from '../apps/BrowserApp'; // Import BrowserApp
+import BankApp from '../apps/BankApp';
+import XhsStockApp from '../apps/XhsStockApp';
+import XhsFreeRoamApp from '../apps/XhsFreeRoamApp';
+import BrowserApp from '../apps/BrowserApp';
 import { SpecialMomentsApp, ValentineController, shouldShowValentinePopup } from './ValentineEvent';
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
@@ -305,8 +307,10 @@ const PhoneShell: React.FC = () => {
       case AppID.Game: return <GameApp />; 
       case AppID.Worldbook: return <WorldbookApp />;
       case AppID.Novel: return <NovelApp />; 
-      case AppID.Bank: return <BankApp />; 
-      case AppID.Browser: return <BrowserApp />; // Added Browser Case
+      case AppID.Bank: return <BankApp />;
+      case AppID.XhsStock: return <XhsStockApp />;
+      case AppID.XhsFreeRoam: return <XhsFreeRoamApp />;
+      case AppID.Browser: return <BrowserApp />;
       case AppID.SpecialMoments: return <SpecialMomentsApp />;
       case AppID.Launcher:
       default: return <Launcher />;

@@ -1107,10 +1107,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           // 1. Define Stores to Process based on Mode
           let storesToProcess: string[] = [];
           const allStores = [
-              'characters', 'messages', 'themes', 'emojis', 'assets', 'gallery', 
-              'user_profile', 'diaries', 'tasks', 'anniversaries', 'room_todos', 
+              'characters', 'messages', 'themes', 'emojis', 'assets', 'gallery',
+              'user_profile', 'diaries', 'tasks', 'anniversaries', 'room_todos',
               'room_notes', 'groups', 'journal_stickers', 'social_posts', 'courses', 'games', 'worldbooks', 'novels',
-              'bank_transactions', 'bank_data'
+              'bank_transactions', 'bank_data',
+              'xhs_activities', 'xhs_stock'
           ];
 
           if (mode === 'full') {
@@ -1263,6 +1264,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                       }
                       break;
                   }
+                  case 'xhs_activities': backupData.xhsActivities = processedData; break;
+                  case 'xhs_stock': backupData.xhsStockImages = processedData; break;
               }
 
               await new Promise(resolve => setTimeout(resolve, 10));

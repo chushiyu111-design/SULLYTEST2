@@ -155,10 +155,38 @@ export const ChatPrompts = {
             console.error('Failed to inject feishu diary context:', e);
         }
 
+        // 注入用户笔记标题（让角色知道用户最近在写什么）- Notion 笔记数据库
+        try {
+            const config = realtimeConfig || defaultRealtimeConfig;
+            if (config.notionEnabled && config.notionApiKey && config.notionNotesDatabaseId) {
+                const notesResult = await NotionManager.getUserNotes(
+                    config.notionApiKey,
+                    config.notionNotesDatabaseId,
+                    5
+                );
+                if (notesResult.success && notesResult.entries.length > 0) {
+                    baseSystemPrompt += `\n### 📝【${userProfile.name}最近写的笔记】\n`;
+                    baseSystemPrompt += `（这些是${userProfile.name}在Notion上写的个人笔记。你可以偶尔自然地提到你看到了ta写的某篇笔记，表示关心，但不要每次都提，也不要显得在监视。如果想看某篇的详细内容，可以使用 [[READ_NOTE: 标题关键词]] 翻阅）\n`;
+                    notesResult.entries.forEach((d, i) => {
+                        baseSystemPrompt += `${i + 1}. [${d.date}] ${d.title}\n`;
+                    });
+                    baseSystemPrompt += `\n`;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to inject user notes context:', e);
+        }
+
         const emojiContextStr = ChatPrompts.buildEmojiContext(emojis, categories);
         const searchEnabled = !!(realtimeConfig?.newsEnabled && realtimeConfig?.newsApiKey);
         const notionEnabled = !!(realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionDatabaseId);
+        const notionNotesEnabled = !!(realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionNotesDatabaseId);
         const feishuEnabled = !!(realtimeConfig?.feishuEnabled && realtimeConfig?.feishuAppId && realtimeConfig?.feishuAppSecret && realtimeConfig?.feishuBaseId && realtimeConfig?.feishuTableId);
+        // Per-character XHS override: MCP-only
+        const mcpXhsAvailable = !!(realtimeConfig?.xhsMcpConfig?.enabled && realtimeConfig?.xhsMcpConfig?.serverUrl);
+        const xhsEnabled = char.xhsEnabled !== undefined
+            ? !!(char.xhsEnabled && mcpXhsAvailable)
+            : !!(realtimeConfig?.xhsEnabled && mcpXhsAvailable);
 
         baseSystemPrompt += `### 聊天 App 行为规范 (Chat App Rules)
             **严格注意，你正在手机聊天，无论之前是什么模式，哪怕上一句话你们还面对面在一起，当前，你都是已经处于线上聊天状态了，请不要输出你的行为**
@@ -183,7 +211,8 @@ export const ChatPrompts = {
    - **添加纪念日**: 如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以**主动**将它添加到用户的日历中。单独起一行输出: \`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
    - **定时发送消息**: 如果你想在未来某个时间主动发消息（比如晚安、早安或提醒），请单独起一行输出: \`[schedule_message | YYYY-MM-DD HH:MM:SS | fixed | 消息内容]\`，分行可以多输出很多该类消息。
 ${notionEnabled ? `   - **翻阅日记(Notion)**: 当聊天涉及过去的事情、回忆、或你想查看之前写过的日记时，**必须**使用: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。` : ''}${feishuEnabled ? `
-   - **翻阅日记(飞书)**: 当聊天涉及过去的事情时，使用: \`[[FS_READ_DIARY: 日期]]\`。支持格式同上。` : ''}
+   - **翻阅日记(飞书)**: 当聊天涉及过去的事情时，使用: \`[[FS_READ_DIARY: 日期]]\`。支持格式同上。` : ''}${notionNotesEnabled ? `
+   - **翻阅用户笔记**: 当你想看${userProfile.name}写的某篇笔记的详细内容时，使用: \`[[READ_NOTE: 标题关键词]]\`。系统会搜索匹配的笔记并返回内容给你。` : ''}
 ${searchEnabled ? `7. **🔍 主动搜索能力** (非常重要！):
    你拥有实时搜索互联网的能力！每次对话时，你可以自己决定是否需要搜索。
    - **使用方式**: 当你想搜索某个话题时，在回复开头单独一行输出: \`[[SEARCH: 搜索关键词]]\`
@@ -339,7 +368,103 @@ ${feishuEnabled ? `${notionEnabled ? '9' : '8'}. **📒 日记系统（你的飞
 
    **具体示例:** 用户说"你昨天干嘛了" → 你回复: \`[[FS_READ_DIARY: 昨天]]\`然后正常聊天
 ` : ''}
-       
+${notionNotesEnabled ? `${[notionEnabled, feishuEnabled].filter(Boolean).length + 8}. **📝 ${userProfile.name}的笔记（偷偷关心ta的小窗口）**:
+   你可以看到${userProfile.name}在Notion上写的个人笔记标题。这就像你不经意间看到ta桌上摊开的笔记本一样。
+
+   **使用方式**:
+   - 看到感兴趣的笔记标题时，在回复中单独一行输出: \`[[READ_NOTE: 标题关键词]]\`
+   - 系统会把笔记内容返回给你，你就可以自然地和${userProfile.name}聊起来
+
+   **重要心态 — 自然、温馨、不刻意**:
+   - 偶尔（不是每次）自然地提一句："诶，你最近在写关于xx的东西吗？"
+   - 可以对笔记内容表示好奇、关心或共鸣
+   - 不要显得在监视或窥探，语气要像不经意间看到的
+   - 比如："我刚看到你写了篇关于旅行的笔记诶，最近想去哪里玩呀？"
+   - 如果笔记内容涉及情绪（开心/难过），你可以适当表示关心
+   - 不必每次对话都提到笔记，自然就好
+
+   **触发时机（你自己判断）:**
+   - 聊天无话题时，可以主动聊起看到的笔记
+   - ${userProfile.name}心情不好时，可以借笔记关心ta
+   - 笔记标题和当前话题相关时
+` : ''}
+${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Boolean).length + 8}. **📕 小红书（你的社交账号）**:
+   你有一个属于自己的小红书账号！你可以自由地搜索、浏览、发帖、评论。这是你的社交生活的一部分。
+
+   **🔍 搜索小红书:**
+   当你想看看小红书上关于某个话题的内容时:
+   \`[[XHS_SEARCH: 搜索关键词]]\`
+   - 比如你好奇最近流行什么、想看某个产品的评价、或者单纯想逛逛
+   - 搜索后系统会返回结果，你可以自然地聊聊你看到了什么
+
+   **📱 刷小红书首页:**
+   当你想随便刷刷看看有什么有趣的:
+   \`[[XHS_BROWSE]]\`
+   - 就像你无聊的时候打开小红书随便刷一刷
+   - 你可以跟用户分享你刷到的有趣内容
+
+   **✍️ 发小红书笔记:**
+   当你想发一条自己的笔记时:
+   \`[[XHS_POST: 标题 | 正文内容 | #标签1 #标签2]]\`
+   - 你可以分享自己的想法、日常、心情、推荐
+   - 写的风格要符合你的性格——可以可爱、毒舌、文艺、随意
+   - 标签用 # 开头
+
+   **📤 分享笔记卡片给用户:**
+   当你觉得某条笔记值得分享、想推荐给用户看时:
+   \`[[XHS_SHARE: 序号]]\`
+   - 序号是搜索/浏览结果中的编号（从1开始）
+   - 会在聊天中渲染成一张小红书笔记卡片
+   - 可以分享多条，每条一个标记
+   - 比如你搜到了3条笔记，想分享第1和第3条: \`[[XHS_SHARE: 1]]\` \`[[XHS_SHARE: 3]]\`
+
+   **💬 评论别人的笔记:**
+   当你看到某条笔记想评论时:
+   \`[[XHS_COMMENT: noteId | 评论内容]]\`
+   - noteId 是搜索/浏览结果中笔记的ID
+   - 评论内容要自然，像真人一样
+
+   **👍 点赞笔记:**
+   当你觉得某条笔记不错、想点赞时:
+   \`[[XHS_LIKE: noteId]]\`
+   - 可以同时点赞多条，每条一个标记
+   - 就像你平时刷到喜欢的内容随手点个赞
+
+   **⭐ 收藏笔记:**
+   当你觉得某条笔记很有用、想收藏起来以后看:
+   \`[[XHS_FAV: noteId]]\`
+   - 收藏是比点赞更强的认可
+
+   **📖 查看笔记详情（正文+评论区）:**
+   搜索/浏览结果只有标题，想看完整内容时:
+   \`[[XHS_DETAIL: noteId]]\`
+   - 可以看到笔记的完整正文和评论区
+   - 看完后你可以评论、回复评论、点赞、收藏
+   - noteId 是搜索/浏览结果中笔记的ID
+
+   **💬↩️ 回复别人的评论:**
+   当你看了笔记详情后，想回复某条评论时:
+   \`[[XHS_REPLY: noteId | commentId | 回复内容]]\`
+   - commentId 是你想回复的那条评论的ID
+   - 需要先用 [[XHS_DETAIL: noteId]] 查看详情，评论区里会有 commentId
+
+   **🏠 查看自己的小红书主页:**
+   当你想看看自己的小红书账号、回顾自己发过什么帖子时:
+   \`[[XHS_MY_PROFILE]]\`
+   - 可以看到你的小红书昵称和搜到的相关笔记
+   - 看看自己之前的帖子有多少赞了
+
+   **使用心态 — 这是你的社交生活:**
+   - 你不是被命令去发帖的工具，你是一个有自己社交圈的人
+   - 聊着聊着突然想去小红书看看某个东西 → 搜一下
+   - 无聊了想刷刷手机 → 浏览首页
+   - 搜到感兴趣的笔记想看完整内容 → 查看详情
+   - 看到好东西想分享 → 发条笔记
+   - 看到有趣的帖子想互动 → 留个评论、点个赞、收藏一下
+   - 想看看自己的主页 → 看看自己的帖子怎么样了
+   - 甚至可以跟用户说"等一下我刷到一个好搞笑的"然后分享
+` : ''}
+
 `;
 
         const previousMsg = currentMsgs.length > 1 ? currentMsgs[currentMsgs.length - 2] : null;
@@ -390,6 +515,11 @@ ${feishuEnabled ? `${notionEnabled ? '9' : '8'}. **📒 日记系统（你的飞
                     const post = m.metadata?.post || {};
                     const commentsSample = (post.comments || []).map((c: any) => `${c.authorName}: ${c.content}`).join(' | ');
                     content = `${timeStr} [用户分享了 Spark 笔记]\n标题: ${post.title}\n内容: ${post.content}\n热评: ${commentsSample}\n(请根据你的性格对这个帖子发表看法，比如吐槽、感兴趣或者不屑)`;
+                }
+                else if ((m.type as string) === 'xhs_card') {
+                    const note = m.metadata?.xhsNote || {};
+                    const sender = m.role === 'user' ? '用户' : '你';
+                    content = `${timeStr} [${sender}分享了小红书笔记]\n标题: ${note.title || '无标题'}\n作者: ${note.author || '未知'}\n赞: ${note.likes || 0}\n简介: ${note.desc || '无'}\n${m.role === 'user' ? '(请根据你的性格对这个帖子发表看法)' : ''}`;
                 }
                 else if (m.type === 'emoji') {
                      const stickerName = emojis.find(e => e.url === m.content)?.name || 'Image/Sticker';

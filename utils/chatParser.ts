@@ -88,6 +88,8 @@ export const ChatParser = {
             .replace(/\[schedule_message[^\]]*\]/g, '')
             .replace(/\[\[(?:QU[OA]TE|引用)[：:][\s\S]*?\]\]/g, '')
             .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')
+            // [回复 "content"]: format (AI mimics history context format)
+            .replace(/\[回复\s*[""\u201C][^""\u201D]*?[""\u201D](?:\.{0,3})\]\s*[：:]?\s*/g, '')
             // Strip backtick-wrapped action tags and empty backtick pairs
             .replace(/`(\[\[[\s\S]*?\]\])`/g, '$1')
             .replace(/``+/g, '')
@@ -121,6 +123,7 @@ export const ChatParser = {
             .replace(/(^|\s)`(\s|$)/gm, '$1$2')
             .replace(/\[\[[\s\S]*?\]\]/g, '')
             .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')
+            .replace(/\[回复\s*[""\u201C][^""\u201D]*?[""\u201D](?:\.{0,3})\]\s*[：:]?\s*/g, '')
             .replace(/^#{1,6}\s+/gm, '')
             .replace(/^\s*[-*+]\s*$/gm, '')
             .trim();

@@ -23,7 +23,9 @@ export enum AppID {
   Worldbook = 'worldbook', 
   Novel = 'novel', 
   Bank = 'bank', // New App
+  XhsStock = 'xhs_stock', // XHS image stock for publishing
   SpecialMoments = 'special_moments', // Valentine's Day & future events
+  XhsFreeRoam = 'xhs_free_roam', // Character autonomous XHS activity
 }
 
 export interface SystemLog {
@@ -108,6 +110,7 @@ export interface RealtimeConfig {
   notionEnabled: boolean;
   notionApiKey: string;   // Notion Integration Token
   notionDatabaseId: string; // 日记数据库ID
+  notionNotesDatabaseId?: string; // 用户笔记数据库ID（可选，让角色读取用户的日常笔记）
 
   // 飞书配置 (中国区 Notion 替代)
   feishuEnabled: boolean;
@@ -115,6 +118,10 @@ export interface RealtimeConfig {
   feishuAppSecret: string;  // 飞书应用 App Secret
   feishuBaseId: string;     // 多维表格 App Token
   feishuTableId: string;    // 数据表 Table ID
+
+  // 小红书配置 (MCP 浏览器自动化)
+  xhsEnabled: boolean;
+  xhsMcpConfig?: XhsMcpConfig;
 
   // 缓存配置
   cacheMinutes: number;
@@ -512,9 +519,12 @@ export interface CharacterProfile {
   savedDateState?: DateState;
   specialMomentRecords?: Record<string, SpecialMomentRecord>;
 
+  // 小红书 per-character toggle
+  xhsEnabled?: boolean;
+
   socialProfile?: {
-      handle: string; 
-      bio?: string;   
+      handle: string;
+      bio?: string;
   };
 
   roomConfig?: {
@@ -561,6 +571,15 @@ export interface Toast {
     id: string;
     message: string;
     type: 'success' | 'error' | 'info';
+}
+
+export interface XhsStockImage {
+    id: string;
+    url: string;           // 图床URL (must be public https)
+    tags: string[];        // 标签 e.g. ['美食','咖啡','下午茶']
+    addedAt: number;       // timestamp
+    usedCount: number;     // 被使用次数
+    lastUsedAt?: number;   // 上次使用时间
 }
 
 export interface GalleryImage {
@@ -703,22 +722,23 @@ export interface GameSession {
     id: string;
     title: string;
     theme: GameTheme;
-    worldSetting: string; 
-    playerCharIds: string[]; 
+    worldSetting: string;
+    playerCharIds: string[];
     logs: GameLog[];
     status: {
         location: string;
-        health: number; 
-        sanity: number; 
-        gold: number;   
+        health: number;
+        sanity: number;
+        gold: number;
         inventory: string[];
     };
-    suggestedActions?: GameActionOption[]; 
+    sanityLocked?: boolean;
+    suggestedActions?: GameActionOption[];
     createdAt: number;
     lastPlayedAt: number;
 }
 
-export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward';
+export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card';
 
 export interface Message {
     id: number;
@@ -795,9 +815,52 @@ export interface FullBackupData {
     
     mediaAssets?: {
         charId: string;
-        avatar?: string; 
+        avatar?: string;
         sprites?: Record<string, string>;
-        roomItems?: Record<string, string>; 
+        roomItems?: Record<string, string>;
         backgrounds?: { chat?: string; date?: string; roomWall?: string; roomFloor?: string };
     }[];
+
+    xhsActivities?: XhsActivityRecord[];
+    xhsStockImages?: XhsStockImage[];
+}
+
+// --- XHS FREE ROAM / AUTONOMOUS ACTIVITY TYPES ---
+
+export type XhsActionType = 'post' | 'browse' | 'search' | 'comment' | 'save_topic' | 'idle';
+
+export interface XhsActivityRecord {
+    id: string;
+    characterId: string;
+    timestamp: number;
+    actionType: XhsActionType;
+    content: {
+        title?: string;
+        body?: string;
+        tags?: string[];
+        keyword?: string;
+        savedTopics?: { title: string; desc: string; noteId?: string }[];
+        notesViewed?: { noteId: string; title: string; desc: string; author: string; likes: number }[];
+        commentTarget?: { noteId: string; title: string };
+        commentText?: string;
+    };
+    thinking: string;  // Character's internal monologue / reasoning
+    result: 'success' | 'failed' | 'skipped';
+    resultMessage?: string;
+}
+
+export interface XhsFreeRoamSession {
+    id: string;
+    characterId: string;
+    startedAt: number;
+    endedAt?: number;
+    activities: XhsActivityRecord[];
+    summary?: string;  // AI-generated session summary
+}
+
+export interface XhsMcpConfig {
+    enabled: boolean;
+    serverUrl: string;  // e.g. "http://localhost:18060/mcp"
+    loggedInUserId?: string;   // 登录用户的 user_id，MCP 连接成功后自动获取
+    loggedInNickname?: string; // 登录用户的昵称
 }

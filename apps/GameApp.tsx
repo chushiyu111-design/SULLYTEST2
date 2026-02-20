@@ -142,7 +142,8 @@ const GameApp: React.FC = () => {
     const [isTyping, setIsTyping] = useState(false);
     const [diceResult, setDiceResult] = useState<number | null>(null);
     const [isRolling, setIsRolling] = useState(false);
-    const [lastTokenUsage, setLastTokenUsage] = useState<number | null>(null);
+    const [lastTokenUsage, setLastTokenUsage] = useState<{prompt?: number, completion?: number, total: number} | null>(null);
+    const [totalTokensUsed, setTotalTokensUsed] = useState(0);
     
     // [FIX] Use Container Ref instead of Element Ref for safer scrolling
     const logsContainerRef = useRef<HTMLDivElement>(null);
@@ -153,6 +154,12 @@ const GameApp: React.FC = () => {
     const [showTools, setShowTools] = useState(false); // Default hidden
     const [showParty, setShowParty] = useState(true);  // Default visible
     const [uiSettings, setUiSettings] = useState<{fontSize: number, color: string}>({ fontSize: 14, color: '' });
+
+    // SAN Lock: Sync from activeGame on load
+    const [sanityLocked, setSanityLocked] = useState(false);
+    useEffect(() => {
+        if (activeGame) setSanityLocked(!!activeGame.sanityLocked);
+    }, [activeGame?.id]);
 
     useEffect(() => {
         loadGames();
@@ -213,7 +220,13 @@ const GameApp: React.FC = () => {
         }
 
         if (json.usage?.total_tokens) {
-            setLastTokenUsage(json.usage.total_tokens);
+            const usage = {
+                prompt: json.usage.prompt_tokens || undefined,
+                completion: json.usage.completion_tokens || undefined,
+                total: json.usage.total_tokens
+            };
+            setLastTokenUsage(usage);
+            setTotalTokensUsed(prev => prev + json.usage.total_tokens);
         }
 
         return json;
@@ -411,6 +424,18 @@ ${playerContext}
         }
     };
 
+    // --- SAN Lock Toggle ---
+    const toggleSanityLock = async () => {
+        const newVal = !sanityLocked;
+        setSanityLocked(newVal);
+        if (activeGame) {
+            const updated = { ...activeGame, sanityLocked: newVal };
+            setActiveGame(updated);
+            await DB.saveGame(updated);
+            addToast(newVal ? 'SAN 值已锁定' : 'SAN 值已解锁', 'info');
+        }
+    };
+
     // --- Gameplay Logic ---
     const rollDice = () => {
         if (isRolling || isTyping) return;
@@ -498,7 +523,7 @@ ${players.map(p => `2. **${p.name}** (ID: ${p.id}) - 你的队友`).join('\n')}
 ${playerContext}
 
 ### 📝 冒险记录 (Log)
-${contextLogs.slice(-50).map(l => `[${l.role === 'gm' ? 'GM' : (l.speakerName || 'System')}]: ${l.content}`).join('\n')}
+${contextLogs.map(l => `[${l.role === 'gm' ? 'GM' : (l.speakerName || 'System')}]: ${l.content}`).join('\n')}
 
 ### 🎲 GM 指令 (Game Master Instructions)
 你现在是这场跑团游戏的 **主持人 (GM)**。
@@ -582,7 +607,7 @@ ${contextLogs.slice(-50).map(l => `[${l.role === 'gm' ? 'GM' : (l.speakerName ||
                 // Update State (Stats)
                 if (res.newLocation) newStatus.location = res.newLocation;
                 if (res.hpChange) newStatus.health = Math.max(0, Math.min(100, (newStatus.health || 100) + res.hpChange));
-                if (res.sanityChange) newStatus.sanity = Math.max(0, Math.min(100, (newStatus.sanity || 100) + res.sanityChange));
+                if (res.sanityChange && !sanityLocked) newStatus.sanity = Math.max(0, Math.min(100, (newStatus.sanity || 100) + res.sanityChange));
                 if (res.goldChange) newStatus.gold = Math.max(0, (newStatus.gold || 0) + res.goldChange);
                 if (res.newItem) newStatus.inventory = [...newStatus.inventory, res.newItem];
             } else {
@@ -904,7 +929,7 @@ Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆
                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                                 {activeGame.status.location}
                             </span>
-                            {lastTokenUsage && <span className="text-[8px] opacity-40 font-mono">⚡{lastTokenUsage}</span>}
+                            {lastTokenUsage && <span className="text-[8px] opacity-40 font-mono" title={`Prompt: ${lastTokenUsage.prompt || '?'} | Completion: ${lastTokenUsage.completion || '?'} | Total session: ${totalTokensUsed}`}>⚡{lastTokenUsage.prompt || '?'}/{lastTokenUsage.completion || '?'} (∑{totalTokensUsed})</span>}
                         </div>
                     </div>
                 </div>
@@ -941,19 +966,33 @@ Output: A concise summary in Chinese (e.g. "探索了地牢并击败了史莱姆
             )}
 
             {/* Stats HUD */}
-            <div className={`px-4 py-2 border-b ${theme.border} bg-black/10 backdrop-blur-sm z-10 grid grid-cols-3 gap-2 shrink-0`}>
-                <div className="flex flex-col items-center bg-red-500/20 rounded p-1 border border-red-500/30">
-                    <span className="text-[8px] text-red-300 font-bold uppercase">HP (生命)</span>
-                    <span className="text-xs font-mono font-bold text-red-100">{activeGame.status.health || 100}</span>
+            <div className={`px-4 py-2 border-b ${theme.border} bg-black/10 backdrop-blur-sm z-10 shrink-0`}>
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col items-center bg-red-500/20 rounded p-1 border border-red-500/30">
+                        <span className="text-[8px] text-red-300 font-bold uppercase">HP (生命)</span>
+                        <span className="text-xs font-mono font-bold text-red-100">{activeGame.status.health || 100}</span>
+                    </div>
+                    <div
+                        onClick={toggleSanityLock}
+                        className={`flex flex-col items-center bg-blue-500/20 rounded p-1 border cursor-pointer active:scale-95 transition-all ${sanityLocked ? 'border-blue-400 ring-1 ring-blue-400/50' : 'border-blue-500/30'}`}
+                    >
+                        <span className="text-[8px] text-blue-300 font-bold uppercase flex items-center gap-1">
+                            SAN (理智) {sanityLocked && <span className="text-blue-400">🔒</span>}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-blue-100">{activeGame.status.sanity || 100}</span>
+                    </div>
+                    <div className="flex flex-col items-center bg-yellow-500/20 rounded p-1 border border-yellow-500/30">
+                        <span className="text-[8px] text-yellow-300 font-bold uppercase">GOLD (金币)</span>
+                        <span className="text-xs font-mono font-bold text-yellow-100">{activeGame.status.gold || 0}</span>
+                    </div>
                 </div>
-                <div className="flex flex-col items-center bg-blue-500/20 rounded p-1 border border-blue-500/30">
-                    <span className="text-[8px] text-blue-300 font-bold uppercase">SAN (理智)</span>
-                    <span className="text-xs font-mono font-bold text-blue-100">{activeGame.status.sanity || 100}</span>
-                </div>
-                <div className="flex flex-col items-center bg-yellow-500/20 rounded p-1 border border-yellow-500/30">
-                    <span className="text-[8px] text-yellow-300 font-bold uppercase">GOLD (金币)</span>
-                    <span className="text-xs font-mono font-bold text-yellow-100">{activeGame.status.gold || 0}</span>
-                </div>
+                {/* Token Statistics */}
+                {lastTokenUsage && (
+                    <div className="mt-1.5 flex items-center justify-between bg-white/5 rounded px-2 py-1 border border-white/10">
+                        <span className="text-[8px] text-white/40 font-mono">⚡ 上下文: {lastTokenUsage.prompt ?? '?'} | 回复: {lastTokenUsage.completion ?? '?'} | 本次: {lastTokenUsage.total}</span>
+                        <span className="text-[8px] text-white/40 font-mono">∑ {totalTokensUsed}</span>
+                    </div>
+                )}
             </div>
 
             {/* Stage / Log Area */}

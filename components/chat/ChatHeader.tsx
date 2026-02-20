@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { CaretLeft, Lightning } from '@phosphor-icons/react';
 import { CharacterProfile } from '../../types';
 
 interface TokenBreakdown {
@@ -48,9 +49,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             ) : (
                 <div className="flex items-center gap-3 w-full">
                     <button onClick={onClose} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                        </svg>
+                        <CaretLeft className="w-5 h-5" weight="bold" />
                     </button>
                     
                     <div onClick={onShowCharsPanel} className="flex-1 min-w-0 flex items-center gap-3 cursor-pointer">
@@ -73,9 +72,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                         disabled={isTyping} 
                         className={`p-2 rounded-full ${isTyping ? 'bg-slate-100' : 'bg-primary/10 text-primary'}`}
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                        </svg>
+                        <Lightning className="w-5 h-5" weight="bold" />
                     </button>
                 </div>
             )}

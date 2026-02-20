@@ -829,7 +829,7 @@ ${isInitialGeneration ? `
 
                            {/* Export Card Button */}
                            <div className="pt-4">
-                               <button 
+                               <button
                                    onClick={handleExportCard}
                                    className="w-full py-4 bg-slate-800 text-white rounded-2xl text-xs font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all"
                                >

@@ -5,11 +5,11 @@ import {
     CharacterProfile, ChatTheme, Message, UserProfile,
     Task, Anniversary, DiaryEntry, RoomTodo, RoomNote,
     GalleryImage, FullBackupData, GroupProfile, SocialPost, StudyCourse, GameSession, Worldbook, NovelBook, Emoji, EmojiCategory,
-    BankTransaction, SavingsGoal, BankFullState, DollhouseState
+    BankTransaction, SavingsGoal, BankFullState, DollhouseState, XhsStockImage, XhsActivityRecord
 } from '../types';
 
 const DB_NAME = 'AetherOS_Data';
-const DB_VERSION = 33; // Bumped for Bank
+const DB_VERSION = 35; // Bumped for XHS Activities
 
 const STORE_CHARACTERS = 'characters';
 const STORE_MESSAGES = 'messages';
@@ -32,8 +32,10 @@ const STORE_COURSES = 'courses';
 const STORE_GAMES = 'games';
 const STORE_WORLDBOOKS = 'worldbooks'; 
 const STORE_NOVELS = 'novels'; 
-const STORE_BANK_TX = 'bank_transactions'; // New
-const STORE_BANK_DATA = 'bank_data'; // New (Single object for state)
+const STORE_BANK_TX = 'bank_transactions';
+const STORE_BANK_DATA = 'bank_data';
+const STORE_XHS_STOCK = 'xhs_stock';
+const STORE_XHS_ACTIVITIES = 'xhs_activities';
 
 export interface ScheduledMessage {
     id: string;
@@ -133,8 +135,14 @@ const openDB = (): Promise<IDBDatabase> => {
       createStore(STORE_WORLDBOOKS, { keyPath: 'id' }); 
       createStore(STORE_NOVELS, { keyPath: 'id' });
       
-      createStore(STORE_BANK_TX, { keyPath: 'id' }); // New
-      createStore(STORE_BANK_DATA, { keyPath: 'id' }); // New
+      createStore(STORE_BANK_TX, { keyPath: 'id' });
+      createStore(STORE_BANK_DATA, { keyPath: 'id' });
+      createStore(STORE_XHS_STOCK, { keyPath: 'id' });
+
+      if (!db.objectStoreNames.contains(STORE_XHS_ACTIVITIES)) {
+          const xhsActStore = db.createObjectStore(STORE_XHS_ACTIVITIES, { keyPath: 'id' });
+          xhsActStore.createIndex('characterId', 'characterId', { unique: false });
+      }
     };
   });
 };
@@ -649,6 +657,98 @@ export const DB = {
       transaction.objectStore(STORE_GALLERY).delete(id);
   },
 
+  // --- XHS Stock Images ---
+  getXhsStockImages: async (): Promise<XhsStockImage[]> => {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_XHS_STOCK, 'readonly');
+          const request = transaction.objectStore(STORE_XHS_STOCK).getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+      });
+  },
+
+  saveXhsStockImage: async (img: XhsStockImage): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_STOCK, 'readwrite');
+      transaction.objectStore(STORE_XHS_STOCK).put(img);
+  },
+
+  deleteXhsStockImage: async (id: string): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_STOCK, 'readwrite');
+      transaction.objectStore(STORE_XHS_STOCK).delete(id);
+  },
+
+  updateXhsStockImageUsage: async (id: string): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_STOCK, 'readwrite');
+      const store = transaction.objectStore(STORE_XHS_STOCK);
+      return new Promise((resolve, reject) => {
+          const req = store.get(id);
+          req.onsuccess = () => {
+              const data = req.result as XhsStockImage;
+              if (data) {
+                  data.usedCount = (data.usedCount || 0) + 1;
+                  data.lastUsedAt = Date.now();
+                  store.put(data);
+                  resolve();
+              } else reject(new Error('Stock image not found'));
+          };
+          req.onerror = () => reject(req.error);
+      });
+  },
+
+  // --- XHS Activities (Free Roam) ---
+  saveXhsActivity: async (activity: XhsActivityRecord): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_ACTIVITIES, 'readwrite');
+      transaction.objectStore(STORE_XHS_ACTIVITIES).put(activity);
+  },
+
+  getXhsActivities: async (characterId: string, limit?: number): Promise<XhsActivityRecord[]> => {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_XHS_ACTIVITIES, 'readonly');
+          const store = transaction.objectStore(STORE_XHS_ACTIVITIES);
+          const index = store.index('characterId');
+          const request = index.getAll(IDBKeyRange.only(characterId));
+          request.onsuccess = () => {
+              let results = (request.result || []) as XhsActivityRecord[];
+              results.sort((a, b) => b.timestamp - a.timestamp);
+              if (limit) results = results.slice(0, limit);
+              resolve(results);
+          };
+          request.onerror = () => reject(request.error);
+      });
+  },
+
+  getAllXhsActivities: async (): Promise<XhsActivityRecord[]> => {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_XHS_ACTIVITIES, 'readonly');
+          const request = transaction.objectStore(STORE_XHS_ACTIVITIES).getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+      });
+  },
+
+  deleteXhsActivity: async (id: string): Promise<void> => {
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_ACTIVITIES, 'readwrite');
+      transaction.objectStore(STORE_XHS_ACTIVITIES).delete(id);
+  },
+
+  clearXhsActivities: async (characterId: string): Promise<void> => {
+      const activities = await DB.getXhsActivities(characterId);
+      const db = await openDB();
+      const transaction = db.transaction(STORE_XHS_ACTIVITIES, 'readwrite');
+      const store = transaction.objectStore(STORE_XHS_ACTIVITIES);
+      for (const a of activities) {
+          store.delete(a.id);
+      }
+  },
+
   saveScheduledMessage: async (msg: ScheduledMessage): Promise<void> => {
       const db = await openDB();
       const transaction = db.transaction(STORE_SCHEDULED, 'readwrite');
@@ -1017,12 +1117,12 @@ export const DB = {
           });
       };
 
-      const [characters, messages, themes, emojis, emojiCategories, assets, galleryImages, userProfiles, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, journalStickers, socialPosts, courses, games, worldbooks, novels, bankTx, bankData] = await Promise.all([
+      const [characters, messages, themes, emojis, emojiCategories, assets, galleryImages, userProfiles, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, journalStickers, socialPosts, courses, games, worldbooks, novels, bankTx, bankData, xhsActivities, xhsStockImages] = await Promise.all([
           getAllFromStore(STORE_CHARACTERS),
           getAllFromStore(STORE_MESSAGES),
           getAllFromStore(STORE_THEMES),
           getAllFromStore(STORE_EMOJIS),
-          getAllFromStore(STORE_EMOJI_CATEGORIES), 
+          getAllFromStore(STORE_EMOJI_CATEGORIES),
           getAllFromStore(STORE_ASSETS),
           getAllFromStore(STORE_GALLERY),
           getAllFromStore(STORE_USER),
@@ -1040,6 +1140,8 @@ export const DB = {
           getAllFromStore(STORE_NOVELS),
           getAllFromStore(STORE_BANK_TX),
           getAllFromStore(STORE_BANK_DATA),
+          getAllFromStore(STORE_XHS_ACTIVITIES),
+          getAllFromStore(STORE_XHS_STOCK),
       ]);
 
       const userProfile = userProfiles.length > 0 ? {
@@ -1055,7 +1157,9 @@ export const DB = {
           characters, messages, customThemes: themes, savedEmojis: emojis, emojiCategories, assets, galleryImages, userProfile, diaries, tasks, anniversaries, roomTodos, roomNotes, groups, savedJournalStickers: journalStickers, socialPosts, courses, games, worldbooks, novels,
           bankState: mainState ? { ...mainState, id: undefined } : undefined,
           bankDollhouse: dollhouseRecord?.data || undefined,
-          bankTransactions: bankTx
+          bankTransactions: bankTx,
+          xhsActivities,
+          xhsStockImages
       };
   },
 
@@ -1064,10 +1168,11 @@ export const DB = {
       
       const availableStores = [
           STORE_CHARACTERS, STORE_MESSAGES, STORE_THEMES, STORE_EMOJIS, STORE_EMOJI_CATEGORIES,
-          STORE_ASSETS, STORE_GALLERY, STORE_USER, STORE_DIARIES, 
+          STORE_ASSETS, STORE_GALLERY, STORE_USER, STORE_DIARIES,
           STORE_TASKS, STORE_ANNIVERSARIES, STORE_ROOM_TODOS, STORE_ROOM_NOTES,
           STORE_GROUPS, STORE_JOURNAL_STICKERS, STORE_SOCIAL_POSTS, STORE_COURSES, STORE_GAMES, STORE_WORLDBOOKS, STORE_NOVELS,
-          STORE_BANK_TX, STORE_BANK_DATA
+          STORE_BANK_TX, STORE_BANK_DATA,
+          STORE_XHS_ACTIVITIES, STORE_XHS_STOCK
       ].filter(name => db.objectStoreNames.contains(name));
 
       const tx = db.transaction(availableStores, 'readwrite');
@@ -1178,7 +1283,9 @@ export const DB = {
       if (data.worldbooks) clearAndAdd(STORE_WORLDBOOKS, data.worldbooks);
       if (data.novels) clearAndAdd(STORE_NOVELS, data.novels);
       if (data.bankTransactions) clearAndAdd(STORE_BANK_TX, data.bankTransactions);
-      
+      if (data.xhsActivities) clearAndAdd(STORE_XHS_ACTIVITIES, data.xhsActivities);
+      if (data.xhsStockImages) clearAndAdd(STORE_XHS_STOCK, data.xhsStockImages);
+
       if (data.userProfile) {
           if (availableStores.includes(STORE_USER)) {
               const store = tx.objectStore(STORE_USER);
