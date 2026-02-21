@@ -65,66 +65,66 @@ const DEFAULT_FURNITURE: RoomItem[] = [
 
 // User-provided layout (Perfectly aligned!)
 const SULLY_FURNITURE: RoomItem[] = [
-  {
-    id: "item-1768927221380",
-    name: "Sully床",
-    type: "furniture",
-    image: "https://sharkpan.xyz/f/A3XeUZ/BED.png",
-    x: 78.45852578067732,
-    y: 97.38889754570907,
-    scale: 2.4,
-    rotation: 0,
-    isInteractive: true,
-    descriptionPrompt: "看起来很好睡的猫窝（确信）。"
-  },
-  {
-    id: "item-1768927255102",
-    name: "Sully电脑桌",
-    type: "furniture",
-    image: "https://sharkpan.xyz/f/G5n3Ul/DNZ.png",
-    x: 28.853756791175588,
-    y: 69.9444485439727,
-    scale: 2.4,
-    rotation: 0,
-    isInteractive: true,
-    descriptionPrompt: "硬核的电脑桌，上面大概运行着什么毁灭世界的程序。"
-  },
-  {
-    id: "item-1768927271632",
-    name: "Sully垃圾桶",
-    type: "furniture",
-    image: "https://sharkpan.xyz/f/75Nvsj/LJT.png",
-    x: 10.276680026943646,
-    y: 80.49999880981437,
-    scale: 0.9,
-    rotation: 0,
-    isInteractive: true,
-    descriptionPrompt: "不要乱翻垃圾桶！"
-  },
-  {
-    id: "item-1768927286526",
-    name: "Sully洞洞板",
-    type: "furniture",
-    image: "https://sharkpan.xyz/f/85K5ij/DDB.png",
-    x: 32.608697687684455,
-    y: 48.72222587415929,
-    scale: 2.6,
-    rotation: 0,
-    isInteractive: true,
-    descriptionPrompt: "收纳着各种奇奇怪怪的黑客工具和猫咪周边的洞洞板。"
-  },
-  {
-    id: "item-1768927303472",
-    name: "Sully书柜",
-    type: "furniture",
-    image: "https://sharkpan.xyz/f/zlpWS5/SG.png",
-    x: 79.84189945375853,
-    y: 68.94444543117953,
-    scale: 2,
-    rotation: 0,
-    isInteractive: true,
-    descriptionPrompt: "塞满了技术书籍和漫画书的柜子。"
-  }
+    {
+        id: "item-1768927221380",
+        name: "Sully床",
+        type: "furniture",
+        image: "https://sharkpan.xyz/f/A3XeUZ/BED.png",
+        x: 78.45852578067732,
+        y: 97.38889754570907,
+        scale: 2.4,
+        rotation: 0,
+        isInteractive: true,
+        descriptionPrompt: "看起来很好睡的猫窝（确信）。"
+    },
+    {
+        id: "item-1768927255102",
+        name: "Sully电脑桌",
+        type: "furniture",
+        image: "https://sharkpan.xyz/f/G5n3Ul/DNZ.png",
+        x: 28.853756791175588,
+        y: 69.9444485439727,
+        scale: 2.4,
+        rotation: 0,
+        isInteractive: true,
+        descriptionPrompt: "硬核的电脑桌，上面大概运行着什么毁灭世界的程序。"
+    },
+    {
+        id: "item-1768927271632",
+        name: "Sully垃圾桶",
+        type: "furniture",
+        image: "https://sharkpan.xyz/f/75Nvsj/LJT.png",
+        x: 10.276680026943646,
+        y: 80.49999880981437,
+        scale: 0.9,
+        rotation: 0,
+        isInteractive: true,
+        descriptionPrompt: "不要乱翻垃圾桶！"
+    },
+    {
+        id: "item-1768927286526",
+        name: "Sully洞洞板",
+        type: "furniture",
+        image: "https://sharkpan.xyz/f/85K5ij/DDB.png",
+        x: 32.608697687684455,
+        y: 48.72222587415929,
+        scale: 2.6,
+        rotation: 0,
+        isInteractive: true,
+        descriptionPrompt: "收纳着各种奇奇怪怪的黑客工具和猫咪周边的洞洞板。"
+    },
+    {
+        id: "item-1768927303472",
+        name: "Sully书柜",
+        type: "furniture",
+        image: "https://sharkpan.xyz/f/zlpWS5/SG.png",
+        x: 79.84189945375853,
+        y: 68.94444543117953,
+        scale: 2,
+        rotation: 0,
+        isInteractive: true,
+        descriptionPrompt: "塞满了技术书籍和漫画书的柜子。"
+    }
 ];
 
 const FLOOR_HORIZON = 65; // Floor starts at 65% from top
@@ -142,7 +142,7 @@ const renderInlineStyle = (text: string) => {
     // 3. *italic*
     // 4. `code`
     const parts = text.split(/(\*\*.*?\*\*|~~.*?~~|\*.*?\*|`.*?`)/g);
-    
+
     return parts.map((part, i) => {
         // Bold
         if (part.startsWith('**') && part.endsWith('**')) {
@@ -158,7 +158,7 @@ const renderInlineStyle = (text: string) => {
         }
         // Inline Code
         if (part.startsWith('`') && part.endsWith('`')) {
-             return <code key={i} className="bg-slate-200 text-slate-600 px-1 rounded text-xs font-mono break-all">{part.slice(1, -1)}</code>;
+            return <code key={i} className="bg-slate-200 text-slate-600 px-1 rounded text-xs font-mono break-all">{part.slice(1, -1)}</code>;
         }
         return part;
     });
@@ -173,11 +173,11 @@ const renderNotebookContent = (text: string) => {
             const firstLineBreak = part.indexOf('\n');
             let codeContent = part;
             if (firstLineBreak > -1 && firstLineBreak < 10) {
-                 codeContent = part.substring(firstLineBreak + 1, part.length - 3);
+                codeContent = part.substring(firstLineBreak + 1, part.length - 3);
             } else {
-                 codeContent = part.substring(3, part.length - 3);
+                codeContent = part.substring(3, part.length - 3);
             }
-            
+
             return (
                 <div key={index} className="my-3 w-full max-w-full">
                     {/* Keep horizontal scroll for code blocks, don't wrap */}
@@ -192,7 +192,7 @@ const renderNotebookContent = (text: string) => {
                 {part.split('\n').map((line, lineIdx) => {
                     const key = `${index}-${lineIdx}`;
                     const trimLine = line.trim();
-                    
+
                     if (!trimLine) return <div key={key} className="h-2"></div>;
 
                     if (trimLine.startsWith('# ')) {
@@ -207,17 +207,17 @@ const renderNotebookContent = (text: string) => {
                     if (trimLine.startsWith('- ') || trimLine.startsWith('• ')) {
                         return <div key={key} className="flex gap-2 my-1 pl-1 items-start"><span className="text-slate-400 mt-1 shrink-0">•</span><span className="flex-1 break-words">{renderInlineStyle(trimLine.substring(2))}</span></div>;
                     }
-                    
+
                     if (trimLine.match(/^\[[ x]\]/)) {
-                         const isChecked = trimLine.includes('[x]');
-                         return (
-                             <div key={key} className="flex gap-2 my-1 pl-1 items-center">
-                                 <div className={`w-3 h-3 border rounded-sm flex items-center justify-center shrink-0 ${isChecked ? 'bg-slate-600 border-slate-600' : 'border-slate-400'}`}>
-                                     {isChecked && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>}
-                                 </div>
-                                 <span className={`flex-1 break-words ${isChecked ? 'line-through text-slate-400' : 'text-slate-700'}`}>{renderInlineStyle(trimLine.substring(3))}</span>
-                             </div>
-                         );
+                        const isChecked = trimLine.includes('[x]');
+                        return (
+                            <div key={key} className="flex gap-2 my-1 pl-1 items-center">
+                                <div className={`w-3 h-3 border rounded-sm flex items-center justify-center shrink-0 ${isChecked ? 'bg-slate-600 border-slate-600' : 'border-slate-400'}`}>
+                                    {isChecked && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>}
+                                </div>
+                                <span className={`flex-1 break-words ${isChecked ? 'line-through text-slate-400' : 'text-slate-700'}`}>{renderInlineStyle(trimLine.substring(3))}</span>
+                            </div>
+                        );
                     }
 
                     return <div key={key} className="min-h-[1.5em] my-0.5 leading-relaxed break-words text-justify">{renderInlineStyle(line)}</div>;
@@ -229,12 +229,12 @@ const renderNotebookContent = (text: string) => {
 
 const RoomApp: React.FC = () => {
     const { closeApp, characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, addToast, userProfile } = useOS();
-    
+
     // Core State
     const [viewState, setViewState] = useState<'select' | 'room'>('select');
     const [mode, setMode] = useState<'view' | 'edit'>('view');
     const [items, setItems] = useState<RoomItem[]>([]);
-    
+
     // Extended State
     const [todaysTodo, setTodaysTodo] = useState<RoomTodo | null>(null);
     const [notebookEntries, setNotebookEntries] = useState<RoomNote[]>([]);
@@ -250,13 +250,13 @@ const RoomApp: React.FC = () => {
     const [showDevModal, setShowDevModal] = useState(false); // Developer Mode
     const [showSettingsModal, setShowSettingsModal] = useState(false); // New: Room Settings
     const [lastPrompt, setLastPrompt] = useState<string>(''); // Debug: Store last sent prompt
-    
+
     // Actor & Room State
     const [actorState, setActorState] = useState({ x: 50, y: 75, action: 'idle' });
-    const [aiBubble, setAiBubble] = useState<{text: string, visible: boolean}>({ text: '', visible: false });
+    const [aiBubble, setAiBubble] = useState<{ text: string, visible: boolean }>({ text: '', visible: false });
     const [observationText, setObservationText] = useState('');
     const [roomDescriptions, setRoomDescriptions] = useState<Record<string, ItemInteraction>>({});
-    
+
     // Edit Mode State
     const [draggingId, setDraggingId] = useState<string | null>(null);
     // Use Ref to store drag offset context
@@ -269,15 +269,15 @@ const RoomApp: React.FC = () => {
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
     const roomRef = useRef<HTMLDivElement>(null);
-    
+
     // File Inputs
     const wallInputRef = useRef<HTMLInputElement>(null);
     const floorInputRef = useRef<HTMLInputElement>(null);
-    const actorInputRef = useRef<HTMLInputElement>(null); 
+    const actorInputRef = useRef<HTMLInputElement>(null);
     const customItemInputRef = useRef<HTMLInputElement>(null);
 
     // Custom Item Library State
-    const [customAssets, setCustomAssets] = useState<{name: string, image: string, defaultScale: number, description?: string}[]>([]);
+    const [customAssets, setCustomAssets] = useState<{ name: string, image: string, defaultScale: number, description?: string }[]>([]);
     const [showCustomModal, setShowCustomModal] = useState(false);
     const [customItemName, setCustomItemName] = useState('');
     const [customItemImage, setCustomItemImage] = useState('');
@@ -285,7 +285,7 @@ const RoomApp: React.FC = () => {
     const [customItemDescription, setCustomItemDescription] = useState(''); // New: Description input
 
     // Deletion State
-    const [deletingAsset, setDeletingAsset] = useState<{name: string, image: string} | null>(null);
+    const [deletingAsset, setDeletingAsset] = useState<{ name: string, image: string } | null>(null);
     const assetLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const char = characters.find(c => c.id === activeCharacterId);
@@ -303,9 +303,9 @@ const RoomApp: React.FC = () => {
         const loadAssets = async () => {
             const dbData = await DB.getAsset('room_custom_assets_list');
             const lsData = localStorage.getItem('room_custom_assets');
-            
+
             if (dbData) {
-                try { setCustomAssets(JSON.parse(dbData)); } catch(e) {}
+                try { setCustomAssets(JSON.parse(dbData)); } catch (e) { }
             } else if (lsData) {
                 // Legacy Migration
                 try {
@@ -313,7 +313,7 @@ const RoomApp: React.FC = () => {
                     setCustomAssets(parsed);
                     await DB.saveAsset('room_custom_assets_list', lsData);
                     localStorage.removeItem('room_custom_assets');
-                } catch(e) {}
+                } catch (e) { }
             }
         };
         loadAssets();
@@ -348,35 +348,35 @@ const RoomApp: React.FC = () => {
     const handleEnterRoom = async (c: CharacterProfile) => {
         setActiveCharacterId(c.id);
         setViewState('room');
-        
+
         // Load Items: Priority -> Character Config > Sully Defaults > Generic Defaults
         let loadedItems = c.roomConfig?.items;
-        
+
         if (!loadedItems || loadedItems.length === 0) {
             // Check if it's Sully (Preset ID or Name fallback)
             if (c.id === 'preset-sully-v2' || c.name === 'Sully') {
-                loadedItems = SULLY_FURNITURE; 
+                loadedItems = SULLY_FURNITURE;
                 // Auto-save Sully's furniture to persist it
                 updateCharacter(c.id, { roomConfig: { ...c.roomConfig, items: SULLY_FURNITURE } });
             } else {
                 loadedItems = DEFAULT_FURNITURE;
             }
         }
-        
+
         setItems(loadedItems || []);
-        
+
         const today = getVirtualDay();
         const hasCache = c.lastRoomDate === today && c.savedRoomState;
 
         if (hasCache && c.savedRoomState) {
             setRoomDescriptions(c.savedRoomState.items || {});
             setAiBubble({ text: c.savedRoomState.welcomeMessage || "...", visible: true });
-            
+
             const existingTodo = await DB.getRoomTodo(c.id, today);
             const existingNotes = await DB.getRoomNotes(c.id);
             setTodaysTodo(existingTodo);
             setNotebookEntries(existingNotes.sort((a, b) => b.timestamp - a.timestamp));
-            
+
             addToast('已恢复今日房间状态', 'info');
         } else {
             initializeRoomState(c, loadedItems || []);
@@ -396,13 +396,13 @@ const RoomApp: React.FC = () => {
             console.warn("Triggering Room Fallback Initialization");
             const baseContext = ContextBuilder.buildCoreContext(c, userProfile, false);
             const fallbackPrompt = `${baseContext}\n\nTask: User entered your room. Just say hello. JSON: { "welcomeMessage": "..." }`;
-            
+
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ 
-                    model: apiConfig.model, 
-                    messages: [{ role: "user", content: fallbackPrompt }], 
+                body: JSON.stringify({
+                    model: apiConfig.model,
+                    messages: [{ role: "user", content: fallbackPrompt }],
                     temperature: 0.5,
                     max_tokens: 8000 // Keep it tiny
                 })
@@ -412,11 +412,11 @@ const RoomApp: React.FC = () => {
                 const data = await safeResponseJson(response);
                 let content = data.choices?.[0]?.message?.content || '{"welcomeMessage": "..."}';
                 content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-                
+
                 try {
                     const res = JSON.parse(content);
                     const todayStr = getVirtualDay();
-                    
+
                     setAiBubble({ text: res.welcomeMessage || "...", visible: true });
                     // Use generic descriptions for items in fallback mode
                     const fallbackItems: Record<string, any> = {};
@@ -461,11 +461,11 @@ const RoomApp: React.FC = () => {
             const now = new Date();
             const nowTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const nowDateStr = now.toLocaleDateString();
-            
+
             let existingTodo = await DB.getRoomTodo(c.id, todayStr);
             const existingNotes = await DB.getRoomNotes(c.id);
             setNotebookEntries(existingNotes.sort((a, b) => b.timestamp - a.timestamp));
-            
+
             const shouldGenerateTodo = !existingTodo;
             if (existingTodo) {
                 setTodaysTodo(existingTodo);
@@ -475,7 +475,7 @@ const RoomApp: React.FC = () => {
             // Increased context from 20 to 50
             const chatContext = recentMsgs.slice(-50).map(m => {
                 const role = m.role === 'user' ? '用户' : c.name;
-                return `${role}: ${m.content.substring(0, 50)}`; 
+                return `${role}: ${m.content.substring(0, 50)}`;
             }).join('\n');
 
             // Time Gap Calculation
@@ -483,12 +483,12 @@ const RoomApp: React.FC = () => {
             const timeGapHint = getTimeGapHint(lastMsg?.timestamp);
 
             const baseContext = ContextBuilder.buildCoreContext(c, userProfile, true); // Keep Full Context
-            
+
             // DEBUG FIX: Sanitize and truncate interactables context to prevent huge Base64 leakage
-            const interactables = currentItems.filter(i => i.isInteractive).map(i => ({ 
-                id: i.id, 
-                name: i.name, 
-                context: (i.descriptionPrompt || '').substring(0, 200) 
+            const interactables = currentItems.filter(i => i.isInteractive).map(i => ({
+                id: i.id,
+                name: i.name,
+                context: (i.descriptionPrompt || '').substring(0, 200)
             }));
 
             let prompt = `${baseContext}
@@ -544,9 +544,9 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ 
-                    model: apiConfig.model, 
-                    messages: [{ role: "user", content: prompt }], 
+                body: JSON.stringify({
+                    model: apiConfig.model,
+                    messages: [{ role: "user", content: prompt }],
                     temperature: 0.5, // Lower temp for stability
                     max_tokens: 8000,
                     // Safety Settings injection for Gemini-based proxies
@@ -562,7 +562,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             if (response.ok) {
                 const data = await safeResponseJson(response);
                 let content = data.choices?.[0]?.message?.content || "";
-                
+
                 // CRITICAL FIX: Empty content check triggers fallback
                 if (!content) {
                     throw new Error("AI returned empty response (Safety Block suspected).");
@@ -572,10 +572,10 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                 const firstBrace = content.indexOf('{');
                 const lastBrace = content.lastIndexOf('}');
                 if (firstBrace !== -1 && lastBrace !== -1) content = content.substring(firstBrace, lastBrace + 1);
-                
+
                 let result;
                 try { result = JSON.parse(content); } catch (e) { throw new Error("JSON Parse Failed"); }
-                
+
                 setAiBubble({ text: result.welcomeMessage || "Welcome!", visible: true });
                 if (result.items) setRoomDescriptions(result.items);
 
@@ -600,20 +600,20 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                     };
                     await DB.saveRoomTodo(newTodo);
                     setTodaysTodo(newTodo);
-                    
+
                     await DB.saveMessage({
                         charId: c.id,
                         role: 'system',
                         type: 'text',
-                        content: `[系统: ${c.name} 制定了今日计划: ${result.todoList.join(', ')}]`
+                        content: `[系统: ${c.name} 制定了今日计划 (${result.todoList.length}项)]`
                     });
                 }
 
                 // 3. Handle Notebook
                 if (result.notebookEntry) {
                     // Create message first to get ID
-                    const msgContent = `[系统: ${c.name} 在记事本上写道: \n"${result.notebookEntry.content}"]`;
-                    
+                    const msgContent = `[系统: 📓 ${c.name} 在记事本上写了一篇随笔]`;
+
                     const msgId = await DB.saveMessage({
                         charId: c.id,
                         role: 'system',
@@ -635,13 +635,13 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
 
             } else { throw new Error(`API Error ${response.status}`); }
 
-        } catch (e: any) { 
-            console.error("Room Init Failed, switching to Fallback", e); 
+        } catch (e: any) {
+            console.error("Room Init Failed, switching to Fallback", e);
             // Trigger Fallback
             await initializeFallback(c);
-        } finally { 
-            clearInterval(textInterval); 
-            setIsInitializing(false); 
+        } finally {
+            clearInterval(textInterval);
+            setIsInitializing(false);
         }
     };
 
@@ -649,27 +649,27 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         if (e) e.stopPropagation();
         if (mode === 'edit') { setSelectedItemId(item.id); return; }
         if (!char) return;
-        
+
         // Character Movement Constraint: Keep feet below horizon line
         // FIX: Place actor visually "In Front" of furniture (lower Y = closer to camera in 2.5D top-down)
-        const targetY = Math.max(FLOOR_HORIZON, item.y + 5); 
-        
+        const targetY = Math.max(FLOOR_HORIZON, item.y + 5);
+
         setActorState({ x: item.x, y: targetY, action: 'walk' });
         setTimeout(() => setActorState(prev => ({ ...prev, action: 'interact' })), 600);
-        
+
         const cached = roomDescriptions[item.id] || roomDescriptions[item.name];
         if (cached) {
             setObservationText(cached.description);
             setAiBubble({ text: cached.reaction, visible: true });
-            
+
             const contentToCheck = `[${userProfile.name}]在[${char.name}]的${item.name}上看到了：${cached.description}。[${char.name}]表示：${cached.reaction}`;
             const recentMsgs = await DB.getMessagesByCharId(char.id);
             const isDuplicate = recentMsgs.slice(-50).some(m => m.role === 'system' && m.content === contentToCheck);
 
             if (!isDuplicate) {
-                try { 
-                    await DB.saveMessage({ charId: char.id, role: 'system', type: 'text', content: contentToCheck }); 
-                } catch (err) {}
+                try {
+                    await DB.saveMessage({ charId: char.id, role: 'system', type: 'text', content: contentToCheck });
+                } catch (err) { }
             }
         } else {
             setObservationText(`${item.name}静静地摆放在那里。`);
@@ -724,17 +724,17 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         const rect = roomRef.current.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
-        
+
         // Constrain to floor: allow climbing a bit, but mostly keep below horizon
         const targetY = Math.max(FLOOR_HORIZON - 5, y);
-        
+
         setActorState({
             x,
             y: targetY,
             action: 'walk'
         });
         setTimeout(() => setActorState(prev => ({ ...prev, action: 'idle' })), 600);
-        
+
         // Clear bubbles
         setAiBubble({ text: '', visible: false });
         setObservationText('');
@@ -742,24 +742,24 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
 
     // --- Edit Logic ---
     const saveRoom = (newItems: RoomItem[]) => { setItems(newItems); if (char) { updateCharacter(char.id, { roomConfig: { ...char.roomConfig, items: newItems } }); } };
-    
+
     // Updated addItem to accept description
-    const addItem = (asset: {name: string, image: string, defaultScale: number, description?: string}, type: 'furniture' | 'decor') => { 
-        const newItem: RoomItem = { 
-            id: `item-${Date.now()}`, 
-            name: asset.name, 
-            type: type, 
-            image: asset.image, 
-            x: 50, 
-            y: 50, 
-            scale: asset.defaultScale, 
-            rotation: 0, 
+    const addItem = (asset: { name: string, image: string, defaultScale: number, description?: string }, type: 'furniture' | 'decor') => {
+        const newItem: RoomItem = {
+            id: `item-${Date.now()}`,
+            name: asset.name,
+            type: type,
+            image: asset.image,
+            x: 50,
+            y: 50,
+            scale: asset.defaultScale,
+            rotation: 0,
             isInteractive: true,
             descriptionPrompt: asset.description // New Field
-        }; 
-        saveRoom([...items, newItem]); 
-        setShowLibrary(false); 
-        addToast(`已添加: ${asset.name}`, 'success'); 
+        };
+        saveRoom([...items, newItem]);
+        setShowLibrary(false);
+        addToast(`已添加: ${asset.name}`, 'success');
     };
 
     // PERF: Update items in state immediately (visual), but debounce DB persistence
@@ -778,49 +778,49 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
     const deleteSelectedItem = () => { if (!selectedItemId) return; saveRoom(items.filter(i => i.id !== selectedItemId)); setSelectedItemId(null); };
     const handleWallChange = (bg: string) => { if (char) updateCharacter(char.id, { roomConfig: { ...char.roomConfig, items, wallImage: bg } }); };
     const handleFloorChange = (bg: string) => { if (char) updateCharacter(char.id, { roomConfig: { ...char.roomConfig, items, floorImage: bg } }); };
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'wall' | 'floor' | 'actor' | 'custom_item') => { 
-        const file = e.target.files?.[0]; 
-        if (file) { 
-            try { 
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'wall' | 'floor' | 'actor' | 'custom_item') => {
+        const file = e.target.files?.[0];
+        if (file) {
+            try {
                 // Force high quality for custom item uploads
                 const processOptions = target === 'custom_item' ? { quality: 1.0, maxWidth: 2048 } : undefined;
-                const base64 = await processImage(file, processOptions); 
-                
-                if (target === 'wall') handleWallChange(base64); 
-                if (target === 'floor') handleFloorChange(base64); 
-                if (target === 'actor') { 
-                    if (char) { 
-                        const newSprites = { ...(char.sprites || {}), 'chibi': base64 }; 
-                        updateCharacter(char.id, { sprites: newSprites }); 
-                        addToast('角色房间立绘已更新', 'success'); 
-                    } 
-                } 
-                if (target === 'custom_item') { 
-                    setCustomItemImage(base64); 
-                } 
-            } catch (err: any) { 
-                addToast(err.message, 'error'); 
-            } 
-        } 
+                const base64 = await processImage(file, processOptions);
+
+                if (target === 'wall') handleWallChange(base64);
+                if (target === 'floor') handleFloorChange(base64);
+                if (target === 'actor') {
+                    if (char) {
+                        const newSprites = { ...(char.sprites || {}), 'chibi': base64 };
+                        updateCharacter(char.id, { sprites: newSprites });
+                        addToast('角色房间立绘已更新', 'success');
+                    }
+                }
+                if (target === 'custom_item') {
+                    setCustomItemImage(base64);
+                }
+            } catch (err: any) {
+                addToast(err.message, 'error');
+            }
+        }
     };
-    
+
     // Custom Item Save
-    const saveCustomItem = async () => { 
+    const saveCustomItem = async () => {
         const imageToUse = customItemUrl || customItemImage;
-        if(!customItemName.trim() || !imageToUse) { addToast('请填写完整信息', 'error'); return; } 
-        
+        if (!customItemName.trim() || !imageToUse) { addToast('请填写完整信息', 'error'); return; }
+
         // 1. Add to Room (as current logic)
-        addItem({ 
-            name: customItemName, 
-            image: imageToUse, 
+        addItem({
+            name: customItemName,
+            image: imageToUse,
             defaultScale: 1.0,
             description: customItemDescription || undefined
         }, 'furniture');
-        
+
         // 2. Add to Custom Asset Library and Persist
-        const newAsset = { 
-            name: customItemName, 
-            image: imageToUse, 
+        const newAsset = {
+            name: customItemName,
+            image: imageToUse,
             defaultScale: 1.0,
             description: customItemDescription || undefined
         };
@@ -828,16 +828,16 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         setCustomAssets(updatedLibrary);
         // Persist to DB Assets (Migration)
         await DB.saveAsset('room_custom_assets_list', JSON.stringify(updatedLibrary));
-        
-        setShowCustomModal(false); 
-        setCustomItemName(''); 
-        setCustomItemImage(''); 
+
+        setShowCustomModal(false);
+        setCustomItemName('');
+        setCustomItemImage('');
         setCustomItemUrl('');
         setCustomItemDescription('');
     };
 
     // New Handlers for Deleting Custom Assets
-    const handleAssetTouchStart = (asset: {name: string, image: string, defaultScale: number}) => {
+    const handleAssetTouchStart = (asset: { name: string, image: string, defaultScale: number }) => {
         assetLongPressTimer.current = setTimeout(() => {
             setDeletingAsset(asset);
         }, 600);
@@ -856,7 +856,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         setCustomAssets(newAssets);
         // Update DB
         await DB.saveAsset('room_custom_assets_list', JSON.stringify(newAssets));
-        
+
         setDeletingAsset(null);
         addToast('素材已删除', 'success');
     };
@@ -981,7 +981,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         pendingDragPos.current = null;
         dragStartRef.current = null;
         setDraggingId(null);
-        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch(_) {}
+        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) { }
     };
 
     // --- Renderers ---
@@ -997,9 +997,9 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                     <span className="font-bold text-slate-700 text-lg tracking-wide">拜访谁的房间?</span>
                     <div className="w-8"></div>
                 </div>
-               <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto pb-20 no-scrollbar">
-    {characters.map(c => (
-        <div key={c.id} onClick={() => handleEnterRoom(c)} className="min-h-[180px] bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all relative overflow-hidden group hover:shadow-md">
+                <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto pb-20 no-scrollbar">
+                    {characters.map(c => (
+                        <div key={c.id} onClick={() => handleEnterRoom(c)} className="min-h-[180px] bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all relative overflow-hidden group hover:shadow-md">
                             <div className="w-20 h-20 rounded-full p-1 border-2 border-slate-100 relative">
                                 <img src={c.avatar} className="w-full h-full rounded-full object-cover" />
                                 <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-400 rounded-full border-2 border-white flex items-center justify-center text-[10px] text-white">🏠</div>
@@ -1017,13 +1017,13 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
     const actorImage = char?.sprites?.['chibi'] || char?.avatar;
     // PERF: Reduced from 3 drop-shadows to 1 simple shadow -- massive mobile GPU savings
     const stickerClass = "filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]";
-    
+
     // Background Style Construction (Logic 1: Legacy String vs New Config)
     const getBgStyle = (img: string | undefined, scale: number | undefined, repeat: boolean | undefined) => {
         if (!img) return '';
         const isUrl = img.startsWith('http') || img.startsWith('data');
         const url = isUrl ? `url(${img})` : img; // If it's a CSS gradient, use it directly
-        
+
         // If it's a gradient string (not URL), ignore scale params as they apply to background-size which works on gradients too, but repeat usually doesn't apply the same way.
         // Let's assume adjustments are mostly for Images.
         if (!isUrl) return url;
@@ -1032,7 +1032,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
         const size = scale && scale > 0 ? `${scale}%` : 'cover'; // 0 = Cover
         const rep = repeat ? 'repeat' : 'no-repeat';
         const pos = 'center center';
-        
+
         return `${url} ${pos} / ${size} ${rep}`;
     };
 
@@ -1050,7 +1050,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
 
     return (
         <div className="h-full w-full bg-[#f8fafc] flex flex-col relative overflow-hidden font-sans select-none">
-            
+
             {isInitializing && (
                 <div className="absolute inset-0 z-[500] bg-white flex flex-col items-center justify-center animate-fade-in">
                     <div className="text-4xl mb-4 animate-bounce">🚪</div>
@@ -1066,10 +1066,10 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                 {items.map(item => {
                     const isDragging = draggingId === item.id;
                     return (
-                        <div 
-                            key={item.id} 
-                            onPointerDown={(e) => handlePointerDown(e, item.id)} 
-                            onClick={(e) => handleLookAt(item, e)} 
+                        <div
+                            key={item.id}
+                            onPointerDown={(e) => handlePointerDown(e, item.id)}
+                            onClick={(e) => handleLookAt(item, e)}
                             className={`absolute origin-bottom-center ${stickerClass} ${mode === 'edit' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : (item.isInteractive ? 'cursor-pointer active:scale-95' : '')} ${selectedItemId === item.id ? 'ring-2 ring-blue-400 rounded-lg ring-offset-4' : ''} touch-none select-none`}
                             style={{
                                 left: `${item.x}%`,
@@ -1086,7 +1086,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                         </div>
                     );
                 })}
-                
+
                 {/* Character Actor - Z Index Boosted to simulate standing in front */}
                 <div onClick={(e) => { e.stopPropagation(); handlePokeActor(); }} className={`absolute transition-[left,top] duration-[1000ms] ease-in-out origin-bottom-center ${stickerClass} cursor-pointer active:scale-95 group`} style={{ left: `${actorState.x}%`, top: `${actorState.y}%`, width: '120px', transform: `translate(-50%, -100%) scale(${actorState.action === 'walk' ? 1.05 : (actorState.action === 'bounce' ? 1.1 : 1)})`, zIndex: Math.floor(actorState.y) + 20 }}>
                     <img src={actorImage} className={`w-full h-full object-contain ${actorState.action === 'walk' ? 'animate-bounce' : ''}`} />
@@ -1110,16 +1110,16 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                     <button onClick={() => setActivePanel('todo')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activePanel === 'todo' ? 'bg-white shadow text-primary' : 'text-slate-400 hover:bg-white/50'}`}>今日计划</button>
                     <button onClick={() => setActivePanel('notebook')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activePanel === 'notebook' ? 'bg-white shadow text-primary' : 'text-slate-400 hover:bg-white/50'}`}>私密记事</button>
                 </div>
-                
+
                 {/* Fixed: Add no-scrollbar class to hide scrollbar */}
                 <div className="flex-1 overflow-y-auto p-6 bg-[#fcfcfc] no-scrollbar">
                     {activePanel === 'todo' && (
                         <div className="space-y-6">
-                            <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{todaysTodo?.date || 'Today'}</span><span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500">完成度: {todaysTodo ? Math.round((todaysTodo.items.filter(i=>i.done).length / todaysTodo.items.length)*100) : 0}%</span></div>
+                            <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{todaysTodo?.date || 'Today'}</span><span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500">完成度: {todaysTodo ? Math.round((todaysTodo.items.filter(i => i.done).length / todaysTodo.items.length) * 100) : 0}%</span></div>
                             {todaysTodo ? <ul className="space-y-3">{todaysTodo.items.map((item, idx) => (
                                 <li key={idx} className="flex items-start gap-3 group">
                                     <div onClick={() => handleToggleTodo(idx)} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer ${item.done ? 'bg-green-400 border-green-400' : 'border-slate-300 group-hover:border-primary'}`}>
-                                        {item.done && <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>}
+                                        {item.done && <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>}
                                     </div>
                                     <span onClick={() => handleToggleTodo(idx)} className={`text-sm leading-relaxed transition-all flex-1 cursor-pointer ${item.done ? 'text-slate-300 line-through decoration-slate-300' : 'text-slate-700 font-medium'}`}>{item.text}</span>
                                     <button onClick={() => handleDeleteTodo(idx)} className="text-slate-300 hover:text-red-400 px-1 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
@@ -1131,8 +1131,8 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                     {activePanel === 'notebook' && (
                         <div className="flex flex-col pb-4">
                             {notebookEntries.length > 0 ? (
-                                <div 
-                                    className="relative bg-white shadow-md border border-slate-200 p-6 min-h-[400px] flex flex-col rounded-xl" 
+                                <div
+                                    className="relative bg-white shadow-md border border-slate-200 p-6 min-h-[400px] flex flex-col rounded-xl"
                                     style={{ backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px' }}
                                 >
                                     {/* Spiral Binding Visual - Adaptive Height */}
@@ -1195,7 +1195,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                                     <button onClick={() => setShowSettingsModal(true)} className="flex flex-col items-center gap-1 shrink-0"><div className="w-12 h-12 bg-slate-200 rounded-xl flex items-center justify-center text-slate-600 shadow-sm border border-slate-300">⚙️</div><span className="text-[10px] font-bold text-slate-500">设置</span></button>
                                     {/* Developer Export Button */}
                                     <button onClick={() => setShowDevModal(true)} className="flex flex-col items-center gap-1 shrink-0"><div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-white shadow-sm border border-slate-600">{'{}'}</div><span className="text-[10px] font-bold text-slate-500">Dev</span></button>
-                                    
+
                                     <input type="file" ref={wallInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'wall')} />
                                     <input type="file" ref={floorInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'floor')} />
                                     <input type="file" ref={actorInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'actor')} />
@@ -1231,9 +1231,9 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                                         } : {};
 
                                         return (
-                                            <button 
-                                                key={i} 
-                                                onClick={() => addItem(asset, category === 'custom' || category === 'sully_special' ? 'furniture' : category as any)} 
+                                            <button
+                                                key={i}
+                                                onClick={() => addItem(asset, category === 'custom' || category === 'sully_special' ? 'furniture' : category as any)}
                                                 className="flex flex-col items-center gap-2 group relative active:scale-95 transition-transform"
                                                 {...handlers}
                                             >
@@ -1253,13 +1253,13 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             </Modal>
 
             {/* Custom Asset Delete Confirmation Modal */}
-            <Modal 
+            <Modal
                 isOpen={!!deletingAsset} title="删除自定义家具" onClose={() => setDeletingAsset(null)}
                 footer={<div className="flex gap-2 w-full"><button onClick={() => setDeletingAsset(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button><button onClick={confirmDeleteAsset} className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold">删除</button></div>}
             >
                 <div className="flex flex-col items-center gap-3 py-2">
                     {deletingAsset && <img src={deletingAsset.image} className="w-16 h-16 object-contain rounded-lg bg-slate-100 border" />}
-                    <p className="text-sm text-slate-600 text-center">确定要从库中永久删除 <br/><span className="font-bold">"{deletingAsset?.name}"</span> 吗？<br/><span className="text-[10px] text-slate-400">(房间里已摆放的不受影响)</span></p>
+                    <p className="text-sm text-slate-600 text-center">确定要从库中永久删除 <br /><span className="font-bold">"{deletingAsset?.name}"</span> 吗？<br /><span className="text-[10px] text-slate-400">(房间里已摆放的不受影响)</span></p>
                 </div>
             </Modal>
 
@@ -1335,10 +1335,10 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             </Modal>
 
             {/* Dev Export Modal */}
-            <Modal 
-                isOpen={showDevModal} 
-                title="开发者工具 (Dev Tools)" 
-                onClose={() => setShowDevModal(false)} 
+            <Modal
+                isOpen={showDevModal}
+                title="开发者工具 (Dev Tools)"
+                onClose={() => setShowDevModal(false)}
                 footer={<button onClick={() => setShowDevModal(false)} className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl">关闭</button>}
             >
                 <div className="space-y-4">
@@ -1359,7 +1359,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                                 {lastPrompt || "(暂无数据，请先尝试进入房间)"}
                             </pre>
                         </div>
-                        <button onClick={() => { if(lastPrompt) { navigator.clipboard.writeText(lastPrompt); addToast('Prompt Copied', 'success'); } else addToast('No prompt yet', 'error'); }} className="w-full py-2 bg-red-500 text-white text-xs font-bold rounded-xl">复制 Prompt 到剪贴板</button>
+                        <button onClick={() => { if (lastPrompt) { navigator.clipboard.writeText(lastPrompt); addToast('Prompt Copied', 'success'); } else addToast('No prompt yet', 'error'); }} className="w-full py-2 bg-red-500 text-white text-xs font-bold rounded-xl">复制 Prompt 到剪贴板</button>
                         <p className="text-[9px] text-slate-400 mt-2 text-center">如果 AI 回复为空，请复制此 Prompt 检查是否有乱码/Base64 混入。</p>
                     </div>
                 </div>

@@ -20,7 +20,7 @@ const Chat: React.FC = () => {
     const [visibleCount, setVisibleCount] = useState(30);
     const [input, setInput] = useState('');
     const [showPanel, setShowPanel] = useState<'none' | 'actions' | 'emojis' | 'chars'>('none');
-    
+
     // Emoji State
     const [emojis, setEmojis] = useState<Emoji[]>([]);
     const [categories, setCategories] = useState<EmojiCategory[]>([]);
@@ -42,7 +42,7 @@ const Chat: React.FC = () => {
     const [emojiImportText, setEmojiImportText] = useState('');
     const [settingsContextLimit, setSettingsContextLimit] = useState(500);
     const [settingsHideSysLogs, setSettingsHideSysLogs] = useState(false);
-    const [preserveContext, setPreserveContext] = useState(true); 
+    const [preserveContext, setPreserveContext] = useState(true);
     const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
     const [selectedEmoji, setSelectedEmoji] = useState<Emoji | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<EmojiCategory | null>(null); // For deletion modal
@@ -50,9 +50,9 @@ const Chat: React.FC = () => {
     const [isSummarizing, setIsSummarizing] = useState(false);
 
     // Archive Prompts State
-    const [archivePrompts, setArchivePrompts] = useState<{id: string, name: string, content: string}[]>(DEFAULT_ARCHIVE_PROMPTS);
+    const [archivePrompts, setArchivePrompts] = useState<{ id: string, name: string, content: string }[]>(DEFAULT_ARCHIVE_PROMPTS);
     const [selectedPromptId, setSelectedPromptId] = useState<string>('preset_rational');
-    const [editingPrompt, setEditingPrompt] = useState<{id: string, name: string, content: string} | null>(null);
+    const [editingPrompt, setEditingPrompt] = useState<{ id: string, name: string, content: string } | null>(null);
 
     // --- Multi-Select State ---
     const [selectionMode, setSelectionMode] = useState(false);
@@ -198,7 +198,7 @@ const Chat: React.FC = () => {
                 const parsed = JSON.parse(savedPrompts);
                 const merged = [...DEFAULT_ARCHIVE_PROMPTS, ...parsed.filter((p: any) => !p.id.startsWith('preset_'))];
                 setArchivePrompts(merged);
-            } catch(e) {}
+            } catch (e) { }
         }
         const savedId = localStorage.getItem('chat_active_archive_prompt_id');
         if (savedId && archivePrompts.some(p => p.id === savedId)) setSelectedPromptId(savedId);
@@ -254,7 +254,7 @@ const Chat: React.FC = () => {
         const type = customType || 'text';
 
         if (!customContent) { setInput(''); localStorage.removeItem(draftKey); }
-        
+
         if (type === 'image') {
             const recentChat = messages.slice(-10).map(m => {
                 const sender = m.role === 'user' ? userProfile.name : char.name;
@@ -272,7 +272,7 @@ const Chat: React.FC = () => {
         }
 
         const msgPayload: any = { charId: char.id, role: 'user', type, content: text, metadata };
-        
+
         if (replyTarget) {
             msgPayload.replyTo = {
                 id: replyTarget.id,
@@ -367,8 +367,8 @@ const Chat: React.FC = () => {
 
     const handleAddCategory = async () => {
         if (!newCategoryName.trim()) {
-             addToast('请输入分类名称', 'error');
-             return;
+            addToast('请输入分类名称', 'error');
+            return;
         }
         const newCat = { id: `cat-${Date.now()}`, name: newCategoryName.trim() };
         await DB.saveEmojiCategory(newCat);
@@ -476,13 +476,13 @@ const Chat: React.FC = () => {
             const dataUrl = await processImage(file, { skipCompression: true });
             updateCharacter(char.id, { chatBackground: dataUrl });
             addToast('聊天背景已更新', 'success');
-        } catch(err: any) {
+        } catch (err: any) {
             addToast(err.message, 'error');
         }
     };
 
     const saveSettings = () => {
-        updateCharacter(char.id, { 
+        updateCharacter(char.id, {
             contextLimit: settingsContextLimit,
             hideSystemLogs: settingsHideSysLogs
         });
@@ -532,13 +532,13 @@ const Chat: React.FC = () => {
         const allMessages = await DB.getMessagesByCharId(char.id);
         const msgsByDate: Record<string, Message[]> = {};
         allMessages
-        .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
-        .forEach(m => {
-            const d = new Date(m.timestamp);
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            if (!msgsByDate[dateStr]) msgsByDate[dateStr] = [];
-            msgsByDate[dateStr].push(m);
-        });
+            .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
+            .forEach(m => {
+                const d = new Date(m.timestamp);
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                if (!msgsByDate[dateStr]) msgsByDate[dateStr] = [];
+                msgsByDate[dateStr].push(m);
+            });
 
         const datesToProcess = Object.keys(msgsByDate).sort();
         if (datesToProcess.length === 0) {
@@ -549,7 +549,7 @@ const Chat: React.FC = () => {
         setIsSummarizing(true);
         setShowPanel('none');
         setModalType('none');
-        
+
         try {
             let processedCount = 0;
             const newMemories: MemoryFragment[] = [];
@@ -559,7 +559,7 @@ const Chat: React.FC = () => {
             for (const dateStr of datesToProcess) {
                 const dayMsgs = msgsByDate[dateStr];
                 const rawLog = dayMsgs.map(m => `[${formatTime(m.timestamp)}] ${m.role === 'user' ? userProfile.name : char.name}: ${m.type === 'image' ? '[Image]' : m.content}`).join('\n');
-                
+
                 let prompt = template;
                 prompt = prompt.replace(/\$\{dateStr\}/g, dateStr);
                 prompt = prompt.replace(/\$\{char\.name\}/g, char.name);
@@ -573,14 +573,14 @@ const Chat: React.FC = () => {
                         model: apiConfig.model,
                         messages: [{ role: "user", content: prompt }],
                         temperature: 0.5,
-                        max_tokens: 8000 
+                        max_tokens: 8000
                     })
                 });
 
                 if (!response.ok) throw new Error(`API Error on ${dateStr}`);
                 const data = await safeResponseJson(response);
                 let summary = data.choices?.[0]?.message?.content || '';
-                summary = summary.trim().replace(/^["']|["']$/g, ''); 
+                summary = summary.trim().replace(/^["']|["']$/g, '');
 
                 if (summary) {
                     newMemories.push({ id: `mem-${Date.now()}`, date: dateStr, summary: summary, mood: 'archive' });
@@ -781,17 +781,17 @@ const Chat: React.FC = () => {
     const handleCharSelectCallback = useCallback((id: string) => { setActiveCharacterId(id); setShowPanel('none'); }, []);
 
     return (
-        <div 
-            className="flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-[background-image] duration-500"
-            style={{ 
+        <div
+            className={`sully-chat-container flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-[background-image] duration-500 theme-${activeTheme.id}`}
+            style={{
                 backgroundImage: char.chatBackground ? `url(${char.chatBackground})` : 'none',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
             }}
         >
-             {activeTheme.customCss && <style>{activeTheme.customCss}</style>}
+            {activeTheme.customCss && <style>{activeTheme.customCss}</style>}
 
-             <ChatModals 
+            <ChatModals
                 modalType={modalType} setModalType={setModalType}
                 transferAmt={transferAmt} setTransferAmt={setTransferAmt}
                 emojiImportText={emojiImportText} setEmojiImportText={setEmojiImportText}
@@ -803,11 +803,11 @@ const Chat: React.FC = () => {
                 editingPrompt={editingPrompt} setEditingPrompt={setEditingPrompt} isSummarizing={isSummarizing}
                 selectedMessage={selectedMessage} selectedEmoji={selectedEmoji} activeCharacter={char} messages={messages}
                 allHistoryMessages={allHistoryMessages}
-                
+
                 newCategoryName={newCategoryName} setNewCategoryName={setNewCategoryName} onAddCategory={handleAddCategory}
                 selectedCategory={selectedCategory}
 
-                onTransfer={() => { if(transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt }); setModalType('none'); }}
+                onTransfer={() => { if (transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt }); setModalType('none'); }}
                 onImportEmoji={handleImportEmoji}
                 onSaveSettings={saveSettings} onBgUpload={handleBgUpload} onRemoveBg={() => updateCharacter(char.id, { chatBackground: undefined })}
                 onClearHistory={handleClearHistory} onArchive={handleFullArchive}
@@ -824,9 +824,9 @@ const Chat: React.FC = () => {
                 onSetTranslateLang={(lang: string) => { setTranslateTargetLang(lang); localStorage.setItem('chat_translate_lang', lang); setShowingTargetIds(new Set()); }}
                 xhsEnabled={!!char.xhsEnabled}
                 onToggleXhs={() => updateCharacter(char.id, { xhsEnabled: !char.xhsEnabled })}
-             />
-             
-             <ChatHeader 
+            />
+
+            <ChatHeader
                 selectionMode={selectionMode}
                 selectedCount={selectedMsgIds.size}
                 onCancelSelection={() => { setSelectionMode(false); setSelectedMsgIds(new Set()); }}
@@ -838,7 +838,7 @@ const Chat: React.FC = () => {
                 onClose={closeApp}
                 onTriggerAI={() => triggerAI(messages)}
                 onShowCharsPanel={() => setShowPanel('chars')}
-             />
+            />
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto pt-6 pb-6 no-scrollbar" style={{ backgroundImage: activeTheme.type === 'custom' && activeTheme.user.backgroundImage ? 'none' : undefined }}>
                 {collapsedCount > 0 && (
@@ -875,11 +875,13 @@ const Chat: React.FC = () => {
                         />
                     );
                 })}
-                
+
                 {(isTyping || recallStatus || searchStatus || diaryStatus) && !selectionMode && (
-                    <div className="flex items-end gap-3 px-3 mb-6 animate-fade-in">
-                        <img src={char.avatar} className="w-9 h-9 rounded-[10px] object-cover" />
-                        <div className="bg-white px-4 py-3 rounded-2xl shadow-sm">
+                    <div className="flex items-start gap-2.5 px-3 mb-4 animate-fade-in">
+                        <img src={char.avatar} className="w-9 h-9 rounded-[4px] object-cover bg-slate-200" />
+                        <div className="sully-typing-bubble bg-white px-3 py-2 rounded-lg shadow-sm relative">
+                            {/* Typing indicator tail */}
+                            <svg className="sully-typing-tail absolute top-[12px] -left-[5.5px] w-[6px] h-[10px] pointer-events-none" style={{ fill: '#ffffff' }}><polygon points="6,0 0,5 6,10" /></svg>
                             {searchStatus ? (
                                 <div className="flex items-center gap-2 text-xs text-emerald-500 font-medium">
                                     <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -910,7 +912,7 @@ const Chat: React.FC = () => {
                         <button onClick={() => setReplyTarget(null)} className="p-1 text-slate-400 hover:text-slate-600">×</button>
                     </div>
                 )}
-                
+
                 <ChatInputArea
                     input={input} setInput={handleInputChange}
                     isTyping={isTyping} selectionMode={selectionMode}

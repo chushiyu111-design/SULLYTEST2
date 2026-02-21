@@ -1,8 +1,55 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { ShareNetwork, Trash, Plus, Smiley, PaperPlaneTilt, Money, BookOpenText, GearSix, Image, Lock, ArrowsClockwise } from '@phosphor-icons/react';
 import { CharacterProfile, ChatTheme, EmojiCategory, Emoji } from '../../types';
 import { PRESET_THEMES } from './ChatConstants';
+
+// ===== WeChat 1:1 Pixel-Perfect Inline SVG Icons =====
+// Matched to real WeChat iOS 8.x bottom input bar icons
+
+// Voice icon: outer circle + center dot + two pairs of broadcast wave arcs
+const WxIconVoice = ({ className = 'w-7 h-7' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="20" />
+        <circle cx="24" cy="24" r="2.2" fill="#3c3c3c" stroke="none" />
+        <path d="M19 18.5a7 7 0 0 0 0 11" />
+        <path d="M29 18.5a7 7 0 0 1 0 11" />
+        <path d="M15.5 15a12 12 0 0 0 0 18" />
+        <path d="M32.5 15a12 12 0 0 1 0 18" />
+    </svg>
+);
+
+// Emoji icon: circle + two dot eyes + wide open-mouth grin (teeth style, like real WeChat)
+const WxIconEmoji = ({ className = 'w-7 h-7' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="20" />
+        {/* Eyes - filled circles */}
+        <circle cx="17" cy="20" r="2" fill="#3c3c3c" stroke="none" />
+        <circle cx="31" cy="20" r="2" fill="#3c3c3c" stroke="none" />
+        {/* Mouth - wide open grin: upper arc (smile line) + lower arc (chin) forming an open mouth */}
+        <path d="M14 28 Q24 38, 34 28" strokeWidth="1.6" />
+        <path d="M14 28 Q24 32, 34 28" strokeWidth="1.6" />
+    </svg>
+);
+
+// Plus icon: circle + cross
+const WxIconPlus = ({ className = 'w-7 h-7' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="20" />
+        <line x1="24" y1="14" x2="24" y2="34" />
+        <line x1="14" y1="24" x2="34" y2="24" />
+    </svg>
+);
+
+// Microphone icon (inside input field, small, gray)
+const WxIconMic = ({ className = 'w-5 h-5' }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="#b2b2b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="9" y="2" width="6" height="11" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0" />
+        <line x1="12" y1="18" x2="12" y2="22" />
+        <line x1="9" y1="22" x2="15" y2="22" />
+    </svg>
+);
 
 interface ChatInputAreaProps {
     input: string;
@@ -45,8 +92,18 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 }) => {
     const chatImageInputRef = useRef<HTMLInputElement>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const startPos = useRef({ x: 0, y: 0 }); 
+    const startPos = useRef({ x: 0, y: 0 });
     const isLongPressTriggered = useRef(false); // Track if long press action fired
+    const wxTextareaRef = useRef<HTMLTextAreaElement>(null); // WeChat auto-expand ref
+
+    // WeChat theme: auto-expand textarea height (up to ~5 lines = 120px)
+    useEffect(() => {
+        const el = wxTextareaRef.current;
+        if (!el || activeThemeId !== 'default') return;
+        el.style.height = '0px'; // Reset to measure natural scrollHeight
+        const scrollH = el.scrollHeight;
+        el.style.height = Math.min(scrollH, 120) + 'px';
+    }, [input, activeThemeId]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -64,7 +121,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     };
 
     // --- Unified Touch/Long-Press Logic ---
-    
+
     const clearTimer = () => {
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
@@ -75,12 +132,12 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     const handleTouchStart = (item: any, type: 'emoji' | 'category', e: React.TouchEvent | React.MouseEvent) => {
         // 1. Always reset state first to ensure clean slate for any interaction
         // This fixes the bug where deleting a category leaves the flag true, blocking clicks on system categories
-        clearTimer(); 
+        clearTimer();
         isLongPressTriggered.current = false;
 
         // 2. Skip long-press for the default category (no options needed)
         if (type === 'category' && item.id === 'default') return;
-        
+
         // 3. Store coordinates and start timer for valid long-press candidates
         if ('touches' in e) {
             startPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -144,8 +201,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     };
 
     return (
-        <div className="bg-white/90 backdrop-blur-2xl border-t border-slate-200/50 pb-safe shrink-0 z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] relative">
-            
+        <div className="sully-chat-input bg-white/90 backdrop-blur-2xl border-t border-slate-200/50 pb-safe shrink-0 z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] relative transition-all duration-300">
+
             {selectionMode ? (
                 <div className="p-3 flex gap-2 bg-white/50 backdrop-blur-md">
                     {onForwardSelected && (
@@ -166,28 +223,130 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                         删除 ({selectedCount})
                     </button>
                 </div>
+            ) : activeThemeId === 'default' ? (
+                /* ===== WeChat Pixel-Perfect Input Bar ===== */
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        minHeight: '56px',
+                        padding: '10px 8px',
+                        gap: '8px',
+                        background: '#f7f7f7',
+                        borderTop: '0.5px solid rgba(0,0,0,0.15)',
+                        transition: 'min-height 0.15s ease',
+                    }}
+                >
+                    {/* Voice Button — 40px touch area, 28px icon */}
+                    <button
+                        onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')}
+                        style={{
+                            width: '40px', height: '40px', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            background: 'transparent', border: 'none',
+                            padding: 0, cursor: 'pointer', flexShrink: 0,
+                        }}
+                    >
+                        <WxIconVoice />
+                    </button>
+
+                    {/* Input Field */}
+                    <div
+                        style={{
+                            flex: 1, minWidth: 0, minHeight: '36px',
+                            background: '#ffffff', borderRadius: '4px',
+                            border: '0.5px solid rgba(0,0,0,0.1)',
+                            display: 'flex', alignItems: 'flex-end',
+                            padding: '6px 8px',
+                        }}
+                    >
+                        <textarea
+                            ref={wxTextareaRef}
+                            rows={1}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            style={{
+                                flex: 1, minWidth: 0, background: 'transparent',
+                                fontSize: '15px', color: '#333333',
+                                border: 'none', outline: 'none', resize: 'none',
+                                minHeight: '24px', maxHeight: '120px',
+                                lineHeight: '24px',
+                                padding: 0, margin: 0,
+                                overflowY: 'auto',
+                            }}
+                            className="no-scrollbar"
+                            placeholder=""
+                        />
+                        {/* Microphone icon inside input field (right side, like real WeChat) */}
+                        <WxIconMic />
+                    </div>
+
+                    {/* Emoji Button */}
+                    <button
+                        onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')}
+                        style={{
+                            width: '40px', height: '40px', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            background: 'transparent', border: 'none',
+                            padding: 0, cursor: 'pointer', flexShrink: 0,
+                        }}
+                    >
+                        <WxIconEmoji />
+                    </button>
+
+                    {/* Plus / Send Toggle */}
+                    {input.trim() ? (
+                        <button
+                            onClick={onSend}
+                            style={{
+                                width: '60px', height: '36px', flexShrink: 0,
+                                background: '#07c160', borderRadius: '4px',
+                                color: '#ffffff', fontSize: '15px', fontWeight: 500,
+                                border: 'none', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'opacity 0.15s',
+                            }}
+                        >
+                            发送
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')}
+                            style={{
+                                width: '40px', height: '40px', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                                background: 'transparent', border: 'none',
+                                padding: 0, cursor: 'pointer', flexShrink: 0,
+                            }}
+                        >
+                            <WxIconPlus />
+                        </button>
+                    )}
+                </div>
             ) : (
+                /* ===== Original Layout (all other themes) ===== */
                 <div className="p-3 px-4 flex gap-3 items-end">
                     <button onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')} className="w-11 h-11 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
                         <Plus className="w-6 h-6" weight="bold" />
                     </button>
                     <div className="flex-1 min-w-0 bg-slate-100 rounded-[24px] flex items-center px-1 border border-transparent focus-within:bg-white focus-within:border-primary/30 transition-all overflow-hidden">
-                        <textarea 
-                            rows={1} 
-                            value={input} 
-                            onChange={(e) => setInput(e.target.value)} 
-                            onKeyDown={handleKeyDown} 
-                            className="flex-1 min-w-0 bg-transparent px-4 py-3 text-[15px] resize-none max-h-24 no-scrollbar" 
-                            placeholder="Message..." 
-                            style={{ height: 'auto' }} 
+                        <textarea
+                            rows={1}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="flex-1 min-w-0 bg-transparent px-4 py-3 text-[15px] resize-none max-h-24 no-scrollbar"
+                            placeholder="Message..."
+                            style={{ height: 'auto' }}
                         />
                         <button onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')} className="p-2 shrink-0 text-slate-400 hover:text-primary">
                             <Smiley className="w-6 h-6" weight="regular" />
                         </button>
                     </div>
-                    <button 
-                        onClick={onSend} 
-                        disabled={!input.trim()} 
+                    <button
+                        onClick={onSend}
+                        disabled={!input.trim()}
                         className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-all ${input.trim() ? 'bg-primary text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                     >
                         <PaperPlaneTilt className="w-5 h-5" weight="fill" />
@@ -198,15 +357,15 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             {/* Panels */}
             {showPanel !== 'none' && !selectionMode && (
                 <div className="bg-slate-50 h-72 border-t border-slate-200/60 overflow-hidden relative z-0 flex flex-col">
-                    
+
                     {/* Emojis Panel with Categories */}
                     {showPanel === 'emojis' && (
                         <>
                             {/* Categories Bar */}
                             <div className="h-10 bg-white border-b border-slate-100 flex items-center px-2 gap-2 overflow-x-auto no-scrollbar shrink-0">
                                 {categories.map(cat => (
-                                    <button 
-                                        key={cat.id} 
+                                    <button
+                                        key={cat.id}
                                         onClick={(e) => handleItemClick(e, cat, 'category')}
                                         // Long press handlers for Categories
                                         onTouchStart={(e) => handleTouchStart(cat, 'category', e)}
@@ -232,8 +391,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                 <div className="grid grid-cols-4 gap-3">
                                     <button onClick={() => onPanelAction('emoji-import')} className="aspect-square bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center text-2xl text-slate-400">+</button>
                                     {emojis.map((e, i) => (
-                                        <button 
-                                            key={i} 
+                                        <button
+                                            key={i}
                                             onClick={(ev) => handleItemClick(ev, e, 'emoji')}
                                             // Long press handlers for Emojis
                                             onTouchStart={(ev) => handleTouchStart(e, 'emoji', ev)}
@@ -263,25 +422,25 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                 </div>
                                 <span className="text-xs font-bold">转账</span>
                             </button>
-                            
+
                             <button onClick={() => onPanelAction('poke')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
                                 <div className="w-14 h-14 bg-sky-50 rounded-2xl flex items-center justify-center shadow-sm text-2xl border border-sky-100">👉</div>
                                 <span className="text-xs font-bold">戳一戳</span>
                             </button>
-                            
+
                             <button onClick={() => onPanelAction('archive')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
                                 <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shadow-sm text-indigo-400 border border-indigo-100">
                                     <BookOpenText className="w-6 h-6" weight="bold" />
                                 </div>
                                 <span className="text-xs font-bold">{isSummarizing ? '归档中...' : '记忆归档'}</span>
                             </button>
-                            
+
                             <button onClick={() => onPanelAction('settings')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
                                 <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm text-slate-500 border border-slate-100">
                                     <GearSix className="w-6 h-6" weight="bold" /></div>
                                 <span className="text-xs font-bold">设置</span>
                             </button>
-                            
+
                             <button onClick={() => chatImageInputRef.current?.click()} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
                                 <div className="w-14 h-14 bg-pink-50 rounded-2xl flex items-center justify-center shadow-sm text-pink-400 border border-pink-100">
                                     <Image className="w-6 h-6" weight="bold" />
@@ -298,9 +457,9 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                 <span className="text-xs font-bold">重新生成</span>
                             </button>
 
-                         </div>
-                     )}
-                     {showPanel === 'chars' && (
+                        </div>
+                    )}
+                    {showPanel === 'chars' && (
                         <div className="p-5 space-y-6 overflow-y-auto no-scrollbar">
                             <div>
                                 <h3 className="text-xs font-bold text-slate-400 px-1 tracking-wider uppercase mb-3">气泡样式</h3>

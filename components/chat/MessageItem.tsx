@@ -24,7 +24,7 @@ const ForwardCard: React.FC<{
     return (
         <>
             {commonLayout(
-                <div className="w-64 bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 active:scale-[0.98] transition-transform cursor-pointer" onClick={handleCardClick}>
+                <div className="sully-card-container w-64 bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 active:scale-[0.98] transition-transform cursor-pointer" onClick={handleCardClick}>
                     <div className="px-4 pt-3 pb-2 border-b border-slate-50">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-primary"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
@@ -68,8 +68,8 @@ const ForwardCard: React.FC<{
                                         <div className="text-[10px] text-slate-400 mb-1 px-1">{senderName} {msg.timestamp ? formatTime(msg.timestamp) : ''}</div>
                                         <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-all ${isUser ? 'bg-primary text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm border border-slate-100'}`}>
                                             {msg.type === 'image' ? <img src={msg.content} className="max-w-[200px] rounded-xl" /> :
-                                             msg.type === 'emoji' ? <img src={msg.content} className="max-w-[100px]" /> :
-                                             msg.content}
+                                                msg.type === 'emoji' ? <img src={msg.content} className="max-w-[100px]" /> :
+                                                    msg.content}
                                         </div>
                                     </div>
                                 </div>
@@ -118,7 +118,7 @@ const MessageItem = React.memo(({
 }: MessageItemProps) => {
     const isUser = m.role === 'user';
     const isSystem = m.role === 'system';
-    const marginBottom = isLastInGroup ? 'mb-6' : 'mb-1.5';
+    const marginBottom = isLastInGroup ? 'mb-4' : 'mb-2';
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const startPos = useRef({ x: 0, y: 0 }); // Track touch start position
 
@@ -131,7 +131,7 @@ const MessageItem = React.memo(({
         } else {
             startPos.current = { x: e.clientX, y: e.clientY };
         }
-        
+
         longPressTimer.current = setTimeout(() => {
             if (!selectionMode) {
                 onLongPress(m);
@@ -195,33 +195,27 @@ const MessageItem = React.memo(({
 
     const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-    // Render Avatar with potential decoration/frame
-    // Removed mb-5 from here, handled via absolute positioning in parent
     const renderAvatar = (src: string) => (
-        <div className="relative w-9 h-9 z-0">
-            {isLastInGroup && (
-                <>
-                    <img 
-                        src={src} 
-                        className="w-full h-full rounded-full object-cover shadow-sm ring-1 ring-black/5 relative z-0" 
-                        alt="avatar" 
-                        loading="lazy" 
-                        decoding="async" 
-                    />
-                    {styleConfig.avatarDecoration && (
-                        <img 
-                            src={styleConfig.avatarDecoration}
-                            className="absolute pointer-events-none z-10 max-w-none"
-                            style={{
-                                left: `${styleConfig.avatarDecorationX ?? 50}%`,
-                                top: `${styleConfig.avatarDecorationY ?? 50}%`,
-                                width: `${36 * (styleConfig.avatarDecorationScale ?? 1)}px`, // Base size 36px (w-9)
-                                height: 'auto',
-                                transform: `translate(-50%, -50%) rotate(${styleConfig.avatarDecorationRotate ?? 0}deg)`,
-                            }}
-                        />
-                    )}
-                </>
+        <div className="relative w-9 h-9 shrink-0 z-0">
+            <img
+                src={src}
+                className="w-full h-full rounded-[4px] object-cover bg-slate-200 pointer-events-none select-none"
+                alt="avatar"
+                loading="lazy"
+                decoding="async"
+            />
+            {styleConfig.avatarDecoration && (
+                <img
+                    src={styleConfig.avatarDecoration}
+                    className="absolute pointer-events-none z-10 max-w-none"
+                    style={{
+                        left: `${styleConfig.avatarDecorationX ?? 50}%`,
+                        top: `${styleConfig.avatarDecorationY ?? 50}%`,
+                        width: `${36 * (styleConfig.avatarDecorationScale ?? 1)}px`, // Base size 36px (w-9)
+                        height: 'auto',
+                        transform: `translate(-50%, -50%) rotate(${styleConfig.avatarDecorationRotate ?? 0}deg)`,
+                    }}
+                />
             )}
         </div>
     );
@@ -230,9 +224,9 @@ const MessageItem = React.memo(({
     if (isSystem) {
         // Clean up text: remove [System:] or [系统:] prefix for display
         const displayText = m.content.replace(/^\[(System|系统|System Log|系统记录)\s*[:：]?\s*/i, '').replace(/\]$/, '').trim();
-        
+
         return (
-            <div className={`flex items-center w-full ${selectionMode ? 'pl-8' : ''} animate-fade-in relative transition-[padding] duration-300`}>
+            <div className={`flex flex-col items-center w-full ${selectionMode ? 'pl-8' : ''} animate-fade-in relative transition-[padding] duration-300`}>
                 {selectionMode && (
                     <div className="absolute left-2 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
@@ -240,12 +234,13 @@ const MessageItem = React.memo(({
                         </div>
                     </div>
                 )}
-                <div className="flex justify-center my-6 px-10 w-full" {...interactionProps}>
-                    <div className="flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
+                <div className="text-[10px] text-slate-400 mt-4 mb-0.5 opacity-70">{formatTime(m.timestamp)}</div>
+                <div className="flex justify-center mb-4 px-10 w-full" {...interactionProps}>
+                    <div className="sully-system-pill flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
                         {/* Optional Icon based on content */}
-                        {displayText.includes('任务') ? '✨' : 
-                        displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
-                        displayText.includes('转账') ? '💰' : '🔔'}
+                        {displayText.includes('任务') ? '✨' :
+                            displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
+                                displayText.includes('转账') ? '💰' : '🔔'}
                         <span className="text-[10px] font-medium tracking-wide">{displayText}</span>
                     </div>
                 </div>
@@ -265,7 +260,7 @@ const MessageItem = React.memo(({
                 )}
                 <div className="text-[10px] text-slate-400 mb-1 opacity-70">{formatTime(m.timestamp)}</div>
                 <div className="group relative cursor-pointer active:scale-95 transition-transform" {...interactionProps}>
-                        <div className="text-[11px] text-slate-500 bg-slate-200/50 backdrop-blur-sm px-4 py-1.5 rounded-full flex items-center gap-1.5 border border-white/40 shadow-sm select-none">
+                    <div className="sully-interaction-pill text-[11px] text-slate-500 bg-slate-200/50 backdrop-blur-sm px-4 py-1.5 rounded-full flex items-center gap-1.5 border border-white/40 shadow-sm select-none">
                         <span className="group-hover:animate-bounce">👉</span>
                         <span className="font-medium opacity-80">{isUser ? '你' : charName}</span>
                         <span className="opacity-60">戳了戳</span>
@@ -277,48 +272,34 @@ const MessageItem = React.memo(({
     }
 
     const commonLayout = (content: React.ReactNode) => (
-            <div className={`flex items-end ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative transition-[padding] duration-300 ${selectionMode ? 'pl-12' : ''}`}>
-                {selectionMode && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
-                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
-                        </div>
+        <div className={`flex items-start ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative transition-[padding] duration-300 ${selectionMode ? (isUser ? 'pr-14' : 'pl-14') : ''}`}>
+            {selectionMode && (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer z-20" onClick={() => onToggleSelect(m.id)}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-slate-300 bg-white/80'}`}>
+                        {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
                     </div>
-                )}
-
-                {/* Avatar - Absolute Positioned */}
-                {!isUser && (
-                    <div className={`absolute bottom-[1.25rem] z-0 ${selectionMode ? 'left-14' : 'left-3'} transition-all duration-300`}>
-                        {renderAvatar(charAvatar)}
-                    </div>
-                )}
-                
-                {/* 
-                    UPDATED: Limit bubble max-width to 72% for better spacing. 
-                    Added min-w-0 to prevent flexbox overflow issues.
-                    Added explicit margins to clear absolute avatars.
-                */}
-                <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[72%] min-w-0 ${!isUser ? 'ml-12' : 'mr-12'}`} {...interactionProps}>
-                    <div className={selectionMode ? 'pointer-events-none' : ''}>
-                        {content}
-                    </div>
-                    {isLastInGroup && <div className="text-[9px] text-slate-400/80 px-1 mt-1 font-medium">{formatTime(m.timestamp)}</div>}
                 </div>
+            )}
 
-                {/* User Avatar - Absolute Positioned */}
-                {isUser && (
-                    <div className="absolute right-3 bottom-[1.25rem] z-0">
-                        {renderAvatar(userAvatar)}
-                    </div>
-                )}
+            {/* Avatar for AI */}
+            {!isUser && renderAvatar(charAvatar)}
+
+            <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[70%] min-w-0 mx-2.5`} {...interactionProps}>
+                <div className={`${selectionMode ? 'pointer-events-none' : ''} relative w-full`}>
+                    {content}
+                </div>
             </div>
+
+            {/* Avatar for User */}
+            {isUser && renderAvatar(userAvatar)}
+        </div>
     );
 
     // [New] Social Card Rendering
     // --- Chat Forward Card ---
     if (m.type === 'chat_forward') {
         let forwardData: any = null;
-        try { forwardData = JSON.parse(m.content); } catch {}
+        try { forwardData = JSON.parse(m.content); } catch { }
         if (forwardData) {
             return <ForwardCard forwardData={forwardData} commonLayout={commonLayout} interactionProps={interactionProps} selectionMode={selectionMode} />;
         }
@@ -328,7 +309,7 @@ const MessageItem = React.memo(({
     if (m.type === 'xhs_card' && m.metadata?.xhsNote) {
         const note = m.metadata.xhsNote;
         return commonLayout(
-            <div className="w-64 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer active:opacity-90 transition-opacity">
+            <div className="sully-card-container w-64 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer active:opacity-90 transition-opacity">
                 {/* Cover image */}
                 {note.coverUrl ? (
                     <div className="relative w-full h-36 bg-slate-100 overflow-hidden">
@@ -416,14 +397,31 @@ const MessageItem = React.memo(({
 
     if (m.type === 'transfer') {
         return commonLayout(
-            <div className="w-64 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group active:scale-[0.98] transition-transform">
-                    <div className="absolute top-0 right-0 p-4 opacity-20"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-12 h-12"><path d="M10.464 8.746c.227-.18.497-.311.786-.394v2.795a2.252 2.252 0 0 1-.786-.393c-.394-.313-.546-.681-.546-1.004 0-.324.152-.691.546-1.004ZM12.75 15.662v-2.824c.347.085.664.228.921.421.427.32.579.686.579.991 0 .305-.152.671-.579.991a2.534 2.534 0 0 1-.921.42Z" /><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v.816a3.836 3.836 0 0 0-1.72.756c-.712.566-1.112 1.35-1.112 2.178 0 .829.4 1.612 1.113 2.178.502.4 1.102.647 1.719.756v2.978a2.536 2.536 0 0 1-.921-.421l-.879-.66a.75.75 0 0 0-.9 1.2l.879.66c.533.4 1.169.645 1.821.75V18a.75.75 0 0 0 1.5 0v-.81a4.124 4.124 0 0 0 1.821-.749c.745-.559 1.179-1.344 1.179-2.191 0-.847-.434-1.632-1.179-2.191a4.122 4.122 0 0 0-1.821-.75V8.354c.29.082.559.213.786.393l.415.33a.75.75 0 0 0 .933-1.175l-.415-.33a3.836 3.836 0 0 0-1.719-.755V6Z" clipRule="evenodd" /><path d="M2.25 18a.75.75 0 0 0 0 1.5c5.4 0 10.63.722 15.6 2.075 1.19.324 2.4-.558 2.4-1.82V18.75a.75.75 0 0 0-.75-.75H2.25Z" /></svg></div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-white/20 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 7.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z" /><path fillRule="evenodd" d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 0 1 1.5 14.625v-9.75ZM8.25 9.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM18.75 9a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75V9.75a.75.75 0 0 0-.75-.75h-.008ZM4.5 9.75A.75.75 0 0 1 5.25 9h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75-.75H5.25a.75.75 0 0 1-.75-.75V9.75Z" clipRule="evenodd" /><path d="M2.25 18a.75.75 0 0 0 0 1.5c5.4 0 10.63.722 15.6 2.075 1.19.324 2.4-.558 2.4-1.82V18.75a.75.75 0 0 0-.75-.75H2.25Z" /></svg></div>
-                        <span className="font-medium text-white/90">Sully Pay</span>
+            <div className="sully-transfer-card w-full max-w-[220px] sm:max-w-[240px] flex flex-col rounded-[8px] overflow-hidden group active:scale-[0.98] transition-transform shadow-sm">
+
+                {/* Top Section (Orange/Glass) */}
+                <div className="sully-transfer-top bg-[#f3883b] p-3.5 pb-3 text-white relative">
+                    {/* Faint ¥ watermark */}
+                    <span className="sully-transfer-watermark absolute right-3 top-1/2 -translate-y-1/2 text-[42px] font-bold leading-none text-white/[0.12] pointer-events-none select-none" style={{ fontFamily: 'system-ui, sans-serif' }}>¥</span>
+
+                    <div className="flex items-center gap-3 relative z-10">
+                        {/* WeChat transfer icon */}
+                        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-base font-medium leading-tight">¥{m.metadata?.amount || '0.00'}</span>
+                            <span className="text-[11px] opacity-80 mt-0.5 max-w-[130px] truncate leading-tight">
+                                {m.metadata?.desc || `转账给${isUser ? charName : '你'}`}
+                            </span>
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold tracking-tight mb-1">₩ {m.metadata?.amount}</div>
-                    <div className="text-[10px] text-white/70">转账给{isUser ? charName : '你'}</div>
+                </div>
+
+                {/* Bottom Flap (White/Glass) */}
+                <div className="sully-transfer-bottom bg-white px-3.5 py-1.5 flex items-center">
+                    <span className="text-[#f3883b] text-[10px] font-medium opacity-80 mix-blend-multiply">微信转账</span>
+                </div>
             </div>
         );
     }
@@ -437,33 +435,14 @@ const MessageItem = React.memo(({
     if (m.type === 'image') {
         return commonLayout(
             <div className="relative group">
-                <img src={m.content} className="max-w-[200px] max-h-[300px] rounded-2xl shadow-sm border border-black/5" alt="Uploaded" loading="lazy" decoding="async" />
+                <img src={m.content} className="sully-image-msg max-w-[200px] max-h-[300px] rounded-2xl shadow-sm border border-black/5" alt="Uploaded" loading="lazy" decoding="async" />
             </div>
         );
     }
 
     // --- Dynamic Style Generation for Bubble ---
-    const radius = styleConfig.borderRadius;
-    let borderObj: React.CSSProperties = {};
-    
-    // Border Radius Logic
-    if (!isFirstInGroup && !isLastInGroup) {
-        borderObj = isUser 
-            ? { borderRadius: `${radius}px`, borderTopRightRadius: '4px', borderBottomRightRadius: '4px' }
-            : { borderRadius: `${radius}px`, borderTopLeftRadius: '4px', borderBottomLeftRadius: '4px' };
-    } else if (isFirstInGroup && !isLastInGroup) {
-        borderObj = isUser
-            ? { borderRadius: `${radius}px`, borderBottomRightRadius: '4px' }
-            : { borderRadius: `${radius}px`, borderBottomLeftRadius: '4px' };
-    } else if (!isFirstInGroup && isLastInGroup) {
-        borderObj = isUser
-            ? { borderRadius: `${radius}px`, borderTopRightRadius: '4px' }
-            : { borderRadius: `${radius}px`, borderTopLeftRadius: '4px' };
-    } else {
-            borderObj = isUser
-            ? { borderRadius: `${radius}px`, borderBottomRightRadius: '2px' }
-            : { borderRadius: `${radius}px`, borderBottomLeftRadius: '2px' };
-    }
+    const radius = styleConfig.borderRadius !== undefined ? styleConfig.borderRadius : 6;
+    let borderObj: React.CSSProperties = { borderRadius: `${radius}px` };
 
     // Container style (BackgroundColor + Opacity)
     const containerStyle: React.CSSProperties = {
@@ -472,7 +451,7 @@ const MessageItem = React.memo(({
         ...borderObj,
     };
 
-    // --- Inline formatting parser: code → bold → italic → plain ---
+    // --- Inline formatting parser: code → bold+italic → bold → italic → plain ---
     const renderInline = (text: string): React.ReactNode[] => {
         // Pre-clean: markdown links [text](url) → just text
         let cleaned = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
@@ -489,25 +468,33 @@ const MessageItem = React.memo(({
                 nodes.push(<code key={nodeKey++} className="bg-black/10 px-1 py-0.5 rounded text-[13px] font-mono">{codePart.slice(1, -1)}</code>);
                 continue;
             }
-            // Step 2: Split by bold (**text**)
-            const boldParts = codePart.split(/(\*\*[^*]+\*\*)/g);
-            for (const boldPart of boldParts) {
-                if (boldPart.startsWith('**') && boldPart.endsWith('**') && boldPart.length > 4) {
-                    nodes.push(<strong key={nodeKey++} className="font-bold">{boldPart.slice(2, -2)}</strong>);
+            // Step 2: Split by bold+italic (***text***) — must come before ** and *
+            const boldItalicParts = codePart.split(/(\*\*\*[^*]+\*\*\*)/g);
+            for (const biPart of boldItalicParts) {
+                if (biPart.startsWith('***') && biPart.endsWith('***') && biPart.length > 6) {
+                    nodes.push(<strong key={nodeKey++} className="font-bold"><em className="italic">{biPart.slice(3, -3)}</em></strong>);
                     continue;
                 }
-                // Strip orphaned ** that didn't form a valid bold pair
-                const cleanedBold = boldPart.replace(/\*\*/g, '');
-                // Step 3: Split by italic (*text*) — safe because ** already stripped
-                const italicParts = cleanedBold.split(/(\*[^*]+\*)/g);
-                for (const italicPart of italicParts) {
-                    if (italicPart.startsWith('*') && italicPart.endsWith('*') && italicPart.length > 2) {
-                        nodes.push(<em key={nodeKey++} className="italic opacity-80">{italicPart.slice(1, -1)}</em>);
+                // Step 3: Split by bold (**text**)
+                const boldParts = biPart.split(/(\*\*[^*]+\*\*)/g);
+                for (const boldPart of boldParts) {
+                    if (boldPart.startsWith('**') && boldPart.endsWith('**') && boldPart.length > 4) {
+                        nodes.push(<strong key={nodeKey++} className="font-bold">{boldPart.slice(2, -2)}</strong>);
                         continue;
                     }
-                    // Strip orphaned * that didn't form a valid italic pair
-                    const cleanedItalic = italicPart.replace(/\*/g, '');
-                    if (cleanedItalic) nodes.push(cleanedItalic);
+                    // Strip orphaned ** that didn't form a valid bold pair
+                    const cleanedBold = boldPart.replace(/\*\*/g, '');
+                    // Step 4: Split by italic (*text*) — safe because ** already stripped
+                    const italicParts = cleanedBold.split(/(\*[^*]+\*)/g);
+                    for (const italicPart of italicParts) {
+                        if (italicPart.startsWith('*') && italicPart.endsWith('*') && italicPart.length > 2) {
+                            nodes.push(<em key={nodeKey++} className="italic opacity-80">{italicPart.slice(1, -1)}</em>);
+                            continue;
+                        }
+                        // Strip orphaned * that didn't form a valid italic pair
+                        const cleanedItalic = italicPart.replace(/\*/g, '');
+                        if (cleanedItalic) nodes.push(cleanedItalic);
+                    }
                 }
             }
         }
@@ -543,7 +530,7 @@ const MessageItem = React.memo(({
                     const quoteText = line.trim().substring(1).trim();
                     if (!quoteText) return null;
                     return (
-                        <div key={key} className="my-1 pl-2.5 border-l-[3px] border-current opacity-70 italic text-[13px]">
+                        <div key={key} className="my-1 pl-2.5 border-l-[3px] border-black/20 opacity-70 italic text-[13px]">
                             {renderInline(quoteText)}
                         </div>
                     );
@@ -591,10 +578,23 @@ const MessageItem = React.memo(({
     const showTranslateButton = translationEnabled && hasBilingual && langBContent;
 
     // Don't render empty bubbles (e.g. messages that were just "---")
-    if (!displayContent) return null;
+    if (!displayContent && m.type === 'text') return null;
 
+    // To allow the arrow tail to show out of bounds, we do not use 'overflow-hidden' everywhere
     return commonLayout(
-        <div className={`relative shadow-sm px-5 py-3 animate-fade-in border border-black/5 active:scale-[0.98] transition-transform overflow-hidden ${isUser ? 'sully-bubble-user' : 'sully-bubble-ai'}`} style={containerStyle}>
+        <div className={`relative px-3 py-2 animate-fade-in active:scale-[0.98] transition-transform ${isUser ? 'sully-bubble-user mt-0' : 'sully-bubble-ai mt-0'}`} style={containerStyle}>
+
+            {/* The Tail (CSS Triangle) — uses inherit to follow bubble background via CSS variable */}
+            <svg
+                className={`sully-bubble-tail absolute top-[12px] w-[6px] h-[10px] pointer-events-none ${isUser ? '-right-[5.5px]' : '-left-[5.5px]'}`}
+                version="1.1" xmlns="http://www.w3.org/2000/svg"
+            >
+                {isUser ? (
+                    <polygon points="0,0 6,5 0,10" style={{ fill: styleConfig.backgroundColor || 'var(--bubble-bg, #95ec69)' }} />
+                ) : (
+                    <polygon points="6,0 0,5 6,10" style={{ fill: styleConfig.backgroundColor || 'var(--bubble-bg, white)' }} />
+                )}
+            </svg>
 
             {/* Layer 1: Background Image with Independent Opacity */}
             {styleConfig.backgroundImage && (
@@ -623,14 +623,14 @@ const MessageItem = React.memo(({
 
             {/* Layer 3: Reply/Quote Block */}
             {m.replyTo && (
-                <div className="relative z-10 mb-1 text-[10px] bg-black/5 p-1.5 rounded-md border-l-2 border-current opacity-60 flex flex-col gap-0.5 max-w-full overflow-hidden">
+                <div className="relative z-10 mb-1 text-[10px] bg-black/5 p-1.5 rounded-md border-l-2 border-black/20 opacity-60 flex flex-col gap-0.5 max-w-full overflow-hidden">
                     <span className="font-bold opacity-90 truncate">{m.replyTo.name}</span>
                     <span className="truncate italic">"{m.replyTo.content}"</span>
                 </div>
             )}
 
             {/* Layer 4: Text Content */}
-            <div className="relative z-10 text-[15px] leading-relaxed whitespace-pre-wrap break-all select-text" style={{ color: styleConfig.textColor }}>
+            <div className="relative z-10 text-[15px] leading-relaxed whitespace-pre-wrap select-text" style={{ color: styleConfig.textColor, overflowWrap: 'break-word', wordBreak: 'normal' }}>
                 {renderContent(displayContent)}
             </div>
 
@@ -664,14 +664,14 @@ const MessageItem = React.memo(({
     );
 }, (prev, next) => {
     return prev.msg.id === next.msg.id &&
-           prev.msg.content === next.msg.content &&
-           prev.isFirstInGroup === next.isFirstInGroup &&
-           prev.isLastInGroup === next.isLastInGroup &&
-           prev.activeTheme === next.activeTheme &&
-           prev.selectionMode === next.selectionMode &&
-           prev.isSelected === next.isSelected &&
-           prev.translationEnabled === next.translationEnabled &&
-           prev.isShowingTarget === next.isShowingTarget;
+        prev.msg.content === next.msg.content &&
+        prev.isFirstInGroup === next.isFirstInGroup &&
+        prev.isLastInGroup === next.isLastInGroup &&
+        prev.activeTheme === next.activeTheme &&
+        prev.selectionMode === next.selectionMode &&
+        prev.isSelected === next.isSelected &&
+        prev.translationEnabled === next.translationEnabled &&
+        prev.isShowingTarget === next.isShowingTarget;
 });
 
 export default MessageItem;

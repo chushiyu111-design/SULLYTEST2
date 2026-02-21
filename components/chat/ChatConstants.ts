@@ -4,20 +4,229 @@ import { ChatTheme } from '../../types';
 // Built-in presets map to the new data structure for consistency
 export const PRESET_THEMES: Record<string, ChatTheme> = {
     default: {
-        id: 'default', name: 'Indigo', type: 'preset',
-        user: { textColor: '#ffffff', backgroundColor: '#6366f1', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 }, 
-        ai: { textColor: '#1e293b', backgroundColor: '#ffffff', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 }
+        id: 'default', name: 'WeChat(绿)', type: 'preset',
+        user: { textColor: '#000000', backgroundColor: '#95ec69', borderRadius: 8, opacity: 1 },
+        ai: { textColor: '#000000', backgroundColor: '#ffffff', borderRadius: 8, opacity: 1 },
+        customCss: `
+/* ===== WeChat Specific Background ===== */
+.theme-default.sully-chat-container {
+    background: #ededed !important;
+}
+
+/* ===== WeChat Header Proportion ===== */
+.theme-default .sully-chat-header {
+    min-height: 64px !important;
+    height: auto !important;
+    padding-bottom: 12px !important;
+    background: #ededed !important;
+    border-bottom: 1px solid #e2e2e2 !important;
+}
+
+/* ===== WeChat Input Area ===== */
+.theme-default .sully-chat-input {
+    background: #f5f5f5 !important;
+    border-top: 1px solid #e2e2e2 !important;
+}
+.theme-default .sully-chat-input input, 
+.theme-default .sully-chat-input textarea {
+    background: #ffffff !important;
+    border-radius: 4px !important;
+}
+.theme-default .sully-chat-input .flex-1 {
+    border-radius: 4px !important;
+}
+
+/* ===== WeChat Transfer Card Proportion ===== */
+.theme-default .sully-transfer-card {
+    background: #f3883b !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+    width: 220px !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+/* Hide the faint ¥ watermark in WeChat default theme (not used in actual WeChat) */
+.theme-default .sully-transfer-watermark {
+    display: none !important;
+}
+/* Ensure bottom flap has proper spacing */
+.theme-default .sully-transfer-bottom {
+    padding: 4px 12px !important;
+}
+`
     },
-    dream: {
-        id: 'dream', name: 'Dream', type: 'preset',
-        user: { textColor: '#ffffff', backgroundColor: '#f472b6', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 },
-        ai: { textColor: '#1e293b', backgroundColor: '#ffffff', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 }
-    },
-    forest: {
-        id: 'forest', name: 'Forest', type: 'preset',
-        user: { textColor: '#ffffff', backgroundColor: '#10b981', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 },
-        ai: { textColor: '#1e293b', backgroundColor: '#ffffff', borderRadius: 20, opacity: 1, backgroundImageOpacity: 0.5 }
-    },
+    waterdrop: {
+        id: 'waterdrop', name: '拟态水滴(Gloss)', type: 'preset',
+        user: { textColor: '#0f172a', backgroundColor: 'transparent', borderRadius: 20, opacity: 1 },
+        ai: { textColor: '#0f172a', backgroundColor: 'transparent', borderRadius: 20, opacity: 1 },
+        customCss: `
+.theme-waterdrop .sully-bubble-tail { display: none !important; }
+.theme-waterdrop .sully-bubble-ai, .theme-waterdrop .sully-bubble-user {
+    padding: 16px 20px !important;
+    background: radial-gradient(140% 140% at 25% 8%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.05) 30%, rgba(0,0,0,0.02) 65%, rgba(255,255,255,0.15) 100%) !important;
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+    box-shadow: 
+        inset 0px 8px 16px rgba(255, 255, 255, 0.9),      /* Top inner volume */
+        inset 0px -6px 14px rgba(0, 0, 0, 0.1),          /* Darker bottom rim for contrast on bright backgrounds */
+        inset 4px 0px 10px rgba(255, 255, 255, 0.6),     /* Left inner volume */
+        inset -4px 0px 10px rgba(0, 0, 0, 0.05),         /* Right darker edge */
+        0px 6px 12px rgba(0, 0, 0, 0.1),                 /* Tight physical shadow */
+        0px 16px 32px rgba(0, 0, 0, 0.15),               /* Broad physical shadow */
+        0px 24px 36px -6px rgba(255, 255, 255, 0.5) !important; /* Huge caustics */
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    border-bottom: 1.5px solid rgba(0, 0, 0, 0.15) !important;
+    border-top: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+    border-radius: 28px !important; 
+    text-shadow: 0px 1px 4px rgba(255,255,255,0.9);
+    min-height: 48px;
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+}
+
+/* Broad Diffuse Gloss (upper body reflection) */
+.theme-waterdrop .sully-bubble-ai::before, .theme-waterdrop .sully-bubble-user::before {
+    content: ''; position: absolute; top: 2px; left: 8%; width: 75%; height: 45%;
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    background: linear-gradient(175deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.1) 40%, rgba(255,255,255,0) 80%);
+    pointer-events: none; filter: blur(1px); mix-blend-mode: overlay;
+    z-index: 20;
+}
+
+/* Primary Specular Glint + Secondary Glint */
+.theme-waterdrop .sully-bubble-ai::after, .theme-waterdrop .sully-bubble-user::after {
+    content: ''; position: absolute; top: 10px; left: 16%; width: 14px; height: 8px;
+    border-radius: 50%; background: rgba(255,255,255,1); pointer-events: none;
+    box-shadow: 0 0 8px 3px rgba(255,255,255,1), 0 0 16px rgba(255,255,255,0.8), 24px 6px 0 -2px rgba(255,255,255,0.4); 
+    transform: rotate(-15deg);
+    z-index: 20;
+}
+
+/* ===== Header Bar ===== */
+.theme-waterdrop .sully-chat-header {
+    background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.05) 70%) !important;
+    backdrop-filter: blur(10px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(120%) !important;
+    border-bottom: 1.5px solid rgba(255,255,255,0.4) !important;
+    box-shadow: 
+        inset 0px 3px 8px rgba(255,255,255,0.6),
+        0px 4px 12px rgba(0,0,0,0.04) !important;
+}
+
+/* ===== Input Area ===== */
+.theme-waterdrop .sully-chat-input {
+    background: radial-gradient(ellipse at 50% 100%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.05) 80%) !important;
+    backdrop-filter: blur(10px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(120%) !important;
+    border-top: 1.5px solid rgba(255,255,255,0.5) !important;
+    box-shadow: 
+        inset 0px -3px 8px rgba(255,255,255,0.6),
+        0px -4px 12px rgba(0,0,0,0.04) !important;
+}
+.theme-waterdrop .sully-chat-input input,
+.theme-waterdrop .sully-chat-input textarea {
+    background: rgba(255,255,255,0.15) !important;
+    border: 1px solid rgba(255,255,255,0.4) !important;
+    border-radius: 20px !important;
+    box-shadow: inset 0px 2px 4px rgba(0,0,0,0.05);
+}
+
+/* ===== Transfer Card ===== */
+.theme-waterdrop .sully-transfer-card {
+    background: radial-gradient(140% 140% at 25% 8%, rgba(251,191,36,0.6) 0%, rgba(249,115,22,0.3) 50%, rgba(251,191,36,0.5) 100%) !important;
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+    border: 1px solid rgba(255,255,255,0.4) !important;
+    border-top: 1.5px solid rgba(255,255,255,0.7) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 24px !important;
+    box-shadow: 
+        inset 0px 5px 12px rgba(255,255,255,0.6),
+        inset 0px -3px 8px rgba(0,0,0,0.05),
+        0px 6px 16px rgba(0,0,0,0.08),
+        0px 16px 24px -4px rgba(251,191,36,0.2) !important;
+}
+.theme-waterdrop .sully-transfer-top,
+.theme-waterdrop .sully-transfer-bottom {
+    background: transparent !important;
+    border: none !important;
+}
+.theme-waterdrop .sully-transfer-bottom span {
+    color: #0f172a !important; /* Make text dark on the glass */
+    mix-blend-mode: normal !important;
+}
+
+/* ===== XHS Card & Social Card ===== */
+.theme-waterdrop .sully-card-container {
+    background: radial-gradient(140% 130% at 30% 10%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.1) 60%, rgba(255,255,255,0.3) 100%) !important;
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+    border: 1px solid rgba(255,255,255,0.5) !important;
+    border-top: 1.5px solid rgba(255,255,255,0.8) !important;
+    border-radius: 20px !important;
+    box-shadow: 
+        inset 0px 4px 10px rgba(255,255,255,0.6),
+        0px 4px 12px rgba(0,0,0,0.05) !important;
+}
+
+/* ===== Waterdrop Global Text Contrast & Links ===== */
+.theme-waterdrop .sully-bubble-ai, .theme-waterdrop .sully-bubble-user {
+    color: #0f172a !important;
+    font-weight: 500;
+}
+.theme-waterdrop .sully-bubble-ai a, .theme-waterdrop .sully-bubble-user a {
+    color: #4338ca !important;
+    text-decoration: underline !important;
+    font-weight: bold;
+}
+.theme-waterdrop .sully-card-container .text-slate-500, 
+.theme-waterdrop .sully-card-container .text-slate-600 {
+    color: #334155 !important;
+}
+.theme-waterdrop .sully-card-container .text-slate-800, 
+.theme-waterdrop .sully-card-container .text-slate-700 {
+    color: #020617 !important;
+}
+
+/* ===== System Message Pill ===== */
+.theme-waterdrop .sully-system-pill {
+    background: rgba(255,255,255,0.15) !important;
+    backdrop-filter: blur(6px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(6px) saturate(120%) !important;
+    border: 1px solid rgba(255,255,255,0.4) !important;
+    box-shadow: inset 0px 2px 6px rgba(255,255,255,0.5), 0px 2px 6px rgba(0,0,0,0.04) !important;
+}
+
+/* ===== Interaction Pill (戳了戳) ===== */
+.theme-waterdrop .sully-interaction-pill {
+    background: rgba(255,255,255,0.15) !important;
+    backdrop-filter: blur(6px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(6px) saturate(120%) !important;
+    border: 1px solid rgba(255,255,255,0.4) !important;
+    box-shadow: inset 0px 2px 6px rgba(255,255,255,0.5), 0px 2px 6px rgba(0,0,0,0.04) !important;
+}
+
+/* ===== Image Messages ===== */
+.theme-waterdrop .sully-image-msg {
+    border: 2px solid rgba(255,255,255,0.5) !important;
+    border-radius: 20px !important;
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.08) !important;
+}
+
+/* ===== Typing Indicator ===== */
+.theme-waterdrop .sully-typing-bubble {
+    background: radial-gradient(130% 130% at 30% 10%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.3) 100%) !important;
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+    border: 1px solid rgba(255,255,255,0.5) !important;
+    border-radius: 20px !important;
+    box-shadow: 
+        inset 0px 4px 8px rgba(255,255,255,0.6),
+        0px 4px 10px rgba(0,0,0,0.06) !important;
+}
+.theme-waterdrop .sully-typing-tail { display: none !important; }
+        `
+    }
 };
 
 // Character App: Monthly Refinement Prompts (daily memories → monthly core memory)
