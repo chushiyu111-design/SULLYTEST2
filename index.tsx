@@ -2,6 +2,10 @@ import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { initSystemInterceptor } from './utils/systemInterceptor';
+
+// Initialize global interceptors BEFORE React mounts
+initSystemInterceptor();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

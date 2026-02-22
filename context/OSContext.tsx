@@ -1,7 +1,8 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig } from '../types';
+import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig } from '../types';
 import { DB } from '../utils/db';
+import { onSystemLog } from '../utils/systemInterceptor';
 
 
 type JSZipLike = {
@@ -80,7 +81,7 @@ interface OSContextType {
     closeApp: () => void;
     theme: OSTheme;
     updateTheme: (updates: Partial<OSTheme>) => void;
-    virtualTime: VirtualTime;
+
     apiConfig: APIConfig;
     updateApiConfig: (updates: Partial<APIConfig>) => void;
     isLocked: boolean;
@@ -358,25 +359,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const [apiConfig, setApiConfig] = useState<APIConfig>(defaultApiConfig);
     const [isLocked, setIsLocked] = useState(true);
 
-    const getRealTime = (): VirtualTime => {
-        const now = new Date();
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        return {
-            hours: now.getHours(),
-            minutes: now.getMinutes(),
-            day: days[now.getDay()]
-        };
-    };
 
-    const [virtualTime, setVirtualTime] = useState<VirtualTime>(getRealTime());
-
-    // Real-time Clock Sync
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setVirtualTime(getRealTime());
-        }, 1000);
-        return () => clearInterval(timer);
-    }, []);
 
     const [characters, setCharacters] = useState<CharacterProfile[]>([]);
     const [activeCharacterId, setActiveCharacterId] = useState<string>('');
@@ -405,7 +388,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const [sysOperation, setSysOperation] = useState<{ status: 'idle' | 'processing', message: string, progress: number }>({ status: 'idle', message: '', progress: 0 });
 
     const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const interceptorsInitialized = useRef(false);
+
+    // Ref mirrors for scheduler – keep in sync without restarting the 5s interval
+    const activeAppRef = useRef(activeApp);
+    const activeCharIdRef = useRef(activeCharacterId);
+    useEffect(() => { activeAppRef.current = activeApp; }, [activeApp]);
+    useEffect(() => { activeCharIdRef.current = activeCharacterId; }, [activeCharacterId]);
 
     // Back Handler Ref
     const backHandlerRef = useRef<(() => boolean) | null>(null);
@@ -439,91 +427,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         }
     };
 
-    // --- Global Error Interception ---
+    // --- Subscribe to external system interceptor logs ---
     useEffect(() => {
-        if (interceptorsInitialized.current) return;
-        interceptorsInitialized.current = true;
-
-        // 1. Monkey Patch Fetch
-        const originalFetch = window.fetch;
-        const patchedFetch = async (...args: [RequestInfo | URL, RequestInit?]) => {
-            const [resource, config] = args;
-
-            const urlStr = String(resource);
-
-            try {
-                const response = await originalFetch(...args);
-
-                if (!response.ok) {
-                    // Only log if it's likely an API call (contains chat/completions or models)
-                    if (urlStr.includes('/chat/completions') || urlStr.includes('/models')) {
-                        try {
-                            const clone = response.clone();
-                            const text = await clone.text();
-                            setSystemLogs(prev => [{
-                                id: `log-${Date.now()}`,
-                                timestamp: Date.now(),
-                                type: 'network',
-                                source: 'API Request',
-                                message: `HTTP ${response.status} Error`,
-                                detail: `URL: ${urlStr}\nResponse: ${text.substring(0, 500)}`
-                            }, ...prev.slice(0, 49)]); // Keep last 50
-                        } catch (e) {
-                            setSystemLogs(prev => [{
-                                id: `log-${Date.now()}`,
-                                timestamp: Date.now(),
-                                type: 'network',
-                                source: 'API Request',
-                                message: `HTTP ${response.status} (Unreadable Body)`,
-                                detail: `URL: ${urlStr}`
-                            }, ...prev.slice(0, 49)]);
-                        }
-                    }
-                }
-                return response;
-            } catch (err: any) {
-                // Network Failure
-                setSystemLogs(prev => [{
-                    id: `log-${Date.now()}`,
-                    timestamp: Date.now(),
-                    type: 'network',
-                    source: 'Network',
-                    message: err.message || 'Fetch Failed',
-                    detail: `URL: ${urlStr}`
-                }, ...prev.slice(0, 49)]);
-                throw err;
-            }
-        };
-
-        try {
-            window.fetch = patchedFetch;
-        } catch (e) {
-            try {
-                Object.defineProperty(window, 'fetch', {
-                    value: patchedFetch,
-                    writable: true,
-                    configurable: true
-                });
-            } catch (e2) {
-                console.warn("Failed to install network interceptor", e2);
-            }
-        }
-
-        const originalConsoleError = console.error;
-        console.error = (...args) => {
-            originalConsoleError(...args);
-            const msg = args.map(a => (a instanceof Error ? a.message : String(a))).join(' ');
-            const detail = args.map(a => (a instanceof Error ? a.stack : '')).join('\n');
-            if (msg.includes('Warning:')) return;
-            setSystemLogs(prev => [{
-                id: `log-${Date.now()}-${Math.random()}`,
-                timestamp: Date.now(),
-                type: 'error',
-                source: 'Application',
-                message: msg.substring(0, 100),
-                detail: detail || msg
-            }, ...prev.slice(0, 49)]);
-        };
+        const unsubscribe = onSystemLog((log) => {
+            setSystemLogs(prev => [log, ...prev.slice(0, 49)]);
+        });
+        return unsubscribe;
     }, []);
 
     const clearLogs = () => setSystemLogs([]);
@@ -749,7 +658,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         if (!isDataLoaded || characters.length === 0) return;
         const checkAllSchedules = async () => {
             let hasNewMessage = false;
-            let newUnreadState = { ...unreadMessages }; // Local copy to update
+            const pendingUnreads: Record<string, number> = {};
 
             for (const char of characters) {
                 try {
@@ -765,12 +674,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                             await DB.deleteScheduledMessage(msg.id);
                         }
                         hasNewMessage = true;
-                        const isChattingWithThisChar = activeApp === AppID.Chat && activeCharacterId === char.id;
+                        const isChattingWithThisChar = activeAppRef.current === AppID.Chat && activeCharIdRef.current === char.id;
 
                         // If not chatting specifically with this char right now, mark as unread
                         if (!isChattingWithThisChar) {
                             addToast(`${char.name} 发来了一条消息`, 'success');
-                            newUnreadState[char.id] = (newUnreadState[char.id] || 0) + dueMessages.length;
+                            pendingUnreads[char.id] = (pendingUnreads[char.id] || 0) + dueMessages.length;
 
                             // [NEW] Web Notification Logic
                             if (window.Notification && Notification.permission === 'granted') {
@@ -799,13 +708,20 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
             if (hasNewMessage) {
                 setLastMsgTimestamp(Date.now());
-                setUnreadMessages(newUnreadState);
+                // Functional update: merge pending unreads into current state
+                setUnreadMessages(prev => {
+                    const next = { ...prev };
+                    for (const [cid, count] of Object.entries(pendingUnreads)) {
+                        next[cid] = (next[cid] || 0) + count;
+                    }
+                    return next;
+                });
             }
         };
         schedulerRef.current = setInterval(checkAllSchedules, 5000);
         checkAllSchedules();
         return () => { if (schedulerRef.current) clearInterval(schedulerRef.current); };
-    }, [isDataLoaded, characters, activeApp, activeCharacterId, unreadMessages]);
+    }, [isDataLoaded, characters]);
 
     const clearUnread = (charId: string) => {
         setUnreadMessages(prev => {
@@ -1472,7 +1388,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         closeApp,
         theme,
         updateTheme,
-        virtualTime,
+
         apiConfig,
         updateApiConfig,
         isLocked,

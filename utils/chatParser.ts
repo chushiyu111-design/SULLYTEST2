@@ -8,7 +8,7 @@ export const ChatParser = {
         aiContent: string,
         charId: string,
         charName: string,
-        addToast: (msg: string, type: 'info'|'success'|'error') => void
+        addToast: (msg: string, type: 'info' | 'success' | 'error') => void
     ) => {
         let content = aiContent;
 
@@ -21,7 +21,7 @@ export const ChatParser = {
         // TRANSFER
         const transferMatch = content.match(/\[\[ACTION:TRANSFER:(\d+)\]\]/);
         if (transferMatch) {
-            await DB.saveMessage({ charId, role: 'assistant', type: 'transfer', content: '[转账]', metadata: { amount: transferMatch[1] } });
+            await DB.saveMessage({ charId, role: 'assistant', type: 'transfer', content: '[转账]', metadata: { amount: transferMatch[1], status: 'pending' } });
             content = content.replace(transferMatch[0], '').trim();
         }
 
@@ -133,7 +133,7 @@ export const ChatParser = {
     // Split text into bubbles (text and emojis)
     splitResponse: (content: string): { type: 'text' | 'emoji', content: string }[] => {
         const emojiPattern = /\[\[SEND_EMOJI:\s*(.*?)\]\]/g;
-        const parts: {type: 'text' | 'emoji', content: string}[] = [];
+        const parts: { type: 'text' | 'emoji', content: string }[] = [];
         let lastIndex = 0;
         let emojiMatch;
 

@@ -16,10 +16,14 @@ export const PRESET_THEMES: Record<string, ChatTheme> = {
 /* ===== WeChat Header Proportion ===== */
 .theme-default .sully-chat-header {
     min-height: 64px !important;
-    height: auto !important;
+    height: 64px !important;
+    max-height: 64px !important;
     padding-bottom: 12px !important;
     background: #ededed !important;
     border-bottom: 1px solid #e2e2e2 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 /* ===== WeChat Input Area ===== */

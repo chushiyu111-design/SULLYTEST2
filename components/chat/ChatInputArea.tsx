@@ -237,18 +237,16 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                         transition: 'min-height 0.15s ease',
                     }}
                 >
-                    {/* Voice Button — 40px touch area, 28px icon */}
-                    <button
-                        onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')}
+                    {/* Voice Button — decorative only (voice input not supported) */}
+                    <div
                         style={{
                             width: '40px', height: '40px', display: 'flex',
                             alignItems: 'center', justifyContent: 'center',
-                            background: 'transparent', border: 'none',
-                            padding: 0, cursor: 'pointer', flexShrink: 0,
+                            flexShrink: 0, opacity: 0.5,
                         }}
                     >
                         <WxIconVoice />
-                    </button>
+                    </div>
 
                     {/* Input Field */}
                     <div

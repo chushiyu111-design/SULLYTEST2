@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, Component, ErrorInfo, Suspense } from 'react';
 import { useOS } from '../context/OSContext';
+import { useVirtualTime } from '../context/VirtualTimeContext';
 import StatusBar from './os/StatusBar';
 import Launcher from '../apps/Launcher';
 import { AppID } from '../types';
@@ -148,7 +149,8 @@ const DisclaimerPopup: React.FC<{ onAccept: () => void }> = ({ onAccept }) => (
 );
 
 const PhoneShell: React.FC = () => {
-  const { theme, isLocked, unlock, activeApp, closeApp, virtualTime, isDataLoaded, toasts, unreadMessages, characters, handleBack } = useOS();
+  const { theme, isLocked, unlock, activeApp, closeApp, isDataLoaded, toasts, unreadMessages, characters, handleBack } = useOS();
+  const virtualTime = useVirtualTime();
 
   // Use a ref so that the popstate / backButton handlers always see the latest values
   // without needing to be re-registered every time state changes.

@@ -48,6 +48,7 @@ const Chat: React.FC = () => {
     const [selectedCategory, setSelectedCategory] = useState<EmojiCategory | null>(null); // For deletion modal
     const [editContent, setEditContent] = useState('');
     const [isSummarizing, setIsSummarizing] = useState(false);
+    const [transferActionMsg, setTransferActionMsg] = useState<Message | null>(null);
 
     // Archive Prompts State
     const [archivePrompts, setArchivePrompts] = useState<{ id: string, name: string, content: string }[]>(DEFAULT_ARCHIVE_PROMPTS);
@@ -671,6 +672,26 @@ const Chat: React.FC = () => {
         setModalType('message-options');
     }, []);
 
+    // --- Transfer Action ---
+    const handleTransferAction = useCallback((msg: Message) => {
+        setTransferActionMsg(msg);
+    }, []);
+
+    const handleTransferStatusUpdate = async (status: 'accepted' | 'returned') => {
+        if (!transferActionMsg || !char) return;
+        await DB.updateMessageMetadata(transferActionMsg.id, { status });
+        // Update local state immediately
+        setMessages(prev => prev.map(m => m.id === transferActionMsg.id ? { ...m, metadata: { ...m.metadata, status } } : m));
+        setTransferActionMsg(null);
+        const isFromUser = transferActionMsg.role === 'user';
+        const amt = transferActionMsg.metadata?.amount || '?';
+        if (status === 'accepted') {
+            addToast(isFromUser ? `${char.name} 已收取 ¥${amt}` : `你已收取 ¥${amt}`, 'success');
+        } else {
+            addToast(isFromUser ? `${char.name} 已退还 ¥${amt}` : `你已退还 ¥${amt}`, 'info');
+        }
+    };
+
     const handleBatchDelete = async () => {
         if (selectedMsgIds.size === 0) return;
         const deleteCount = selectedMsgIds.size;
@@ -715,6 +736,7 @@ const Chat: React.FC = () => {
                 role: m.role,
                 type: m.type,
                 content: m.content,
+                metadata: m.metadata,
                 timestamp: m.timestamp || Date.now()
             }))
         };
@@ -807,7 +829,13 @@ const Chat: React.FC = () => {
                 newCategoryName={newCategoryName} setNewCategoryName={setNewCategoryName} onAddCategory={handleAddCategory}
                 selectedCategory={selectedCategory}
 
-                onTransfer={() => { if (transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt }); setModalType('none'); }}
+                onTransfer={() => {
+                    const amt = parseFloat(transferAmt);
+                    if (!transferAmt || isNaN(amt) || amt <= 0) { addToast('请输入有效金额', 'error'); return; }
+                    handleSendText(`[转账]`, 'transfer', { amount: amt.toFixed(2), status: 'pending' });
+                    setTransferAmt('');
+                    setModalType('none');
+                }}
                 onImportEmoji={handleImportEmoji}
                 onSaveSettings={saveSettings} onBgUpload={handleBgUpload} onRemoveBg={() => updateCharacter(char.id, { chatBackground: undefined })}
                 onClearHistory={handleClearHistory} onArchive={handleFullArchive}
@@ -872,6 +900,7 @@ const Chat: React.FC = () => {
                             translationEnabled={translationEnabled && m.type === 'text' && m.role === 'assistant'}
                             isShowingTarget={showingTargetIds.has(m.id)}
                             onTranslateToggle={handleTranslateToggle}
+                            onTransferAction={handleTransferAction}
                         />
                     );
                 })}
@@ -958,6 +987,50 @@ const Chat: React.FC = () => {
                         <div className="text-center text-xs text-slate-400 py-8">没有其他角色可以转发</div>
                     )}
                 </div>
+            </Modal>
+
+            {/* Transfer Action Modal */}
+            <Modal isOpen={!!transferActionMsg} title="转账详情" onClose={() => setTransferActionMsg(null)}>
+                {transferActionMsg && (
+                    <div className="flex flex-col items-center gap-4 py-2">
+                        <div className="w-14 h-14 rounded-full bg-[#f3883b]/10 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f3883b" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-2xl font-bold text-slate-800">¥{transferActionMsg.metadata?.amount || '0.00'}</div>
+                            <div className="text-xs text-slate-400 mt-1">
+                                {transferActionMsg.role === 'user' ? `你转账给${char.name}` : `${char.name}转账给你`}
+                            </div>
+                        </div>
+                        <div className="w-full space-y-2 mt-2">
+                            {transferActionMsg.role === 'user' ? (
+                                /* User sent this transfer — only allow withdraw */
+                                <button
+                                    onClick={() => handleTransferStatusUpdate('returned')}
+                                    className="w-full py-3 bg-slate-100 text-slate-600 font-medium rounded-2xl active:scale-[0.98] transition-transform"
+                                >
+                                    撤回转账
+                                </button>
+                            ) : (
+                                /* AI sent this transfer — allow accept or return */
+                                <>
+                                    <button
+                                        onClick={() => handleTransferStatusUpdate('accepted')}
+                                        className="w-full py-3 bg-[#07c160] text-white font-bold rounded-2xl active:scale-[0.98] transition-transform shadow-sm"
+                                    >
+                                        确认收款
+                                    </button>
+                                    <button
+                                        onClick={() => handleTransferStatusUpdate('returned')}
+                                        className="w-full py-3 bg-slate-100 text-slate-600 font-medium rounded-2xl active:scale-[0.98] transition-transform"
+                                    >
+                                        退还
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );
