@@ -47,9 +47,15 @@ const getWechatSound = (): HTMLAudioElement => {
     if (!_wechatSound) {
         _wechatSound = new Audio('https://image2url.com/r2/default/audio/1771769870930-c9be8c96-c34e-4509-bc81-48619ad5406d.wav');
         _wechatSound.volume = 0.6;
+        _wechatSound.preload = 'auto';
     }
     return _wechatSound;
 };
+
+// Eagerly pre-load the sound file on module initialization
+if (typeof window !== 'undefined') {
+    getWechatSound();
+}
 
 /**
  * Play the WeChat notification sound.

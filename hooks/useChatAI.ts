@@ -1602,6 +1602,14 @@ export const useChatAI = ({
                 const hasTranslationTags = /<翻译>\s*<原文>[\s\S]*?<\/原文>\s*<译文>[\s\S]*?<\/译文>\s*<\/翻译>/.test(aiContent);
 
                 let globalMsgIndex = 0;
+                let notificationPlayed = false;
+                const playFirstNotification = () => {
+                    if (notificationPlayed) { haptic.light(); return; }
+                    notificationPlayed = true;
+                    haptic.medium();
+                    const isWechatTheme = !char.bubbleStyle || char.bubbleStyle === 'default';
+                    if (isWechatTheme) playWechatNotification();
+                };
 
                 if (hasTranslationTags) {
                     // ─── New bilingual format: each <翻译> block = one bubble ───
@@ -1631,6 +1639,7 @@ export const useChatAI = ({
                                     await new Promise(r => setTimeout(r, Math.min(Math.max(chunk.length * 50, 500), 2000)));
                                     await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: chunk, replyTo: replyData });
                                     setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                    playFirstNotification();
                                     globalMsgIndex++;
                                 }
                             }
@@ -1647,6 +1656,7 @@ export const useChatAI = ({
                             await new Promise(r => setTimeout(r, Math.min(Math.max(biContent.length * 30, 400), 2000)));
                             await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: biContent, replyTo: replyData });
                             setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
                             globalMsgIndex++;
                         }
 
@@ -1666,6 +1676,7 @@ export const useChatAI = ({
                                 await new Promise(r => setTimeout(r, Math.min(Math.max(chunk.length * 50, 500), 2000)));
                                 await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: chunk, replyTo: replyData });
                                 setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                playFirstNotification();
                                 globalMsgIndex++;
                             }
                         }
@@ -1678,6 +1689,7 @@ export const useChatAI = ({
                             await new Promise(r => setTimeout(r, Math.random() * 500 + 300));
                             await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'emoji', content: foundEmoji.url });
                             setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
                         }
                     }
                 } else {
@@ -1693,6 +1705,7 @@ export const useChatAI = ({
                                 await new Promise(r => setTimeout(r, Math.random() * 500 + 300));
                                 await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'emoji', content: foundEmoji.url });
                                 setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                playFirstNotification();
                             }
                         } else {
                             // Split on --- separators first, then chunkText for fine-grained splitting
@@ -1731,13 +1744,7 @@ export const useChatAI = ({
                                         await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: cleanChunk, replyTo: replyData });
                                         setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
                                         // Haptic + sound on AI reply
-                                        if (globalMsgIndex === 0) {
-                                            haptic.medium();
-                                            const isWechatTheme = !char.bubbleStyle || char.bubbleStyle === 'default';
-                                            if (isWechatTheme) playWechatNotification();
-                                        } else {
-                                            haptic.light();
-                                        }
+                                        playFirstNotification();
                                         globalMsgIndex++;
                                     }
                                 }
