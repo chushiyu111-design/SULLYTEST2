@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig } from '../types';
 import { DB } from '../utils/db';
 import { onSystemLog } from '../utils/systemInterceptor';
+import { haptic, setHapticsEnabled as setHapticsEnabledGlobal, getHapticsEnabled } from '../utils/haptics';
 
 
 type JSZipLike = {
@@ -157,6 +158,10 @@ interface OSContextType {
     // Navigation Logic
     registerBackHandler: (handler: () => boolean) => () => void; // Returns unregister function
     handleBack: () => boolean; // Returns true if back action was handled, false if already at root
+
+    // Haptics
+    hapticsEnabled: boolean;
+    setHapticsEnabled: (v: boolean) => void;
 }
 
 const defaultTheme: OSTheme = {
@@ -377,6 +382,18 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const [customThemes, setCustomThemes] = useState<ChatTheme[]>([]);
     const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
     const [toasts, setToasts] = useState<Toast[]>([]);
+    const [hapticsEnabled, setHapticsEnabledState] = useState(() => {
+        try { const v = localStorage.getItem('os_haptics_enabled'); return v === null ? true : v === 'true'; } catch { return true; }
+    });
+
+    const setHapticsEnabled = (v: boolean) => {
+        setHapticsEnabledState(v);
+        setHapticsEnabledGlobal(v);
+        try { localStorage.setItem('os_haptics_enabled', String(v)); } catch { /* ignore */ }
+    };
+
+    // Sync global flag on mount
+    useEffect(() => { setHapticsEnabledGlobal(hapticsEnabled); }, []);
 
     const [lastMsgTimestamp, setLastMsgTimestamp] = useState<number>(0);
     const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
@@ -953,7 +970,15 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const removeCustomTheme = async (id: string) => { setCustomThemes(prev => prev.filter(t => t.id !== id)); await DB.deleteTheme(id); };
     const setCustomIcon = async (appId: string, iconUrl: string | undefined) => { setCustomIcons(prev => { const next = { ...prev }; if (iconUrl) next[appId] = iconUrl; else delete next[appId]; return next; }); if (iconUrl) { await DB.saveAsset(`icon_${appId}`, iconUrl); } else { await DB.deleteAsset(`icon_${appId}`); } };
     const handleSetActiveCharacter = (id: string) => { setActiveCharacterId(id); localStorage.setItem('os_last_active_char_id', id); };
-    const addToast = (message: string, type: Toast['type'] = 'info') => { const id = Date.now().toString(); setToasts(prev => [...prev, { id, message, type }]); setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 3000); };
+    const addToast = (message: string, type: Toast['type'] = 'info') => {
+        const id = Date.now().toString();
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 3000);
+        // Auto haptic by toast type
+        if (type === 'success') haptic.success();
+        else if (type === 'error') haptic.error();
+        else haptic.light();
+    };
 
     // --- MODIFIED EXPORT SYSTEM WITH SEPARATED ASSETS ZIP ---
     const exportSystem = async (mode: 'text_only' | 'media_only' | 'full'): Promise<Blob> => {
@@ -1354,7 +1379,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
 
     const resetSystem = async () => { try { await DB.deleteDB(); localStorage.clear(); window.location.reload(); } catch (e) { console.error(e); addToast('重置失败，请手动清除浏览器数据', 'error'); } };
-    const openApp = (appId: AppID) => setActiveApp(appId);
+    const openApp = (appId: AppID) => { haptic.light(); setActiveApp(appId); };
     const closeApp = () => setActiveApp(AppID.Launcher);
     const unlock = () => setIsLocked(false);
 
@@ -1437,7 +1462,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         systemLogs,
         clearLogs,
         registerBackHandler,
-        handleBack
+        handleBack,
+        hapticsEnabled,
+        setHapticsEnabled
     };
 
     return (

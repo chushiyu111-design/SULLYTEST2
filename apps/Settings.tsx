@@ -8,14 +8,16 @@ import { safeResponseJson } from '../utils/safeApi';
 import Modal from '../components/os/Modal';
 import { NotionManager, FeishuManager } from '../utils/realtimeContext';
 import { XhsMcpClient } from '../utils/xhsMcpClient';
+import { haptic } from '../utils/haptics';
 
 const Settings: React.FC = () => {
     const {
         apiConfig, updateApiConfig, closeApp, availableModels, setAvailableModels,
         exportSystem, importSystem, addToast, resetSystem,
         apiPresets, addApiPreset, removeApiPreset,
-        sysOperation, // Get progress state
-        realtimeConfig, updateRealtimeConfig // 实时感知配置
+        sysOperation,
+        realtimeConfig, updateRealtimeConfig,
+        hapticsEnabled, setHapticsEnabled
     } = useOS();
 
     const [localKey, setLocalKey] = useState(apiConfig.apiKey);
@@ -589,6 +591,25 @@ const Settings: React.FC = () => {
                             <div className="text-lg mb-1">{rtXhsEnabled ? '📕' : '📋'}</div>
                             小红书
                         </div>
+                    </div>
+                </section>
+
+                {/* 触觉反馈 */}
+                <section className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-sm border border-white/50">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-amber-100/50 rounded-xl text-amber-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3" /></svg>
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold text-slate-600">触觉反馈</h2>
+                                <p className="text-[10px] text-slate-400">操作时产生震动反馈</p>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={hapticsEnabled} onChange={e => { setHapticsEnabled(e.target.checked); if (e.target.checked) haptic.medium(); }} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
                     </div>
                 </section>
 

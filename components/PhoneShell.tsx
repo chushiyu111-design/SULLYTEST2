@@ -46,6 +46,7 @@ const LazyValentineController = React.lazy(() => import('./ValentineEvent').then
 
 // shouldShowValentinePopup is a pure function, import it statically
 import { shouldShowValentinePopup } from './ValentineEvent';
+import { haptic } from '../utils/haptics';
 
 // Internal Error Boundary Component
 class AppErrorBoundary extends Component<{ children: React.ReactNode, onCloseApp: () => void }, { hasError: boolean, error: Error | null }> {
@@ -301,6 +302,7 @@ const PhoneShell: React.FC = () => {
           if ('Notification' in window && Notification.permission !== 'granted') {
             Notification.requestPermission();
           }
+          haptic.light();
           unlock();
         }}
         className="relative w-full h-full bg-cover bg-center cursor-pointer overflow-hidden group font-light select-none overscroll-none"

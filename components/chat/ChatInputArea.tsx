@@ -5,49 +5,45 @@ import { CharacterProfile, ChatTheme, EmojiCategory, Emoji } from '../../types';
 import { PRESET_THEMES } from './ChatConstants';
 
 // ===== WeChat 1:1 Pixel-Perfect Inline SVG Icons =====
-// Matched to real WeChat iOS 8.x bottom input bar icons
+// Matched to real WeChat iOS bottom input bar icons
 
-// Voice icon: outer circle + center dot + two pairs of broadcast wave arcs
-const WxIconVoice = ({ className = 'w-7 h-7' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="20" />
-        <circle cx="24" cy="24" r="2.2" fill="#3c3c3c" stroke="none" />
-        <path d="M19 18.5a7 7 0 0 0 0 11" />
-        <path d="M29 18.5a7 7 0 0 1 0 11" />
-        <path d="M15.5 15a12 12 0 0 0 0 18" />
-        <path d="M32.5 15a12 12 0 0 1 0 18" />
+// Voice icon: Circle with a speaker cone and two soundwaves
+const WxIconVoice = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="21" />
+        <path d="M14 20.5v7h4.5L24 33v-18l-5.5 5.5H14z" />
+        <path d="M29 19q3 5 0 10" />
+        <path d="M34 14.5q5 9.5 0 19" />
     </svg>
 );
 
-// Emoji icon: circle + two dot eyes + wide open-mouth grin (teeth style, like real WeChat)
-const WxIconEmoji = ({ className = 'w-7 h-7' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="20" />
-        {/* Eyes - filled circles */}
-        <circle cx="17" cy="20" r="2" fill="#3c3c3c" stroke="none" />
-        <circle cx="31" cy="20" r="2" fill="#3c3c3c" stroke="none" />
-        {/* Mouth - wide open grin: upper arc (smile line) + lower arc (chin) forming an open mouth */}
-        <path d="M14 28 Q24 38, 34 28" strokeWidth="1.6" />
-        <path d="M14 28 Q24 32, 34 28" strokeWidth="1.6" />
+// Emoji icon: Circle with dots for eyes and a clean arched smile
+const WxIconEmoji = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="21" />
+        {/* Eyes perfectly vertically aligned in their upper half */}
+        <circle cx="16" cy="19" r="2" fill="#2A2A2A" stroke="none" />
+        <circle cx="32" cy="19" r="2" fill="#2A2A2A" stroke="none" />
+        {/* Smile - perfectly elegant wide arc */}
+        <path d="M14 28 Q24 35 34 28" />
     </svg>
 );
 
-// Plus icon: circle + cross
-const WxIconPlus = ({ className = 'w-7 h-7' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#3c3c3c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="20" />
-        <line x1="24" y1="14" x2="24" y2="34" />
-        <line x1="14" y1="24" x2="34" y2="24" />
+// Plus icon: Circle with a precise elegant cross
+const WxIconPlus = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
+    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="24" cy="24" r="21" />
+        <line x1="24" y1="13" x2="24" y2="35" />
+        <line x1="13" y1="24" x2="35" y2="24" />
     </svg>
 );
 
-// Microphone icon (inside input field, small, gray)
+// Microphone icon (rarely used now, but keeping for compatibility)
 const WxIconMic = ({ className = 'w-5 h-5' }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="#b2b2b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="9" y="2" width="6" height="11" rx="3" />
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="#b2b2b2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="9" y="3" width="6" height="10" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0" />
-        <line x1="12" y1="18" x2="12" y2="22" />
-        <line x1="9" y1="22" x2="15" y2="22" />
+        <line x1="12" y1="18" x2="12" y2="21" />
     </svg>
 );
 

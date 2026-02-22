@@ -12,6 +12,7 @@ import ChatInputArea from '../components/chat/ChatInputArea';
 import ChatModals from '../components/chat/ChatModals';
 import Modal from '../components/os/Modal';
 import { useChatAI } from '../hooks/useChatAI';
+import { haptic } from '../utils/haptics';
 
 const Chat: React.FC = () => {
     const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig } = useOS();
@@ -284,6 +285,7 @@ const Chat: React.FC = () => {
         }
 
         await DB.saveMessage(msgPayload);
+        haptic.medium();
 
         // Detect XHS link in user text and create xhs_card via MCP
         if (type === 'text') {

@@ -3,6 +3,7 @@
 
 import React, { useRef, useState } from 'react';
 import { Message, ChatTheme } from '../../types';
+import { haptic } from '../../utils/haptics';
 
 // --- Forward Card with expand/collapse ---
 const ForwardCard: React.FC<{
@@ -137,6 +138,7 @@ const MessageItem = React.memo(({
 
         longPressTimer.current = setTimeout(() => {
             if (!selectionMode) {
+                haptic.heavy();
                 onLongPress(m);
             }
         }, 600);
@@ -430,14 +432,14 @@ const MessageItem = React.memo(({
                 );
             }
             if (isAccepted) {
-                // Checkmark circle
+                // Checkmark without outer circle (handled by container)
                 return (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]"><circle cx="12" cy="12" r="10" /><path d="M8 12.5l2.5 3 5.5-6" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="w-[16px] h-[16px] ml-0.5"><path d="M5 13l4 4L19 7" /></svg>
                 );
             }
-            // Returned: undo/return arrow circle
+            // Returned: 1:1 WeChat refund arrow (arrow curving to the left)
             return (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]"><circle cx="12" cy="12" r="10" /><path d="M14.5 8.5H10a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h1" /><path d="M11 8.5l-2 2 2 2" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-[17px] h-[17px]"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" /></svg>
             );
         };
 
@@ -462,7 +464,7 @@ const MessageItem = React.memo(({
 
                     <div className="flex items-center gap-3 relative z-10">
                         {/* Status icon */}
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: isPending ? 'rgba(255,255,255,0.2)' : 'rgba(210,160,100,0.2)', color: amtColor }}>
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: isPending ? 'rgba(255,255,255,0.2)' : '#ffffff', color: amtColor }}>
                             <StatusIcon />
                         </div>
                         <div className="flex flex-col">

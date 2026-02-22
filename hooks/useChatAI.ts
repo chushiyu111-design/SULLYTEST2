@@ -7,6 +7,7 @@ import { ChatParser } from '../utils/chatParser';
 import { RealtimeContextManager, NotionManager, FeishuManager, XhsNote } from '../utils/realtimeContext';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
 import { safeFetchJson, safeResponseJson } from '../utils/safeApi';
+import { haptic, playWechatNotification } from '../utils/haptics';
 
 // Resolve XHS config: per-character override, MCP-only
 function resolveXhsConfig(char: CharacterProfile, realtimeConfig?: RealtimeConfig): {
@@ -52,7 +53,7 @@ async function xhsPublish(conf: { mcpUrl: string }, title: string, content: stri
             })).sort((a, b) => b.score - a.score);
             if (scored[0]?.img.url) {
                 images = [scored[0].img.url];
-                DB.updateXhsStockImageUsage(scored[0].img.id).catch(() => {});
+                DB.updateXhsStockImageUsage(scored[0].img.id).catch(() => { });
             }
         }
     } catch { /* ignore stock failures */ }
@@ -88,7 +89,7 @@ interface UseChatAIProps {
     groups: GroupProfile[];
     emojis: Emoji[];
     categories: EmojiCategory[];
-    addToast: (msg: string, type: 'info'|'success'|'error') => void;
+    addToast: (msg: string, type: 'info' | 'success' | 'error') => void;
     setMessages: (msgs: Message[]) => void; // Callback to update UI messages
     realtimeConfig?: RealtimeConfig; // 新增：实时配置
     translationConfig?: { enabled: boolean; sourceLang: string; targetLang: string };
@@ -106,7 +107,7 @@ export const useChatAI = ({
     realtimeConfig,  // 新增
     translationConfig
 }: UseChatAIProps) => {
-    
+
     const [isTyping, setIsTyping] = useState(false);
     const [recallStatus, setRecallStatus] = useState<string>('');
     const [searchStatus, setSearchStatus] = useState<string>('');
@@ -258,7 +259,7 @@ export const useChatAI = ({
             // 4. Initial Cleanup
             let aiContent = data.choices?.[0]?.message?.content || '';
             aiContent = aiContent.replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '');
-            aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, ''); 
+            aiContent = aiContent.replace(/^[\w\u4e00-\u9fa5]+:\s*/, '');
             aiContent = aiContent.replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
 
             // 5. Handle Recall (Loop if needed)
@@ -1078,7 +1079,7 @@ export const useChatAI = ({
                                 // 其他错误（网络/加载慢等）可以重试
                                 const replyRetries = [3000, 4000, 5000];
                                 for (let i = 0; i < replyRetries.length && !result.success; i++) {
-                                    console.warn(`📕 [XHS] 回复失败(${i+1}/${replyRetries.length})，${replyRetries[i]/1000}秒后重试:`, result.message);
+                                    console.warn(`📕 [XHS] 回复失败(${i + 1}/${replyRetries.length})，${replyRetries[i] / 1000}秒后重试:`, result.message);
                                     await new Promise(r => setTimeout(r, replyRetries[i]));
                                     result = await xhsReplyComment(xhsConf, noteId, xsecToken, replyContent, commentId, commentUserId, parentCommentId);
                                 }
@@ -1350,9 +1351,11 @@ export const useChatAI = ({
                     const xhsMessages = [
                         ...fullMessages,
                         { role: 'assistant', content: cleanedForXhs },
-                        { role: 'user', content: detailFailed
-                            ? `[系统: 你尝试打开一条小红书笔记（noteId=${noteId}），但加载失败了]\n\n${detailStr}\n\n[系统: 笔记详情页加载失败了。可能的原因：这条笔记需要先通过搜索或浏览才能打开详情。现在请你：\n1. 自然地告知用户"这条笔记打不开/加载不出来"\n2. 可以建议搜索相关关键词再试: [[XHS_SEARCH: 关键词]]\n3. 严禁再输出[[XHS_DETAIL:...]]标记]`
-                            : `[系统: 你点开了一条小红书笔记的详情页（noteId=${noteId}）]\n\n${detailStr}\n\n[系统: 你已经看完了这条笔记的完整内容和评论区。现在请你：\n1. 自然地分享你看到的内容和感受\n2. 如果想评论这条笔记，可以用 [[XHS_COMMENT: ${noteId} | 评论内容]]\n3. 如果想回复某条评论，可以用 [[XHS_REPLY: ${noteId} | commentId | 回复内容]]（commentId 在上面的评论区数据里）\n4. 如果想点赞，可以用 [[XHS_LIKE: ${noteId}]]；想收藏可以用 [[XHS_FAV: ${noteId}]]\n5. 严禁再输出[[XHS_DETAIL:...]]标记]` }
+                        {
+                            role: 'user', content: detailFailed
+                                ? `[系统: 你尝试打开一条小红书笔记（noteId=${noteId}），但加载失败了]\n\n${detailStr}\n\n[系统: 笔记详情页加载失败了。可能的原因：这条笔记需要先通过搜索或浏览才能打开详情。现在请你：\n1. 自然地告知用户"这条笔记打不开/加载不出来"\n2. 可以建议搜索相关关键词再试: [[XHS_SEARCH: 关键词]]\n3. 严禁再输出[[XHS_DETAIL:...]]标记]`
+                                : `[系统: 你点开了一条小红书笔记的详情页（noteId=${noteId}）]\n\n${detailStr}\n\n[系统: 你已经看完了这条笔记的完整内容和评论区。现在请你：\n1. 自然地分享你看到的内容和感受\n2. 如果想评论这条笔记，可以用 [[XHS_COMMENT: ${noteId} | 评论内容]]\n3. 如果想回复某条评论，可以用 [[XHS_REPLY: ${noteId} | commentId | 回复内容]]（commentId 在上面的评论区数据里）\n4. 如果想点赞，可以用 [[XHS_LIKE: ${noteId}]]；想收藏可以用 [[XHS_FAV: ${noteId}]]\n5. 严禁再输出[[XHS_DETAIL:...]]标记]`
+                        }
                     ];
 
                     data = await safeFetchJson(`${baseUrl}/chat/completions`, {
@@ -1442,7 +1445,7 @@ export const useChatAI = ({
                                 // 其他错误（网络/加载慢等）可以重试
                                 const replyRetries = [3000, 4000, 5000];
                                 for (let i = 0; i < replyRetries.length && !result.success; i++) {
-                                    console.warn(`📕 [XHS] 回复失败(detail后)(${i+1}/${replyRetries.length})，${replyRetries[i]/1000}秒后重试:`, result.message);
+                                    console.warn(`📕 [XHS] 回复失败(detail后)(${i + 1}/${replyRetries.length})，${replyRetries[i] / 1000}秒后重试:`, result.message);
                                     await new Promise(r => setTimeout(r, replyRetries[i]));
                                     result = await xhsReplyComment(xhsConf, noteId, xsecToken, replyContent, commentId, commentUserId, parentCommentId);
                                 }
@@ -1727,6 +1730,14 @@ export const useChatAI = ({
                                     if (cleanChunk) {
                                         await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: cleanChunk, replyTo: replyData });
                                         setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                        // Haptic + sound on AI reply
+                                        if (globalMsgIndex === 0) {
+                                            haptic.medium();
+                                            const isWechatTheme = !char.bubbleStyle || char.bubbleStyle === 'default';
+                                            if (isWechatTheme) playWechatNotification();
+                                        } else {
+                                            haptic.light();
+                                        }
                                         globalMsgIndex++;
                                     }
                                 }

@@ -18,11 +18,41 @@ export const ChatParser = {
             content = content.replace('[[ACTION:POKE]]', '').trim();
         }
 
-        // TRANSFER
+        // TRANSFER (AI initiates a transfer to the user)
         const transferMatch = content.match(/\[\[ACTION:TRANSFER:(\d+)\]\]/);
         if (transferMatch) {
             await DB.saveMessage({ charId, role: 'assistant', type: 'transfer', content: '[转账]', metadata: { amount: transferMatch[1], status: 'pending' } });
             content = content.replace(transferMatch[0], '').trim();
+        }
+
+        // RECEIVE_TRANSFER (AI accepts a pending user transfer)
+        if (content.includes('[[ACTION:RECEIVE_TRANSFER]]')) {
+            try {
+                const recentMsgs = await DB.getRecentMessagesByCharId(charId, 50);
+                const pendingUserTransfer = recentMsgs.slice().reverse().find(
+                    m => m.role === 'user' && m.type === 'transfer' && m.metadata?.status === 'pending'
+                );
+                if (pendingUserTransfer) {
+                    await DB.updateMessageMetadata(pendingUserTransfer.id, { status: 'accepted' });
+                    addToast(`${charName} 已收取 ¥${pendingUserTransfer.metadata?.amount}`, 'success');
+                }
+            } catch (e) { console.error('RECEIVE_TRANSFER failed:', e); }
+            content = content.replace('[[ACTION:RECEIVE_TRANSFER]]', '').trim();
+        }
+
+        // RETURN_TRANSFER (AI returns/rejects a pending user transfer)
+        if (content.includes('[[ACTION:RETURN_TRANSFER]]')) {
+            try {
+                const recentMsgs = await DB.getRecentMessagesByCharId(charId, 50);
+                const pendingUserTransfer = recentMsgs.slice().reverse().find(
+                    m => m.role === 'user' && m.type === 'transfer' && m.metadata?.status === 'pending'
+                );
+                if (pendingUserTransfer) {
+                    await DB.updateMessageMetadata(pendingUserTransfer.id, { status: 'returned' });
+                    addToast(`${charName} 退还了 ¥${pendingUserTransfer.metadata?.amount}`, 'info');
+                }
+            } catch (e) { console.error('RETURN_TRANSFER failed:', e); }
+            content = content.replace('[[ACTION:RETURN_TRANSFER]]', '').trim();
         }
 
         // ADD_EVENT
