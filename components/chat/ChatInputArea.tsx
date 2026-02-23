@@ -267,49 +267,61 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
                     {/* Actions Panel */}
                     {showPanel === 'actions' && (
-                        <div className="p-6 grid grid-cols-4 gap-8 overflow-y-auto">
-                            <button onClick={() => onPanelAction('transfer')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
-                                <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center shadow-sm text-orange-400 border border-orange-100">
-                                    <Money className="w-6 h-6" weight="bold" />
+                        <>
+                            {THEME_PLUGINS[activeThemeId]?.ActionsPanel ? (
+                                React.createElement(THEME_PLUGINS[activeThemeId].ActionsPanel!, {
+                                    onPanelAction,
+                                    isSummarizing,
+                                    onReroll,
+                                    canReroll,
+                                    chatImageInputRef
+                                })
+                            ) : (
+                                <div className="p-6 grid grid-cols-4 gap-8 overflow-y-auto">
+                                    <button onClick={() => onPanelAction('transfer')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
+                                        <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center shadow-sm text-orange-400 border border-orange-100">
+                                            <Money className="w-6 h-6" weight="bold" />
+                                        </div>
+                                        <span className="text-xs font-bold">转账</span>
+                                    </button>
+
+                                    <button onClick={() => onPanelAction('poke')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
+                                        <div className="w-14 h-14 bg-sky-50 rounded-2xl flex items-center justify-center shadow-sm text-2xl border border-sky-100">👉</div>
+                                        <span className="text-xs font-bold">戳一戳</span>
+                                    </button>
+
+                                    <button onClick={() => onPanelAction('archive')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
+                                        <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shadow-sm text-indigo-400 border border-indigo-100">
+                                            <BookOpenText className="w-6 h-6" weight="bold" />
+                                        </div>
+                                        <span className="text-xs font-bold">{isSummarizing ? '归档中...' : '记忆归档'}</span>
+                                    </button>
+
+                                    <button onClick={() => onPanelAction('settings')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
+                                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm text-slate-500 border border-slate-100">
+                                            <GearSix className="w-6 h-6" weight="bold" /></div>
+                                        <span className="text-xs font-bold">设置</span>
+                                    </button>
+
+                                    <button onClick={() => chatImageInputRef.current?.click()} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
+                                        <div className="w-14 h-14 bg-pink-50 rounded-2xl flex items-center justify-center shadow-sm text-pink-400 border border-pink-100">
+                                            <Image className="w-6 h-6" weight="bold" />
+                                        </div>
+                                        <span className="text-xs font-bold">相册</span>
+                                    </button>
+
+                                    {/* Regenerate Button */}
+                                    <button onClick={onReroll} disabled={!canReroll} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${canReroll ? 'text-slate-600' : 'text-slate-300 opacity-50'}`}>
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${canReroll ? 'bg-emerald-50 text-emerald-400 border-emerald-100' : 'bg-slate-50 text-slate-300 border-slate-100'}`}>
+                                            <ArrowsClockwise className="w-6 h-6" weight="bold" />
+                                        </div>
+                                        <span className="text-xs font-bold">重新生成</span>
+                                    </button>
                                 </div>
-                                <span className="text-xs font-bold">转账</span>
-                            </button>
-
-                            <button onClick={() => onPanelAction('poke')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
-                                <div className="w-14 h-14 bg-sky-50 rounded-2xl flex items-center justify-center shadow-sm text-2xl border border-sky-100">👉</div>
-                                <span className="text-xs font-bold">戳一戳</span>
-                            </button>
-
-                            <button onClick={() => onPanelAction('archive')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
-                                <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shadow-sm text-indigo-400 border border-indigo-100">
-                                    <BookOpenText className="w-6 h-6" weight="bold" />
-                                </div>
-                                <span className="text-xs font-bold">{isSummarizing ? '归档中...' : '记忆归档'}</span>
-                            </button>
-
-                            <button onClick={() => onPanelAction('settings')} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
-                                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm text-slate-500 border border-slate-100">
-                                    <GearSix className="w-6 h-6" weight="bold" /></div>
-                                <span className="text-xs font-bold">设置</span>
-                            </button>
-
-                            <button onClick={() => chatImageInputRef.current?.click()} className="flex flex-col items-center gap-2 text-slate-600 active:scale-95 transition-transform">
-                                <div className="w-14 h-14 bg-pink-50 rounded-2xl flex items-center justify-center shadow-sm text-pink-400 border border-pink-100">
-                                    <Image className="w-6 h-6" weight="bold" />
-                                </div>
-                                <span className="text-xs font-bold">相册</span>
-                            </button>
+                            )}
+                            {/* Hidden file input for both default and plugin panels */}
                             <input type="file" ref={chatImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'chat')} />
-
-                            {/* Regenerate Button */}
-                            <button onClick={onReroll} disabled={!canReroll} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${canReroll ? 'text-slate-600' : 'text-slate-300 opacity-50'}`}>
-                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${canReroll ? 'bg-emerald-50 text-emerald-400 border-emerald-100' : 'bg-slate-50 text-slate-300 border-slate-100'}`}>
-                                    <ArrowsClockwise className="w-6 h-6" weight="bold" />
-                                </div>
-                                <span className="text-xs font-bold">重新生成</span>
-                            </button>
-
-                        </div>
+                        </>
                     )}
                     {showPanel === 'chars' && (
                         <div className="p-5 space-y-6 overflow-y-auto no-scrollbar">

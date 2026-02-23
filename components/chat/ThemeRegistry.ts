@@ -10,6 +10,7 @@ import React from 'react';
 import { Message } from '../../types';
 import WeChatInputBar from './plugins/WeChatInputBar';
 import WeChatTransferCard from './plugins/WeChatTransferCard';
+import WeChatActionsPanel, { ActionsPanelProps } from './plugins/WeChatActionsPanel';
 
 /** Shared props for all transfer card plugins */
 export interface TransferCardProps {
@@ -35,6 +36,8 @@ export interface ThemePlugin {
     }>;
     /** Custom transfer card component (undefined = use neutral fallback card) */
     TransferCard?: React.FC<TransferCardProps>;
+    /** Custom actions panel (undefined = use default colored grid) */
+    ActionsPanel?: React.FC<ActionsPanelProps>;
 }
 
 /**
@@ -47,7 +50,8 @@ export const THEME_PLUGINS: Record<string, ThemePlugin> = {
         id: 'default',
         notificationSound: 'https://image2url.com/r2/default/audio/1771769870930-c9be8c96-c34e-4509-bc81-48619ad5406d.wav',
         InputBar: WeChatInputBar,
-        TransferCard: WeChatTransferCard
+        TransferCard: WeChatTransferCard,
+        ActionsPanel: WeChatActionsPanel
     },
     'waterdrop': {
         id: 'waterdrop',

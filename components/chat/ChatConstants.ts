@@ -13,8 +13,8 @@ export const PRESET_THEMES: Record<string, ChatTheme> = {
     },
     waterdrop: {
         id: 'waterdrop', name: '拟态水滴(Gloss)', type: 'preset',
-        user: { textColor: '#0f172a', backgroundColor: 'transparent', borderRadius: 20, opacity: 1 },
-        ai: { textColor: '#0f172a', backgroundColor: 'transparent', borderRadius: 20, opacity: 1 },
+        user: { textColor: '#1a1a2e', backgroundColor: 'rgba(225,230,235,0.06)', borderRadius: 26, opacity: 1 },
+        ai: { textColor: '#1a1a2e', backgroundColor: 'rgba(225,230,235,0.06)', borderRadius: 26, opacity: 1 },
         customCss: waterdropCss
     }
 };
