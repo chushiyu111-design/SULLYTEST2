@@ -39,33 +39,36 @@ export const haptic = {
     selection: () => vibrate(ImpactStyle.Light, 8),
 };
 
-// ── WeChat Notification Sound ───────────────────────────────────────────────
-// Preloaded audio object, reused on every call.
-let _wechatSound: HTMLAudioElement | null = null;
-
-const getWechatSound = (): HTMLAudioElement => {
-    if (!_wechatSound) {
-        _wechatSound = new Audio('https://image2url.com/r2/default/audio/1771769870930-c9be8c96-c34e-4509-bc81-48619ad5406d.wav');
-        _wechatSound.volume = 0.6;
-        _wechatSound.preload = 'auto';
-    }
-    return _wechatSound;
-};
-
-// Eagerly pre-load the sound file on module initialization
-if (typeof window !== 'undefined') {
-    getWechatSound();
-}
+// ── Generic Theme Notification Sound ────────────────────────────────────────
+// Caches Audio objects per URL for reuse across calls.
+const _soundCache = new Map<string, HTMLAudioElement>();
 
 /**
- * Play the WeChat notification sound.
- * Call this ONLY when the active chat theme is WeChat ('default').
- * The caller is responsible for the theme check.
+ * Play a notification sound for the active theme.
+ * The URL is provided by the ThemePlugin registry.
+ * Audio elements are lazily created and cached per-URL.
  */
-export const playWechatNotification = () => {
+export const playThemeNotification = (url: string) => {
     try {
-        const sound = getWechatSound();
+        let sound = _soundCache.get(url);
+        if (!sound) {
+            sound = new Audio(url);
+            sound.volume = 0.6;
+            sound.preload = 'auto';
+            _soundCache.set(url, sound);
+        }
         sound.currentTime = 0;
         sound.play().catch(() => { /* autoplay blocked or network error — silent */ });
     } catch { /* silent */ }
 };
+
+// ── Backward-Compatible Alias ───────────────────────────────────────────────
+const WECHAT_NOTIFICATION_URL = 'https://image2url.com/r2/default/audio/1771769870930-c9be8c96-c34e-4509-bc81-48619ad5406d.wav';
+
+/** @deprecated Use playThemeNotification(url) instead. Kept for backward compatibility. */
+export const playWechatNotification = () => playThemeNotification(WECHAT_NOTIFICATION_URL);
+
+// Eagerly pre-load the WeChat sound on module initialization
+if (typeof window !== 'undefined') {
+    playThemeNotification(WECHAT_NOTIFICATION_URL); // This also caches the Audio element
+}

@@ -9,7 +9,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { DB } from '../utils/db';
 import { ContextBuilder } from '../utils/context';
-import { DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
+import { DEFAULT_ARCHIVE_PROMPTS } from '../constants/archivePrompts';
 import ImpressionPanel from '../components/character/ImpressionPanel';
 import MemoryArchivist from '../components/character/MemoryArchivist';
 import { safeResponseJson } from '../utils/safeApi';
@@ -832,8 +832,8 @@ ${isInitialGeneration ? `
                                                                 {wb.category && <span className="text-[9px] text-slate-400">{wb.category}</span>}
                                                                 {wb.position && wb.position !== 'after_worldview' && (
                                                                     <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${wb.position === 'top' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                                                                            wb.position === 'bottom' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                                                                                'bg-sky-50 text-sky-600 border border-sky-100'
+                                                                        wb.position === 'bottom' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                                                                            'bg-sky-50 text-sky-600 border border-sky-100'
                                                                         }`}>
                                                                         {wb.position === 'top' ? '人设之前' : wb.position === 'bottom' ? '记忆之后' : '印象之后'}
                                                                     </span>

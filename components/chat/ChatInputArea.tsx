@@ -1,51 +1,12 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { ShareNetwork, Trash, Plus, Smiley, PaperPlaneTilt, Money, BookOpenText, GearSix, Image, Lock, ArrowsClockwise } from '@phosphor-icons/react';
 import { CharacterProfile, ChatTheme, EmojiCategory, Emoji } from '../../types';
 import { PRESET_THEMES } from './ChatConstants';
+import { THEME_PLUGINS } from './ThemeRegistry';
 
-// ===== WeChat 1:1 Pixel-Perfect Inline SVG Icons =====
-// Matched to real WeChat iOS bottom input bar icons
-
-// Voice icon: Circle with a speaker cone and two soundwaves
-const WxIconVoice = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="21" />
-        <path d="M14 20.5v7h4.5L24 33v-18l-5.5 5.5H14z" />
-        <path d="M29 19q3 5 0 10" />
-        <path d="M34 14.5q5 9.5 0 19" />
-    </svg>
-);
-
-// Emoji icon: Circle with dots for eyes and a clean arched smile
-const WxIconEmoji = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="21" />
-        {/* Eyes perfectly vertically aligned in their upper half */}
-        <circle cx="16" cy="19" r="2" fill="#2A2A2A" stroke="none" />
-        <circle cx="32" cy="19" r="2" fill="#2A2A2A" stroke="none" />
-        {/* Smile - perfectly elegant wide arc */}
-        <path d="M14 28 Q24 35 34 28" />
-    </svg>
-);
-
-// Plus icon: Circle with a precise elegant cross
-const WxIconPlus = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
-    <svg viewBox="0 0 48 48" className={className} fill="none" stroke="#2A2A2A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="24" cy="24" r="21" />
-        <line x1="24" y1="13" x2="24" y2="35" />
-        <line x1="13" y1="24" x2="35" y2="24" />
-    </svg>
-);
-
-// Microphone icon (rarely used now, but keeping for compatibility)
-const WxIconMic = ({ className = 'w-5 h-5' }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="#b2b2b2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="9" y="3" width="6" height="10" rx="3" />
-        <path d="M5 11a7 7 0 0 0 14 0" />
-        <line x1="12" y1="18" x2="12" y2="21" />
-    </svg>
-);
+// WeChat-specific icons and input bar are now in ./plugins/WeChatInputBar.tsx
+// Loaded via ThemeRegistry at runtime.
 
 interface ChatInputAreaProps {
     input: string;
@@ -90,16 +51,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const startPos = useRef({ x: 0, y: 0 });
     const isLongPressTriggered = useRef(false); // Track if long press action fired
-    const wxTextareaRef = useRef<HTMLTextAreaElement>(null); // WeChat auto-expand ref
-
-    // WeChat theme: auto-expand textarea height (up to ~5 lines = 120px)
-    useEffect(() => {
-        const el = wxTextareaRef.current;
-        if (!el || activeThemeId !== 'default') return;
-        el.style.height = '0px'; // Reset to measure natural scrollHeight
-        const scrollH = el.scrollHeight;
-        el.style.height = Math.min(scrollH, 120) + 'px';
-    }, [input, activeThemeId]);
+    // WeChat auto-expand ref & useEffect moved to plugins/WeChatInputBar.tsx
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -219,107 +171,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                         删除 ({selectedCount})
                     </button>
                 </div>
-            ) : activeThemeId === 'default' ? (
-                /* ===== WeChat Pixel-Perfect Input Bar ===== */
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'flex-end',
-                        minHeight: '56px',
-                        padding: '10px 8px',
-                        gap: '8px',
-                        background: '#f7f7f7',
-                        borderTop: '0.5px solid rgba(0,0,0,0.15)',
-                        transition: 'min-height 0.15s ease',
-                    }}
-                >
-                    {/* Voice Button — decorative only (voice input not supported) */}
-                    <div
-                        style={{
-                            width: '40px', height: '40px', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0, opacity: 0.5,
-                        }}
-                    >
-                        <WxIconVoice />
-                    </div>
-
-                    {/* Input Field */}
-                    <div
-                        style={{
-                            flex: 1, minWidth: 0, minHeight: '36px',
-                            background: '#ffffff', borderRadius: '4px',
-                            border: '0.5px solid rgba(0,0,0,0.1)',
-                            display: 'flex', alignItems: 'flex-end',
-                            padding: '6px 8px',
-                        }}
-                    >
-                        <textarea
-                            ref={wxTextareaRef}
-                            rows={1}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            style={{
-                                flex: 1, minWidth: 0, background: 'transparent',
-                                fontSize: '15px', color: '#333333',
-                                border: 'none', outline: 'none', resize: 'none',
-                                minHeight: '24px', maxHeight: '120px',
-                                lineHeight: '24px',
-                                padding: 0, margin: 0,
-                                overflowY: 'auto',
-                            }}
-                            className="no-scrollbar"
-                            placeholder=""
-                        />
-                        {/* Microphone icon inside input field (right side, like real WeChat) */}
-                        <WxIconMic />
-                    </div>
-
-                    {/* Emoji Button */}
-                    <button
-                        onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')}
-                        style={{
-                            width: '40px', height: '40px', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            background: 'transparent', border: 'none',
-                            padding: 0, cursor: 'pointer', flexShrink: 0,
-                        }}
-                    >
-                        <WxIconEmoji />
-                    </button>
-
-                    {/* Plus / Send Toggle */}
-                    {input.trim() ? (
-                        <button
-                            onClick={onSend}
-                            style={{
-                                width: '60px', height: '36px', flexShrink: 0,
-                                background: '#07c160', borderRadius: '4px',
-                                color: '#ffffff', fontSize: '15px', fontWeight: 500,
-                                border: 'none', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                transition: 'opacity 0.15s',
-                            }}
-                        >
-                            发送
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')}
-                            style={{
-                                width: '40px', height: '40px', display: 'flex',
-                                alignItems: 'center', justifyContent: 'center',
-                                background: 'transparent', border: 'none',
-                                padding: 0, cursor: 'pointer', flexShrink: 0,
-                            }}
-                        >
-                            <WxIconPlus />
-                        </button>
-                    )}
-                </div>
+            ) : THEME_PLUGINS[activeThemeId]?.InputBar ? (
+                /* ===== Theme Plugin Input Bar (e.g. WeChat) ===== */
+                React.createElement(THEME_PLUGINS[activeThemeId].InputBar!, {
+                    input, setInput, showPanel, setShowPanel, onSend
+                })
             ) : (
-                /* ===== Original Layout (all other themes) ===== */
+                /* ===== Default Pill Layout (all other themes) ===== */
                 <div className="p-3 px-4 flex gap-3 items-end">
                     <button onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')} className="w-11 h-11 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
                         <Plus className="w-6 h-6" weight="bold" />
