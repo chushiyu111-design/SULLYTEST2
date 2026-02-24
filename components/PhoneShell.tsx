@@ -209,39 +209,6 @@ const PhoneShell: React.FC = () => {
     init();
   }, []);
 
-  // ── Web Fullscreen API Fallback (for non-PWA browser tabs) ──────────────────
-  // Attempts to enter fullscreen on first user interaction to hide browser chrome.
-  // Only fires for regular browser usage; PWA & Capacitor already handle this.
-  useEffect(() => {
-    if (Capacitor.isNativePlatform()) return;
-    // Check if already in standalone/fullscreen PWA mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.matchMedia('(display-mode: fullscreen)').matches
-      || (window.navigator as any).standalone === true;
-    if (isStandalone) return;
-
-    const requestFullscreen = () => {
-      const el = document.documentElement;
-      const rfs = el.requestFullscreen
-        || (el as any).webkitRequestFullscreen
-        || (el as any).msRequestFullscreen;
-      if (rfs) {
-        rfs.call(el).catch(() => { /* silently fail if denied */ });
-      }
-      // Only attempt once
-      document.removeEventListener('click', requestFullscreen);
-      document.removeEventListener('touchstart', requestFullscreen);
-    };
-
-    document.addEventListener('click', requestFullscreen, { once: true });
-    document.addEventListener('touchstart', requestFullscreen, { once: true });
-
-    return () => {
-      document.removeEventListener('click', requestFullscreen);
-      document.removeEventListener('touchstart', requestFullscreen);
-    };
-  }, []);
-
   // ── Capacitor: Android Hardware Back Button ───────────────────────────────────
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
