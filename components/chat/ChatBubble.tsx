@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { renderMarkdown } from '../../utils/markdownLite';
 
 /**
@@ -12,6 +12,8 @@ import { renderMarkdown } from '../../utils/markdownLite';
  *   5. Text Content + Translate Toggle
  *
  * Uses CSS custom properties for theme-aware styling.
+ * Workshop-customizable properties (background, color, borderRadius, opacity)
+ * are applied via style.setProperty with !important to override theme CSS.
  */
 
 export interface BubbleStyleConfig {
@@ -48,16 +50,29 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
     onTranslateToggle,
 }) => {
     const radius = styleConfig.borderRadius !== undefined ? styleConfig.borderRadius : 6;
-    const containerStyle: React.CSSProperties = {
-        backgroundColor: styleConfig.backgroundColor,
-        opacity: styleConfig.opacity,
-        borderRadius: `${radius}px`,
-    };
+    const bubbleRef = useRef<HTMLDivElement>(null);
+
+    // Apply Workshop-customizable properties via setProperty with !important
+    // This allows custom bubble styles to override theme CSS (waterdrop, glassmorphism etc.)
+    useEffect(() => {
+        if (!bubbleRef.current) return;
+        const el = bubbleRef.current;
+        if (styleConfig.backgroundColor) {
+            el.style.setProperty('background', styleConfig.backgroundColor, 'important');
+        }
+        el.style.setProperty('border-radius', `${radius}px`, 'important');
+        if (styleConfig.textColor) {
+            el.style.setProperty('color', styleConfig.textColor, 'important');
+        }
+        if (styleConfig.opacity !== undefined) {
+            el.style.setProperty('opacity', String(styleConfig.opacity));
+        }
+    }, [styleConfig.backgroundColor, styleConfig.textColor, radius, styleConfig.opacity]);
 
     return (
         <div
+            ref={bubbleRef}
             className={`relative px-3 py-2 animate-fade-in active:scale-[0.98] transition-transform ${isUser ? 'sully-bubble-user mt-0' : 'sully-bubble-ai mt-0'}`}
-            style={containerStyle}
         >
             {/* Layer 0: SVG Tail */}
             <svg

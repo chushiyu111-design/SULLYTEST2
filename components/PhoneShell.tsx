@@ -2,10 +2,11 @@
 
 
 
-import React, { useState, useEffect, Component, ErrorInfo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, Suspense } from 'react';
 import { useOS } from '../context/OSContext';
 import { useVirtualTime } from '../context/VirtualTimeContext';
 import StatusBar from './os/StatusBar';
+import AppSplashScreen from './os/AppSplashScreen';
 import Launcher from '../apps/Launcher';
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
@@ -408,11 +409,7 @@ const PhoneShell: React.FC = () => {
         {/* App Container */}
         <div className="flex-1 relative overflow-hidden" style={{ contain: 'layout style paint' }}>
           <AppErrorBoundary onCloseApp={closeApp}>
-            <Suspense fallback={
-              <div className="w-full h-full flex items-center justify-center bg-white/50 backdrop-blur-sm">
-                <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-              </div>
-            }>
+            <Suspense fallback={<AppSplashScreen appId={activeApp} />}>
               {renderApp()}
             </Suspense>
           </AppErrorBoundary>
@@ -421,14 +418,26 @@ const PhoneShell: React.FC = () => {
         {/* Overlays: Status Bar (Top) */}
         {!theme.hideStatusBar && <StatusBar />}
 
-        {/* Overlays: Toasts (Top) */}
-        <div className="absolute top-12 left-0 w-full flex flex-col items-center gap-2 pointer-events-none z-[60]">
+        {/* Overlays: iOS-Style Banner Notifications */}
+        <div className="absolute top-0 left-0 w-full flex flex-col items-center gap-2 pointer-events-none z-[60]" style={{ paddingTop: 'max(12px, calc(env(safe-area-inset-top) + 4px))' }}>
           {toasts.map(toast => (
-            <div key={toast.id} className="animate-fade-in bg-white/95 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-xl border border-black/5 flex items-center gap-3 max-w-[85%] ring-1 ring-white/20">
-              {toast.type === 'success' && <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0"></div>}
-              {toast.type === 'error' && <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></div>}
-              {toast.type === 'info' && <div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0"></div>}
-              <span className="text-xs font-bold text-slate-800 truncate leading-none">{toast.message}</span>
+            <div key={toast.id} className="animate-notif-in w-[92%] max-w-md bg-white/90 backdrop-blur-2xl rounded-[20px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/40 overflow-hidden pointer-events-auto">
+              <div className="px-4 py-3 flex items-start gap-3">
+                {/* App Icon indicator */}
+                <div className={`w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center shadow-sm mt-0.5 ${toast.type === 'success' ? 'bg-gradient-to-br from-green-400 to-green-500' :
+                  toast.type === 'error' ? 'bg-gradient-to-br from-red-400 to-red-500' :
+                    'bg-gradient-to-br from-indigo-400 to-purple-500'
+                  }`}>
+                  <span className="text-white text-sm font-bold">S</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">SullyOS</span>
+                    <span className="text-[10px] text-slate-400">now</span>
+                  </div>
+                  <p className="text-[13px] font-semibold text-slate-800 leading-snug line-clamp-2">{toast.message}</p>
+                </div>
+              </div>
             </div>
           ))}
         </div>

@@ -821,7 +821,9 @@ export const useChatAI = ({
                     notificationPlayed = true;
                     haptic.medium();
                     const themeId = char.bubbleStyle || 'default';
-                    const themePlugin = THEME_PLUGINS[themeId];
+                    // Resolve baseThemeId for custom Workshop themes (so they inherit notification sound)
+                    const resolvedThemeId = THEME_PLUGINS[themeId] ? themeId : 'default';
+                    const themePlugin = THEME_PLUGINS[resolvedThemeId];
                     if (themePlugin?.notificationSound) playThemeNotification(themePlugin.notificationSound);
                 };
 

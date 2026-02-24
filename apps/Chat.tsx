@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
-import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory } from '../types';
+import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory, AppID } from '../types';
 import { processImage } from '../utils/file';
 import { safeResponseJson } from '../utils/safeApi';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
@@ -16,7 +16,7 @@ import { useChatAI } from '../hooks/useChatAI';
 import { haptic } from '../utils/haptics';
 
 const Chat: React.FC = () => {
-    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig } = useOS();
+    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, openApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig } = useOS();
     const [messages, setMessages] = useState<Message[]>([]);
     const [totalMsgCount, setTotalMsgCount] = useState(0);
     const [visibleCount, setVisibleCount] = useState(30);
@@ -364,6 +364,12 @@ const Chat: React.FC = () => {
             case 'select-category': setActiveCategory(payload); break;
             case 'category-options': setSelectedCategory(payload); setModalType('category-options'); break;
             case 'delete-category-req': setSelectedCategory(payload); setModalType('delete-category'); break;
+            case 'edit-theme':
+                if (payload) {
+                    window.sessionStorage.setItem('themeMakerEditId', payload);
+                    openApp(AppID.ThemeMaker);
+                }
+                break;
         }
     };
 
@@ -807,7 +813,7 @@ const Chat: React.FC = () => {
 
     return (
         <div
-            className={`sully-chat-container flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-[background-image] duration-500 theme-${activeTheme.id}`}
+            className={`sully-chat-container flex flex-col h-full bg-[#f1f5f9] overflow-hidden relative font-sans transition-[background-image] duration-500 theme-${activeTheme.baseThemeId || activeTheme.id}`}
             style={{
                 backgroundImage: char.chatBackground ? `url(${char.chatBackground})` : 'none',
                 backgroundSize: 'cover',

@@ -1,8 +1,9 @@
-import React, { useMemo, useEffect, useLayoutEffect, useState, useRef } from 'react';
+import React, { useMemo, useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { useVirtualTime } from '../context/VirtualTimeContext';
 import { INSTALLED_APPS, DOCK_APPS } from '../constants';
 import AppIcon from '../components/os/AppIcon';
+import { haptic } from '../utils/haptics';
 import { DB } from '../utils/db';
 import { CharacterProfile, Anniversary, AppID } from '../types';
 
@@ -106,10 +107,12 @@ const CharacterWidget = React.memo(({
 // 3. Grid Page Component
 const AppGridPage = React.memo(({
     apps,
-    openApp
+    openApp,
+    onLongPressApp
 }: {
     apps: typeof INSTALLED_APPS,
-    openApp: (id: AppID) => void
+    openApp: (id: AppID) => void,
+    onLongPressApp?: (app: typeof INSTALLED_APPS[0]) => void
 }) => {
     return (
         <div className="grid grid-cols-4 gap-y-6 gap-x-2 place-items-center animate-fade-in relative">
@@ -121,6 +124,7 @@ const AppGridPage = React.memo(({
                     <AppIcon
                         app={app}
                         onClick={() => openApp(app.id)}
+                        onLongPress={onLongPressApp ? () => onLongPressApp(app) : undefined}
                     />
                 </div>
             ))}
@@ -212,6 +216,13 @@ let _lastPageIndex = 0;
 
 const Launcher: React.FC = () => {
     const { openApp, characters, activeCharacterId, theme, lastMsgTimestamp, isDataLoaded, unreadMessages } = useOS();
+
+    // Context menu state for long-press
+    const [contextMenu, setContextMenu] = useState<{ app: typeof INSTALLED_APPS[0] } | null>(null);
+    const handleLongPressApp = useCallback((app: typeof INSTALLED_APPS[0]) => {
+        setContextMenu({ app });
+    }, []);
+    const dismissContextMenu = useCallback(() => setContextMenu(null), []);
 
     // Local state for widget data to prevent context trashing
     const [widgetChar, setWidgetChar] = useState<CharacterProfile | null>(null);
@@ -406,6 +417,7 @@ const Launcher: React.FC = () => {
                                     <AppGridPage
                                         apps={pageApps}
                                         openApp={openApp}
+                                        onLongPressApp={handleLongPressApp}
                                     />
                                 </div>
                             </>
@@ -467,6 +479,7 @@ const Launcher: React.FC = () => {
                                 <AppGridPage
                                     apps={pageApps}
                                     openApp={openApp}
+                                    onLongPressApp={handleLongPressApp}
                                 />
                                 <div className="flex-1"></div>
                             </div>
@@ -500,7 +513,7 @@ const Launcher: React.FC = () => {
                 <div className="bg-white/20 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.2)] px-4 py-3 flex gap-3 sm:gap-6 items-center mx-auto max-w-full justify-between overflow-x-auto no-scrollbar transform-gpu">
                     {dockAppsConfig.map(app => (
                         <div key={app.id} className="relative">
-                            <AppIcon app={app} onClick={() => openApp(app.id)} variant="dock" size="md" />
+                            <AppIcon app={app} onClick={() => openApp(app.id)} onLongPress={() => handleLongPressApp(app)} variant="dock" size="md" />
                             {app.id === 'chat' && totalUnread > 0 && (
                                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center border-2 border-white/20 shadow-sm font-bold pointer-events-none animate-pop-in">
                                     {totalUnread > 9 ? '9+' : totalUnread}
@@ -510,6 +523,46 @@ const Launcher: React.FC = () => {
                     ))}
                 </div>
             </div>
+
+            {/* Long-Press Context Menu Overlay */}
+            {contextMenu && (
+                <div
+                    className="absolute inset-0 z-[100] flex items-center justify-center animate-fade-in"
+                    onClick={dismissContextMenu}
+                    style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+                >
+                    <div
+                        className="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 p-5 min-w-[200px] max-w-[260px] animate-pop-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex flex-col items-center gap-3 mb-4">
+                            <div className="w-16 h-16">
+                                <AppIcon app={contextMenu.app} onClick={() => { dismissContextMenu(); openApp(contextMenu.app.id); }} size="lg" hideLabel />
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-base font-bold text-slate-800">{contextMenu.app.name}</h3>
+                                <p className="text-[11px] text-slate-400 mt-0.5">SullyOS App</p>
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <button
+                                onClick={() => { dismissContextMenu(); openApp(contextMenu.app.id); }}
+                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors text-left"
+                            >
+                                <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                <span className="text-sm font-semibold text-slate-700">打开应用</span>
+                            </button>
+                            <button
+                                onClick={dismissContextMenu}
+                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors text-left"
+                            >
+                                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                <span className="text-sm font-semibold text-slate-700">取消</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

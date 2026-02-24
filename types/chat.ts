@@ -82,6 +82,7 @@ export interface ChatTheme {
     id: string;
     name: string;
     type: 'preset' | 'custom';
+    baseThemeId?: string; // Inherited preset theme ID for CSS class (header/input/card styling)
     user: BubbleStyle;
     ai: BubbleStyle;
     customCss?: string;

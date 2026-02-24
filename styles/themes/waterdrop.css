@@ -9,17 +9,19 @@
 }
 
 /* ===== Core Bubble — High-Transparency 3D Glass ===== */
+/* NOTE: background, border-radius, color, padding are WITHOUT !important
+   so that Bubble Workshop (ThemeMaker) inline styles can override them. */
 .theme-waterdrop .sully-bubble-ai,
 .theme-waterdrop .sully-bubble-user {
     position: relative;
-    padding: 14px 22px !important;
+    padding: 14px 22px;
     /* ULTRA TRANSPARENT — nearly clear glass */
     background: linear-gradient(168deg,
             rgba(230, 235, 240, 0.08) 0%,
             rgba(215, 220, 225, 0.05) 25%,
             rgba(210, 215, 220, 0.06) 55%,
             rgba(215, 220, 225, 0.04) 85%,
-            rgba(225, 230, 235, 0.03) 100%) !important;
+            rgba(225, 230, 235, 0.03) 100%);
     /* Minimal blur — maximum clarity */
     backdrop-filter: blur(4px) saturate(130%) !important;
     -webkit-backdrop-filter: blur(4px) saturate(130%) !important;
@@ -49,10 +51,10 @@
     border-left: 1.5px solid rgba(255, 255, 255, 0.55) !important;
     border-right: 1.5px solid rgba(0, 0, 0, 0.20) !important;
     border-bottom: 2px solid rgba(0, 0, 0, 0.30) !important;
-    /* Pill shape */
-    border-radius: 26px !important;
-    /* Text styling — dark text on transparent glass + subtle emboss */
-    color: #1a1a2e !important;
+    /* Pill shape — no !important so Workshop can override */
+    border-radius: 26px;
+    /* Text styling — no !important so Workshop can override */
+    color: #1a1a2e;
     font-weight: 500;
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     /* Spacing */
