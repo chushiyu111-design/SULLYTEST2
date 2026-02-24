@@ -176,37 +176,33 @@
 }
 
 html {
-  /* Ensure html fills entire viewport including safe areas */
   height: 100%;
-  width: 100%;
   overflow: hidden;
-  background-color: transparent;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  background-color: transparent;
+  background-color: #000000;
   margin: 0;
+  padding: 0;
   overflow: hidden;
   /* Critical: Prevent browser back/forward swipe navigation AND vertical rubber-banding */
   overscroll-behavior: none;
   /* Prevent text selection to feel like an app */
   user-select: none;
   -webkit-user-select: none;
-  /* Use fixed position to ensure we cover the entire viewport including safe area */
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  /* iOS Fix */
+  width: 100vw;
   font-family: var(--app-font);
-}
-
-#root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
 }
 
 /* Global scroll behavior fix */
