@@ -1,29 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>手抓糯米机</title>
-    
-    <!-- PWA Settings -->
-    <link rel="manifest" href="./manifest.json" />
-    <meta name="theme-color" content="#0f1115" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="手抓糯米机" />
-    
-    <!-- Updated Icons -->
-    <link rel="icon" type="image/png" href="https://sharkpan.xyz/f/4rVXFj/123%20%282%29.png" />
-    <link rel="apple-touch-icon" href="https://sharkpan.xyz/f/4rVXFj/123%20%282%29.png" />
 
-    <!-- KaTeX CSS for Math Rendering -->
-    <link rel="stylesheet" href="https://unpkg.com/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>手抓糯米机</title>
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <!-- PWA Settings -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="手抓糯米机" />
 
-    <!-- Import Map: Only for heavy third-party libs loaded on-demand (NOT bundled by Vite) -->
-    <script type="importmap">
+  <!-- Updated Icons -->
+  <link rel="icon" type="image/png" href="https://sharkpan.xyz/f/4rVXFj/123%20%282%29.png" />
+  <link rel="apple-touch-icon" href="https://sharkpan.xyz/f/4rVXFj/123%20%282%29.png" />
+
+  <!-- KaTeX CSS for Math Rendering -->
+  <link rel="stylesheet" href="https://unpkg.com/katex@0.16.9/dist/katex.min.css"
+    integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Import Map: Only for heavy third-party libs loaded on-demand (NOT bundled by Vite) -->
+  <script type="importmap">
 {
   "imports": {
     "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
@@ -32,9 +36,11 @@
   }
 }
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

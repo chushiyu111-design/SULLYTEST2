@@ -150,6 +150,7 @@
   --primary-hue: 245;
   --primary-sat: 25%;
   --primary-lightness: 65%;
+  --safe-area-top: env(safe-area-inset-top);
   --safe-area-bottom: env(safe-area-inset-bottom);
   --app-height: 100%;
   /* Default fallback */
@@ -224,4 +225,8 @@ select:focus {
 /* Utility for Safe Area */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
 }
