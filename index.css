@@ -175,34 +175,34 @@
   --pill-text: #64748b;
 }
 
-html {
-  height: 100%;
+html,
+body {
+  margin: 0;
+  padding: 0;
   overflow: hidden;
+  background-color: #000000;
+  /* Fill entire physical screen including display cutout / notch */
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: var(--app-font);
+  /* Extend background behind notch and home indicator */
+  -webkit-overflow-scrolling: touch;
 }
 
 #root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
-}
-
-body {
-  background-color: #000000;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  /* Critical: Prevent browser back/forward swipe navigation AND vertical rubber-banding */
-  overscroll-behavior: none;
-  /* Prevent text selection to feel like an app */
-  user-select: none;
-  -webkit-user-select: none;
-  height: 100vh;
-  height: 100dvh;
-  /* iOS Fix */
-  width: 100vw;
-  font-family: var(--app-font);
 }
 
 /* Global scroll behavior fix */
