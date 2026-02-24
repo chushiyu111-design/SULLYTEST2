@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* --- Custom Handwriting Font (Journal Card) --- */
+@font-face {
+  font-family: 'JournalFont';
+  src: url('https://files.catbox.moe/dqbcvp.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- Custom Handwriting Font (Private Note Card) --- */
+@font-face {
+  font-family: 'NoteFont';
+  src: url('https://files.catbox.moe/tsuh8v.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ==========================================
    Custom Theme (migrated from CDN inline config)
    Tailwind v4 CSS-first configuration
@@ -136,6 +154,24 @@
   --app-height: 100%;
   /* Default fallback */
   --app-font: 'Quicksand', sans-serif;
+
+  /* Card Design Tokens — overridable per theme */
+  --card-bg: #ffffff;
+  --card-border: #f1f5f9;
+  --card-text-primary: #334155;
+  --card-text-secondary: #64748b;
+  --card-text-muted: #94a3b8;
+
+  /* Bubble Design Tokens */
+  --bubble-user-bg: #95ec69;
+  --bubble-ai-bg: #ffffff;
+  --bubble-user-text: #000000;
+  --bubble-ai-text: #333333;
+  --bubble-radius: 6px;
+
+  /* System Pill Tokens */
+  --pill-bg: rgba(226, 232, 240, 0.4);
+  --pill-text: #64748b;
 }
 
 body {

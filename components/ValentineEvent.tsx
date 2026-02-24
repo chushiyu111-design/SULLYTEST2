@@ -652,6 +652,7 @@ export const ValentineSession: React.FC<ValentineSessionProps> = ({ charId, onCl
         if (!recordRef.current || isExporting) return;
         setIsExporting(true);
         try {
+            // @ts-ignore — runtime CDN import, no type declarations available
             const mod: any = await import('https://esm.sh/html2canvas@1.4.1');
             const html2canvas = mod.default;
             const canvas = await html2canvas(recordRef.current, {

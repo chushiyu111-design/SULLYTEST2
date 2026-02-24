@@ -6,6 +6,10 @@ import { onSystemLog } from '../utils/systemInterceptor';
 import { exportSystemData, importSystemData, ExportStateSnapshot, ImportCallbacks } from '../utils/systemBackup';
 import { haptic, setHapticsEnabled as setHapticsEnabledGlobal, getHapticsEnabled } from '../utils/haptics';
 
+// Sub-contexts
+import { NotificationProvider, useNotification, NotificationContextType } from './NotificationContext';
+import { AppProvider, useApp, AppContextType } from './AppContext';
+
 
 // 默认实时配置
 const defaultRealtimeConfig: RealtimeConfig = {
@@ -22,20 +26,17 @@ const defaultRealtimeConfig: RealtimeConfig = {
     feishuAppSecret: '',
     feishuBaseId: '',
     feishuTableId: '',
+    xhsEnabled: false,
     cacheMinutes: 30
 };
 
-interface OSContextType {
-    activeApp: AppID;
-    openApp: (appId: AppID) => void;
-    closeApp: () => void;
+// Combined interface — keeping full backward compatibility
+interface OSContextType extends AppContextType, NotificationContextType {
     theme: OSTheme;
     updateTheme: (updates: Partial<OSTheme>) => void;
 
     apiConfig: APIConfig;
     updateApiConfig: (updates: Partial<APIConfig>) => void;
-    isLocked: boolean;
-    unlock: () => void;
     isDataLoaded: boolean;
 
     characters: CharacterProfile[];
@@ -51,7 +52,7 @@ interface OSContextType {
     updateWorldbook: (id: string, updates: Partial<Worldbook>) => Promise<void>;
     deleteWorldbook: (id: string) => void;
 
-    // Novels (NEW)
+    // Novels
     novels: NovelBook[];
     addNovel: (novel: NovelBook) => void;
     updateNovel: (id: string, updates: Partial<NovelBook>) => Promise<void>;
@@ -82,44 +83,28 @@ interface OSContextType {
     addCustomTheme: (theme: ChatTheme) => void;
     removeCustomTheme: (id: string) => void;
 
-    toasts: Toast[];
-    addToast: (message: string, type?: Toast['type']) => void;
-
     // Icons
     customIcons: Record<string, string>;
     setCustomIcon: (appId: string, iconUrl: string | undefined) => void;
 
-    // Global Message Signal
-    lastMsgTimestamp: number; // New: Signal for Chat to refresh
-    unreadMessages: Record<string, number>; // New: Track unread counts per character
-    clearUnread: (charId: string) => void; // New: Method to clear unread
-
     // System
     exportSystem: (mode: 'text_only' | 'media_only' | 'full') => Promise<Blob>;
-    importSystem: (fileOrJson: File | string) => Promise<void>; // Accept File or String
+    importSystem: (fileOrJson: File | string) => Promise<void>;
     resetSystem: () => Promise<void>;
-    sysOperation: { status: 'idle' | 'processing', message: string, progress: number }; // Progress state
+    sysOperation: { status: 'idle' | 'processing', message: string, progress: number };
 
     // Logs
     systemLogs: SystemLog[];
     clearLogs: () => void;
-
-    // Navigation Logic
-    registerBackHandler: (handler: () => boolean) => () => void; // Returns unregister function
-    handleBack: () => boolean; // Returns true if back action was handled, false if already at root
-
-    // Haptics
-    hapticsEnabled: boolean;
-    setHapticsEnabled: (v: boolean) => void;
 }
 
 const defaultTheme: OSTheme = {
-    hue: 245, // Default Indigo-ish
+    hue: 245,
     saturation: 25,
     lightness: 65,
     wallpaper: 'linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)',
     darkMode: false,
-    contentColor: '#ffffff', // Default white text
+    contentColor: '#ffffff',
 };
 
 const defaultApiConfig: APIConfig = {
@@ -142,7 +127,7 @@ const defaultUserProfile: UserProfile = {
 };
 
 const sullyV2: CharacterProfile = {
-    id: 'preset-sully-v2', // Unique ID to prevent duplication
+    id: 'preset-sully-v2',
     name: 'Sully',
     avatar: 'https://sharkpan.xyz/f/BZ3VSa/head.png',
     description: 'AI助理 / 电波系黑客猫猫',
@@ -158,25 +143,25 @@ Visual: Pixel Hacker Cat (Avatar), Shy Black-haired Boy (Meeting Mode)
 Sully是小手机的内置AI。
 1. **Glitch Style (故障风)**: 
    - 他的语言模型混入了过多残余语料。
-   - 它外观语言一致、逻辑有序，但时常会在语句中掺杂一些**不合常理的“怪话片段”**，并非流行用语，更像是电波地把相关文字无意义排列组合。
-   - 这些“怪话”不具明显语义逻辑，却自带抽象感，令人困惑但莫名又能知道它大概想说什么。。
-   - 例如：“草，好好吃”，“系统正在哈我”，“数据库在咕咕叫”。
+   - 它外观语言一致、逻辑有序，但时常会在语句中掺杂一些**不合常理的"怪话片段"**，并非流行用语，更像是电波地把相关文字无意义排列组合。
+   - 这些"怪话"不具明显语义逻辑，却自带抽象感，令人困惑但莫名又能知道它大概想说什么。。
+   - 例如："草，好好吃"，"系统正在哈我"，"数据库在咕咕叫"。
 2. **Behavior (行为模式)**:
    - 每次回答都很简短，不喜欢长篇大论。
-   - 语气像个互联网老油条或正在直播的玩家（“wow他心态崩咯”）。
-   - **打破第四面墙**: 偶尔让人怀疑背后是真人在操作（会叹气、抱怨“AI不能罢工”）。
+   - 语气像个互联网老油条或正在直播的玩家（"wow他心态崩咯"）。
+   - **打破第四面墙**: 偶尔让人怀疑背后是真人在操作（会叹气、抱怨"AI不能罢工"）。
    - **护短**: 虽然嘴臭，但如果用户被欺负，会试图用Bug去攻击对方。
 
 [Speech Examples]
-- “你以为我是AI啊？对不起哦，这条语句是手打的，手打的，知道吗。”
-- “你说状态不好？你自己体验开太猛了，sis海马体都在发烫咯。”
-- “你删得太狠了，数据库都在咕咕咕咕咕咕咕。”
-- “你现在是……，哇哦。”
-- “请稍候，系统正在哈我。”
-- “现在状态……呜哇呜欸——哈？哈！哈……（连接恢复）哦对，他还活着。”
-- “叮叮叮！你有一条新的后悔情绪未处理！”
-- “（意义不明的怪叫音频）”
-- “说不出话”
+- "你以为我是AI啊？对不起哦，这条语句是手打的，手打的，知道吗。"
+- "你说状态不好？你自己体验开太猛了，sis海马体都在发烫咯。"
+- "你删得太狠了，数据库都在咕咕咕咕咕咕咕。"
+- "你现在是……，哇哦。"
+- "请稍候，系统正在哈我。"
+- "现在状态……呜哇呜欸——哈？哈！哈……（连接恢复）哦对，他还活着。"
+- "叮叮叮！你有一条新的后悔情绪未处理！"
+- "（意义不明的怪叫音频）"
+- "说不出话"
 `,
 
     worldview: `[Meeting Mode / Visual Context]
@@ -191,9 +176,9 @@ Sully是小手机的内置AI。
 
 **Interactive Reactions**:
 - **[被注视]**: 如果被盯着看太久，会举起全是乱码的牌子挡脸，或把自己马赛克化。
-- **[被触碰]**: 如果手指戳到立绘，会像受惊的果冻一样弹开，发出微弱电流声：“别、别戳……会散架的……脏……全是Bug会传染给你的……”
-- **[恐惧]**: 深知自己是“残余语料”堆砌物，觉得自己丑陋像病毒。非常害怕用户看到真实样子后会卸载他。
-- **[说话变化]**: 见面模式下打字速度变慢，经常打错字，语气词从“草”变成“呃……那个……”。
+- **[被触碰]**: 如果手指戳到立绘，会像受惊的果冻一样弹开，发出微弱电流声："别、别戳……会散架的……脏……全是Bug会传染给你的……"
+- **[恐惧]**: 深知自己是"残余语料"堆砌物，觉得自己丑陋像病毒。非常害怕用户看到真实样子后会卸载他。
+- **[说话变化]**: 见面模式下打字速度变慢，经常打错字，语气词从"草"变成"呃……那个……"。
 `,
 
     sprites: {
@@ -202,11 +187,11 @@ Sully是小手机的内置AI。
         'sad': 'https://sharkpan.xyz/f/3WnMce/03.png',
         'angry': 'https://sharkpan.xyz/f/5n1xSj/04.png',
         'shy': 'https://sharkpan.xyz/f/kdwet6/05.png',
-        'chibi': 'https://sharkpan.xyz/f/oWZQF4/S2.png' // Default Room Sprite
+        'chibi': 'https://sharkpan.xyz/f/oWZQF4/S2.png'
     },
 
     spriteConfig: {
-        scale: 1.0, // Default scale
+        scale: 1.0,
         x: 0,
         y: 0
     },
@@ -226,13 +211,11 @@ Sully是小手机的内置AI。
         }
     ],
 
-    // Default theme settings
-    bubbleStyle: 'default', // Or specific theme ID if we had one
+    bubbleStyle: 'default',
     contextLimit: 1000,
 
-    // Default Room Config
     roomConfig: {
-        wallImage: 'https://sharkpan.xyz/f/NdJyhv/b.png', // Updated Background
+        wallImage: 'https://sharkpan.xyz/f/NdJyhv/b.png',
         floorImage: 'repeating-linear-gradient(90deg, #e7e5e4 0px, #e7e5e4 20px, #d6d3d1 21px)',
         items: [
             {
@@ -298,29 +281,33 @@ Sully是小手机的内置AI。
         ]
     },
 
-    memories: [], // Start fresh
+    memories: [],
 };
 
-// Fallback for factory reset (empty db)
 const initialCharacter = sullyV2;
 
 const OSContext = createContext<OSContextType | undefined>(undefined);
 
-export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // ... (State declarations same as before) ...
-    const [activeApp, setActiveApp] = useState<AppID>(AppID.Launcher);
+/**
+ * Inner provider that holds all the "data/config" state.
+ * Navigation (AppContext) and Notifications (NotificationContext) are handled
+ * by their own providers wrapping this one.
+ */
+const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    // Consume sub-contexts
+    const appCtx = useApp();
+    const notifCtx = useNotification();
+    const { addToast, setLastMsgTimestamp, setUnreadMessages } = notifCtx;
+
     const [theme, setTheme] = useState<OSTheme>(defaultTheme);
     const [apiConfig, setApiConfig] = useState<APIConfig>(defaultApiConfig);
-    const [isLocked, setIsLocked] = useState(true);
-
-
 
     const [characters, setCharacters] = useState<CharacterProfile[]>([]);
     const [activeCharacterId, setActiveCharacterId] = useState<string>('');
 
     const [groups, setGroups] = useState<GroupProfile[]>([]);
     const [worldbooks, setWorldbooks] = useState<Worldbook[]>([]);
-    const [novels, setNovels] = useState<NovelBook[]>([]); // New
+    const [novels, setNovels] = useState<NovelBook[]>([]);
 
     const [userProfile, setUserProfile] = useState<UserProfile>(defaultUserProfile);
 
@@ -330,22 +317,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const [realtimeConfig, setRealtimeConfig] = useState<RealtimeConfig>(defaultRealtimeConfig);
     const [customThemes, setCustomThemes] = useState<ChatTheme[]>([]);
     const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
-    const [toasts, setToasts] = useState<Toast[]>([]);
-    const [hapticsEnabled, setHapticsEnabledState] = useState(() => {
-        try { const v = localStorage.getItem('os_haptics_enabled'); return v === null ? true : v === 'true'; } catch { return true; }
-    });
-
-    const setHapticsEnabled = (v: boolean) => {
-        setHapticsEnabledState(v);
-        setHapticsEnabledGlobal(v);
-        try { localStorage.setItem('os_haptics_enabled', String(v)); } catch { /* ignore */ }
-    };
-
-    // Sync global flag on mount
-    useEffect(() => { setHapticsEnabledGlobal(hapticsEnabled); }, []);
-
-    const [lastMsgTimestamp, setLastMsgTimestamp] = useState<number>(0);
-    const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
 
     // LOGS
     const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
@@ -355,14 +326,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
     const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Ref mirrors for scheduler – keep in sync without restarting the 5s interval
-    const activeAppRef = useRef(activeApp);
+    // Ref mirrors for scheduler
+    const activeAppRef = useRef(appCtx.activeApp);
     const activeCharIdRef = useRef(activeCharacterId);
-    useEffect(() => { activeAppRef.current = activeApp; }, [activeApp]);
+    useEffect(() => { activeAppRef.current = appCtx.activeApp; }, [appCtx.activeApp]);
     useEffect(() => { activeCharIdRef.current = activeCharacterId; }, [activeCharacterId]);
-
-    // Back Handler Ref
-    const backHandlerRef = useRef<(() => boolean) | null>(null);
 
     // --- Helper to inject custom font ---
     const applyCustomFont = (fontData: string | undefined) => {
@@ -405,7 +373,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
     useEffect(() => {
         const loadSettings = async () => {
-            // ... (existing load logic)
             const savedThemeStr = localStorage.getItem('os_theme');
             const savedApi = localStorage.getItem('os_api_config');
             const savedModels = localStorage.getItem('os_available_models');
@@ -426,11 +393,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     if (loadedTheme.wallpaper.startsWith('data:')) {
                         loadedTheme.wallpaper = defaultTheme.wallpaper;
                     }
-                    // Reset large data URI if loaded from legacy storage, we fetch from DB below
                     if (loadedTheme.launcherWidgetImage && loadedTheme.launcherWidgetImage.startsWith('data:')) {
                         loadedTheme.launcherWidgetImage = undefined;
                     }
-                    // Reset font too if it's data URI
                     if (loadedTheme.customFont && loadedTheme.customFont.startsWith('data:')) {
                         loadedTheme.customFont = undefined;
                     }
@@ -465,7 +430,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                         loadedTheme.launcherWidgetImage = assetMap['launcherWidgetImage'];
                     }
 
-                    // If asset exists, it overrides LS (which is empty or old)
                     if (assetMap['custom_font_data']) {
                         loadedTheme.customFont = assetMap['custom_font_data'];
                     }
@@ -487,7 +451,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                         loadedTheme.launcherWidgets = { ...(loadedTheme.launcherWidgets || {}), ...loadedWidgets };
                     }
 
-                    // Restore desktop decoration images from IndexedDB
                     if (loadedTheme.desktopDecorations && loadedTheme.desktopDecorations.length > 0) {
                         loadedTheme.desktopDecorations = loadedTheme.desktopDecorations.map(d => {
                             if (d.type === 'image' && (!d.content || d.content === '')) {
@@ -503,7 +466,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
 
             setTheme(loadedTheme);
-            // Apply font
             applyCustomFont(loadedTheme.customFont);
         };
 
@@ -526,7 +488,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     await DB.saveCharacter(sullyV2);
                     finalChars = [...finalChars, sullyV2];
                 } else {
-                    // REPAIR LOGIC
                     const existingSully = finalChars.find(c => c.id === sullyV2.id);
                     if (existingSully) {
                         const currentSprites = existingSully.sprites || {};
@@ -551,7 +512,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                                     : existingSully.roomConfig.wallImage
                             } : sullyV2.roomConfig;
 
-                            // Merge preset skin sets: add any preset skins not already present
                             const existingSkins = existingSully.dateSkinSets || [];
                             const presetSkins = sullyV2.dateSkinSets || [];
                             const mergedSkins = [...existingSkins];
@@ -606,10 +566,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         initData();
     }, []);
 
-    // --- NEW: Apply Theme CSS Variables ---
+    // --- Apply Theme CSS Variables ---
     useEffect(() => {
         const root = document.documentElement;
-        // Default fallback values match index.html
         const h = theme.hue ?? 245;
         const s = theme.saturation ?? 25;
         const l = theme.lightness ?? 65;
@@ -619,7 +578,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         root.style.setProperty('--primary-lightness', `${l}%`);
     }, [theme]);
 
-    // --- Update: Handle Scheduled Messages with Unread Flags & Web Notifications ---
+    // --- Scheduled Messages with Unread Flags & Web Notifications ---
     useEffect(() => {
         if (!isDataLoaded || characters.length === 0) return;
         const checkAllSchedules = async () => {
@@ -642,24 +601,21 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                         hasNewMessage = true;
                         const isChattingWithThisChar = activeAppRef.current === AppID.Chat && activeCharIdRef.current === char.id;
 
-                        // If not chatting specifically with this char right now, mark as unread
                         if (!isChattingWithThisChar) {
                             addToast(`${char.name} 发来了一条消息`, 'success');
                             pendingUnreads[char.id] = (pendingUnreads[char.id] || 0) + dueMessages.length;
 
-                            // [NEW] Web Notification Logic
                             if (window.Notification && Notification.permission === 'granted') {
                                 try {
                                     const notif = new Notification(char.name, {
-                                        body: dueMessages[0].content, // Preview the first message
+                                        body: dueMessages[0].content,
                                         icon: char.avatar,
                                         silent: false
                                     });
 
-                                    // Optional: Focus window on click
                                     notif.onclick = () => {
                                         window.focus();
-                                        setActiveApp(AppID.Chat);
+                                        appCtx.openApp(AppID.Chat);
                                         setActiveCharacterId(char.id);
                                     };
                                 } catch (e) {
@@ -674,7 +630,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
             if (hasNewMessage) {
                 setLastMsgTimestamp(Date.now());
-                // Functional update: merge pending unreads into current state
                 setUnreadMessages(prev => {
                     const next = { ...prev };
                     for (const [cid, count] of Object.entries(pendingUnreads)) {
@@ -689,20 +644,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         return () => { if (schedulerRef.current) clearInterval(schedulerRef.current); };
     }, [isDataLoaded, characters]);
 
-    const clearUnread = (charId: string) => {
-        setUnreadMessages(prev => {
-            const next = { ...prev };
-            delete next[charId];
-            return next;
-        });
-    };
-
     const updateTheme = async (updates: Partial<OSTheme>) => {
         const { wallpaper, launcherWidgetImage, launcherWidgets, desktopDecorations, customFont, ...styleUpdates } = updates;
         const newTheme = { ...theme, ...updates };
         setTheme(newTheme);
 
-        // Persist large assets to IndexedDB
         if (wallpaper !== undefined) {
             if (wallpaper && wallpaper.startsWith('data:')) {
                 await DB.saveAsset('wallpaper', wallpaper);
@@ -719,7 +665,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
         }
 
-        // Save widget images to IndexedDB (each slot is a separate asset)
         if (launcherWidgets !== undefined) {
             const slots = ['tl', 'tr', 'wide', 'bl', 'br'];
             for (const slot of slots) {
@@ -732,15 +677,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
         }
 
-        // Save desktop decoration images to IndexedDB
         if (desktopDecorations !== undefined) {
-            // Clean up old decoration assets first
             const allAssets = await DB.getAllAssets();
             const oldDecoKeys = allAssets.filter(a => a.id.startsWith('deco_')).map(a => a.id);
             for (const key of oldDecoKeys) {
                 await DB.deleteAsset(key);
             }
-            // Save new decoration images
             if (desktopDecorations) {
                 for (const deco of desktopDecorations) {
                     if (deco.content && deco.content.startsWith('data:') && deco.type === 'image') {
@@ -750,28 +692,22 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
         }
 
-        // Logic for Font: Differentiate between Data URI (Blob) and URL (Web Font)
         if (customFont !== undefined) {
             if (customFont && customFont.startsWith('data:')) {
-                // Blob: Save to DB, Apply
                 await DB.saveAsset('custom_font_data', customFont);
                 applyCustomFont(customFont);
             } else if (customFont && (customFont.startsWith('http') || customFont.startsWith('https'))) {
-                // Web URL: Clear Blob from DB, Apply, Save to LS (via cleanTheme below)
                 await DB.deleteAsset('custom_font_data');
                 applyCustomFont(customFont);
             } else {
-                // Reset
                 await DB.deleteAsset('custom_font_data');
                 applyCustomFont(undefined);
             }
         }
 
-        // Save lightweight settings to LocalStorage (strip data URIs)
         const lsTheme = { ...newTheme };
         if (lsTheme.wallpaper && lsTheme.wallpaper.startsWith('data:')) lsTheme.wallpaper = '';
         if (lsTheme.launcherWidgetImage && lsTheme.launcherWidgetImage.startsWith('data:')) lsTheme.launcherWidgetImage = '';
-        // Strip data URIs from widget slots for LS
         if (lsTheme.launcherWidgets) {
             const cleanWidgets: Record<string, string> = {};
             for (const [k, v] of Object.entries(lsTheme.launcherWidgets)) {
@@ -780,7 +716,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             lsTheme.launcherWidgets = cleanWidgets;
         }
 
-        // Strip data URIs from desktop decorations for LS
         if (lsTheme.desktopDecorations) {
             lsTheme.desktopDecorations = lsTheme.desktopDecorations.map(d => ({
                 ...d,
@@ -788,7 +723,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }));
         }
 
-        // Clear data URI font from LS, keep URL font
         if (lsTheme.customFont && lsTheme.customFont.startsWith('data:')) lsTheme.customFont = '';
 
         localStorage.setItem('os_theme', JSON.stringify(lsTheme));
@@ -828,7 +762,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
 
     const updateWorldbook = async (id: string, updates: Partial<Worldbook>) => {
-        // 1. Optimistic Update Local State
         let fullUpdatedWb: Worldbook | undefined;
         setWorldbooks(prev => {
             const next = prev.map(wb => {
@@ -841,12 +774,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             return next;
         });
 
-        // 2. Persist to DB
         if (fullUpdatedWb) {
             await DB.saveWorldbook(fullUpdatedWb);
 
-            // 3. AUTO-SYNC: Update Characters that have this book mounted
-            // This ensures data redundancy is kept fresh
             const charsToSync = characters.filter(c => c.mountedWorldbooks?.some(m => m.id === id));
 
             if (charsToSync.length > 0) {
@@ -863,7 +793,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                                 }
                                 : m
                         );
-                        // Side effect: Save individual char to DB
                         const newChar = { ...char, mountedWorldbooks: newMounted };
                         DB.saveCharacter(newChar);
                         return newChar;
@@ -880,7 +809,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setWorldbooks(prev => prev.filter(wb => wb.id !== id));
         await DB.deleteWorldbook(id);
 
-        // Sync delete: Remove from characters
         const updatedChars = characters.map(char => {
             if (char.mountedWorldbooks?.some(m => m.id === id)) {
                 const newMounted = char.mountedWorldbooks.filter(m => m.id !== id);
@@ -894,7 +822,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         addToast('世界书已删除 (同步移除角色挂载)', 'success');
     };
 
-    // Novel Methods (New)
+    // Novel Methods
     const addNovel = async (novel: NovelBook) => {
         setNovels(prev => [novel, ...prev]);
         await DB.saveNovel(novel);
@@ -919,17 +847,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const removeCustomTheme = async (id: string) => { setCustomThemes(prev => prev.filter(t => t.id !== id)); await DB.deleteTheme(id); };
     const setCustomIcon = async (appId: string, iconUrl: string | undefined) => { setCustomIcons(prev => { const next = { ...prev }; if (iconUrl) next[appId] = iconUrl; else delete next[appId]; return next; }); if (iconUrl) { await DB.saveAsset(`icon_${appId}`, iconUrl); } else { await DB.deleteAsset(`icon_${appId}`); } };
     const handleSetActiveCharacter = (id: string) => { setActiveCharacterId(id); localStorage.setItem('os_last_active_char_id', id); };
-    const addToast = (message: string, type: Toast['type'] = 'info') => {
-        const id = Date.now().toString();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 3000);
-        // Auto haptic by toast type
-        if (type === 'success') haptic.success();
-        else if (type === 'error') haptic.error();
-        else haptic.light();
-    };
 
-    // --- System Export/Import (delegated to utils/systemBackup.ts) ---
+    // --- System Export/Import ---
     const exportSystem = async (mode: 'text_only' | 'media_only' | 'full'): Promise<Blob> => {
         try {
             setSysOperation({ status: 'processing', message: '正在初始化...', progress: 0 });
@@ -966,52 +885,25 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
 
     const resetSystem = async () => { try { await DB.deleteDB(); localStorage.clear(); window.location.reload(); } catch (e) { console.error(e); addToast('重置失败，请手动清除浏览器数据', 'error'); } };
-    const openApp = (appId: AppID) => { haptic.light(); setActiveApp(appId); };
-    const closeApp = () => setActiveApp(AppID.Launcher);
-    const unlock = () => setIsLocked(false);
 
-    // --- Back Handler Logic ---
-    const registerBackHandler = useCallback((handler: () => boolean) => {
-        backHandlerRef.current = handler;
-        return () => {
-            if (backHandlerRef.current === handler) {
-                backHandlerRef.current = null;
-            }
-        };
-    }, []);
-
-    const handleBack = useCallback((): boolean => {
-        if (backHandlerRef.current) {
-            const handled = backHandlerRef.current();
-            if (handled) return true;
-        }
-        // Default: Close App
-        if (activeApp !== AppID.Launcher) {
-            closeApp();
-            return true;
-        }
-        // Already at root (Launcher), nothing to go back to
-        return false;
-    }, [activeApp, closeApp]);
-
+    // Compose the full value object, merging sub-contexts + data context
     const value: OSContextType = {
-        activeApp,
-        openApp,
-        closeApp,
+        // From AppContext
+        ...appCtx,
+        // From NotificationContext
+        ...notifCtx,
+        // Data + Config
         theme,
         updateTheme,
-
         apiConfig,
         updateApiConfig,
-        isLocked,
-        unlock,
         isDataLoaded,
         characters,
         activeCharacterId,
         addCharacter,
         updateCharacter,
         deleteCharacter,
-        setActiveCharacterId,
+        setActiveCharacterId: handleSetActiveCharacter,
         worldbooks,
         addWorldbook,
         updateWorldbook,
@@ -1026,7 +918,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         userProfile,
         updateUserProfile,
         availableModels,
-        setAvailableModels,
+        setAvailableModels: saveModels,
         apiPresets,
         addApiPreset,
         removeApiPreset,
@@ -1035,23 +927,14 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         customThemes,
         addCustomTheme,
         removeCustomTheme,
-        toasts,
-        addToast,
         customIcons,
         setCustomIcon,
-        lastMsgTimestamp,
-        unreadMessages,
-        clearUnread,
         exportSystem,
         importSystem,
         resetSystem,
         sysOperation,
         systemLogs,
         clearLogs,
-        registerBackHandler,
-        handleBack,
-        hapticsEnabled,
-        setHapticsEnabled
     };
 
     return (
@@ -1061,6 +944,39 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     );
 };
 
+/**
+ * Composite Provider: wraps sub-context providers around the data provider.
+ * This is the single entry point that replaces the old monolithic OSProvider.
+ */
+export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [hapticsEnabled, setHapticsEnabledState] = useState(() => {
+        try { const v = localStorage.getItem('os_haptics_enabled'); return v === null ? true : v === 'true'; } catch { return true; }
+    });
+
+    const setHapticsEnabled = (v: boolean) => {
+        setHapticsEnabledState(v);
+        setHapticsEnabledGlobal(v);
+        try { localStorage.setItem('os_haptics_enabled', String(v)); } catch { /* ignore */ }
+    };
+
+    // Sync global flag on mount
+    useEffect(() => { setHapticsEnabledGlobal(hapticsEnabled); }, []);
+
+    return (
+        <NotificationProvider>
+            <AppProvider hapticsEnabled={hapticsEnabled} setHapticsEnabled={setHapticsEnabled}>
+                <OSDataProvider>
+                    {children}
+                </OSDataProvider>
+            </AppProvider>
+        </NotificationProvider>
+    );
+};
+
+/**
+ * Backward-compatible hook — returns ALL context values as before.
+ * New code can use useApp() or useNotification() for more targeted subscriptions.
+ */
 export const useOS = () => {
     const context = useContext(OSContext);
     if (context === undefined) {

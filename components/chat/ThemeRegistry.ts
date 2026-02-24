@@ -58,4 +58,9 @@ export const THEME_PLUGINS: Record<string, ThemePlugin> = {
         // No custom InputBar → falls back to the default pill layout
         // No notificationSound → no sound plays
     },
+    'glassmorphism': {
+        id: 'glassmorphism',
+        // No custom InputBar → falls back to the default pill layout
+        // No notificationSound → no sound plays
+    },
 };

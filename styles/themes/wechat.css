@@ -152,3 +152,12 @@
 .theme-default .sully-transfer-bottom {
     padding: 4px 12px !important;
 }
+
+/* ===== WeChat Card Design Tokens ===== */
+.theme-default .sully-card-container {
+    --card-bg: #ffffff;
+    --card-border: #e8e8e8;
+    --card-text-primary: #111111;
+    --card-text-secondary: #666666;
+    --card-text-muted: #999999;
+}

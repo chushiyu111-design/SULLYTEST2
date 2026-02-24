@@ -64,7 +64,7 @@ export const ChatParser = {
                 const anni: any = { id: `anni-${Date.now()}`, title: title, date: date, charId };
                 await DB.saveAnniversary(anni);
                 addToast(`${charName} 添加了新日程: ${title}`, 'success');
-                await DB.saveMessage({ charId, role: 'system', type: 'text', content: `[系统: ${charName} 新增了日程 "${title}" (${date})]` });
+                await DB.saveMessage({ charId, role: 'system', type: 'text', content: `[系统: ${charName} 新增了日程 "${title}" (${date})]`, metadata: { source: 'schedule', scheduleEvent: 'add_event' } });
             }
             content = content.replace(eventMatch[0], '').trim();
         }
@@ -93,6 +93,18 @@ export const ChatParser = {
         content = content.replace(/\[\[RECALL:.*?\]\]/g, '').trim();
 
         return content;
+    },
+
+    /**
+     * Post-API-call cleanup for AI output.
+     * Strips leaked timestamps, name prefixes, and normalises sticker tags.
+     * Called after every API completion (initial + re-calls from search/diary/xhs).
+     */
+    cleanAiSecondPass: (text: string): string => {
+        return text
+            .replace(/\[\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.*?\]/g, '')
+            .replace(/^[\w\u4e00-\u9fa5]+:\s*/, '')
+            .replace(/\[(?:你|User|用户|System)\s*发送了表情包[:：]\s*(.*?)\]/g, '[[SEND_EMOJI: $1]]');
     },
 
     /**
