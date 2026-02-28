@@ -98,7 +98,7 @@ export interface CharacterProfile {
     savedDateState?: DateState;
     specialMomentRecords?: Record<string, SpecialMomentRecord>;
 
-    // 小红书 per-character toggle
+    // 小红�?per-character toggle
     xhsEnabled?: boolean;
 
     socialProfile?: {

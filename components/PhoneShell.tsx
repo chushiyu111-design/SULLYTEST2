@@ -38,6 +38,7 @@ const BankApp = React.lazy(() => import('../apps/BankApp'));
 const XhsStockApp = React.lazy(() => import('../apps/XhsStockApp'));
 const XhsFreeRoamApp = React.lazy(() => import('../apps/XhsFreeRoamApp'));
 const BrowserApp = React.lazy(() => import('../apps/BrowserApp'));
+const ZhaixinglouApp = React.lazy(() => import('../apps/zhaixinglou/ZhaixinglouApp'));
 const LazyValentineEvent = React.lazy(() => import('./ValentineEvent').then(m => ({
   default: m.SpecialMomentsApp
 })));
@@ -48,6 +49,7 @@ const LazyValentineController = React.lazy(() => import('./ValentineEvent').then
 // shouldShowValentinePopup is a pure function, import it statically
 import { shouldShowValentinePopup } from './ValentineEvent';
 import { haptic } from '../utils/haptics';
+import UpdatePopup from './os/UpdatePopup';
 
 // Internal Error Boundary Component
 class AppErrorBoundary extends Component<{ children: React.ReactNode, onCloseApp: () => void }, { hasError: boolean, error: Error | null }> {
@@ -280,6 +282,20 @@ const PhoneShell: React.FC = () => {
     window.scrollTo(0, 0);
   }, [activeApp]);
 
+  // ── Idle Prefetch: Preload Zhaixinglou chunk + critical assets after unlock ──
+  // This runs once when the user enters the Launcher, so the chunk is already
+  // in browser cache by the time they tap the Zhaixinglou icon.
+  useEffect(() => {
+    if (isLocked) return;
+    const id = requestIdleCallback(() => {
+      // Prefetch the ZhaixinglouApp JS chunk (download only, no mount)
+      import('../apps/zhaixinglou/ZhaixinglouApp');
+      // Prefetch critical first-screen assets (card back image + fonts)
+      import('../apps/zhaixinglou/AssetPreloader').then(m => m.prefetchZhaixinglouAssets());
+    }, { timeout: 4000 });
+    return () => cancelIdleCallback(id);
+  }, [isLocked]);
+
   if (!isDataLoaded) {
     return <div className="w-full h-full bg-black flex items-center justify-center"><div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div></div>;
   }
@@ -371,6 +387,7 @@ const PhoneShell: React.FC = () => {
       case AppID.XhsFreeRoam: return <XhsFreeRoamApp />;
       case AppID.Browser: return <BrowserApp />;
       case AppID.SpecialMoments: return <LazyValentineEvent />;
+      case AppID.Zhaixinglou: return <ZhaixinglouApp />;
       case AppID.Launcher:
       default: return <Launcher />;
     }
@@ -448,6 +465,9 @@ const PhoneShell: React.FC = () => {
 
       {/* Valentine's Day popup (2026-02-14) */}
       {!showDisclaimer && showValentine && <Suspense fallback={null}><LazyValentineController onClose={() => setShowValentine(false)} /></Suspense>}
+
+      {/* Update Changelog Popup */}
+      <UpdatePopup canShow={!showDisclaimer && !showValentine} />
     </div>
   );
 };

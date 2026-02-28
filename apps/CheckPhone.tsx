@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { CharacterProfile, PhoneEvidence, PhoneCustomApp } from '../types';
@@ -6,6 +6,16 @@ import { ContextBuilder } from '../utils/context';
 import Modal from '../components/os/Modal';
 import { safeResponseJson } from '../utils/safeApi';
 import MeituanTakeoutCard from '../components/chat/cards/phone/MeituanTakeoutCard';
+
+// 朋友圈封面背景图池 —— 每次进入随机选一张
+const MOMENTS_BG_POOL = [
+    'https://i.postimg.cc/FKHSBpn0/Camera-1040g3k031roibveui4405pjvpo8gu1m2pj5m6bg.jpg',
+    'https://i.postimg.cc/0NySBnHp/Camera-XHS-17719469368011040g2sg31dsqqr5ngccg5o6it4n098c9sr3goe0.jpg',
+    'https://i.postimg.cc/W41ZH8fG/Camera-XHS-17719472040941040g2sg31enohhbkmi7g5pu896g399ls9l2jb1o.jpg',
+    'https://i.postimg.cc/5yYqkgjj/Camera-XHS-17719473891901040g00831dne1qidge305o3i8irg8p0lbup6im0.jpg',
+    'https://i.postimg.cc/prhY1Crw/Camera-XHS-17719479279871040g2sg30ttugsjr4m605ojdbvn8d1ctvlghth8.jpg',
+    'https://i.postimg.cc/rs0CYjzK/mmexport1771947836221.jpg',
+];
 
 // --- Debug Component ---
 const LayoutInspector: React.FC = () => {
@@ -84,6 +94,11 @@ const CheckPhone: React.FC = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, [activeAppId, view]);
+
+    // 朋友圈封面：每次组件挂载随机选一张背景
+    const momentsCoverBg = useMemo(() =>
+        MOMENTS_BG_POOL[Math.floor(Math.random() * MOMENTS_BG_POOL.length)],
+        []);
 
     // Auto scroll to bottom of chat detail
     // NOTE: Do NOT use scrollIntoView - it propagates to page scroll on mobile, shifting the entire layout up
@@ -809,11 +824,7 @@ Format:
                 <div className="flex-1 overflow-y-auto no-scrollbar pb-24 overscroll-contain bg-white">
                     {/* Moments Cover Image Area */}
                     <div className="h-64 bg-gray-100 relative mb-12">
-                        {targetChar?.dateBackground ? (
-                            <img src={targetChar.dateBackground} className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full bg-gradient-to-b from-slate-300 to-slate-400" />
-                        )}
+                        <img src={targetChar?.dateBackground || momentsCoverBg} className="w-full h-full object-cover" />
                         <div className="absolute -bottom-8 right-4 flex items-end gap-4">
                             <span className="text-white text-lg font-bold drop-shadow-md mb-2">{targetChar?.name}</span>
                             <div className="w-16 h-16 rounded-lg bg-gray-200 p-[2px] bg-white shadow-sm shrink-0">

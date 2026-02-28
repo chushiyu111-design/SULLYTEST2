@@ -26,6 +26,7 @@ export enum AppID {
     XhsStock = 'xhs_stock', // XHS image stock for publishing
     SpecialMoments = 'special_moments', // Valentine's Day & future events
     XhsFreeRoam = 'xhs_free_roam', // Character autonomous XHS activity
+    Zhaixinglou = 'zhaixinglou', // 摘星楼 - Astrology & Divination
 }
 
 export interface SystemLog {
