@@ -141,22 +141,24 @@ const SecondaryApiSettingsModal: React.FC<Props> = ({
                                 {isFetchingModels ? '获取中...' : '获取模型列表'}
                             </button>
                         </div>
-                        {availableModels.length > 0 ? (
-                            <select
-                                value={localModel}
-                                onChange={e => setLocalModel(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/90 text-sm focus:outline-none focus:border-white/30"
-                            >
-                                <option value="">请选择模型</option>
-                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                        ) : (
-                            <input
-                                value={localModel}
-                                onChange={e => setLocalModel(e.target.value)}
-                                placeholder="gpt-4o-mini"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/90 text-sm placeholder-white/20 focus:outline-none focus:border-white/30 focus:bg-white/8 transition-colors"
-                            />
+                        <input
+                            value={localModel}
+                            onChange={e => setLocalModel(e.target.value)}
+                            placeholder="手动输入模型名称..."
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/90 text-sm placeholder-white/20 focus:outline-none focus:border-white/30 focus:bg-white/8 transition-colors"
+                        />
+                        {availableModels.length > 0 && (
+                            <div className="mt-2 max-h-32 overflow-y-auto no-scrollbar bg-white/5 border border-white/10 rounded-xl">
+                                {availableModels.map(m => (
+                                    <button
+                                        key={m}
+                                        onClick={() => setLocalModel(m)}
+                                        className={`w-full text-left px-4 py-2 text-xs transition-colors truncate ${m === localModel ? 'bg-white/15 text-white font-bold' : 'text-white/60 hover:bg-white/8 hover:text-white/80'}`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
 
