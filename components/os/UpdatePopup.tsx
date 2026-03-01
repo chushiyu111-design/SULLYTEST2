@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 const UPDATE_VERSION_KEY = 'sullyos_update_seen_version';
-export const CURRENT_VERSION = 'v2.5.0';
+export const CURRENT_VERSION = 'v2.5.1';
 
 const UPDATE_LOGS = [
     {
@@ -27,6 +27,10 @@ const UPDATE_LOGS = [
     {
         title: '✨ 系统体验升级',
         desc: '全新丝滑的 App 过渡动画与滑动解锁，触控震动反馈遍布全局。朋友圈支持自定义背景，大量界面交互细节与稳定性优化。'
+    },
+    {
+        title: '🔧 修复 iOS 端黑屏问题',
+        desc: '修复了部分 iOS 机型解锁后出现黑屏的问题，同时优化了摘星楼字体加载速度，大幅提升移动端体验。'
     }
 ];
 

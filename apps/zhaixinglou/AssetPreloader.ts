@@ -56,16 +56,16 @@ export function prefetchZhaixinglouAssets() {
 
     // Inject <link rel="preload"> hints for font files — now served locally from public/fonts/
     const fontUrls = [
-        '/fonts/zhaixinglou-title.ttf',  // ZhaixinglouTitle (~38KB)
-        '/fonts/zhaixinglou-body.ttf',   // ZhaixinglouFont (~76KB)
-        '/fonts/zhaixinglou-cn.ttf',     // ZhaixinglouCN (~14MB Chinese font)
+        '/fonts/zhaixinglou-title.woff2',  // ZhaixinglouTitle (~16KB)
+        '/fonts/zhaixinglou-body.woff2',   // ZhaixinglouFont (~31KB)
+        '/fonts/zhaixinglou-cn.woff2',     // ZhaixinglouCN (~1.1MB, subsetted)
     ];
     for (const url of fontUrls) {
         if (!document.querySelector(`link[href="${url}"]`)) {
             const link = document.createElement('link');
             link.rel = 'preload';
             link.as = 'font';
-            link.type = 'font/ttf';
+            link.type = 'font/woff2';
             link.href = url;
             link.crossOrigin = 'anonymous';
             document.head.appendChild(link);

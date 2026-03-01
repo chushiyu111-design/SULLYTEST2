@@ -10,7 +10,7 @@
 /* Fonts are bundled locally in public/fonts/ for fast loading (no external CDN) */
 @font-face {
     font-family: 'ZhaixinglouTitle';
-    src: url('/fonts/zhaixinglou-title.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-title.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -18,7 +18,7 @@
 
 @font-face {
     font-family: 'ZhaixinglouFont';
-    src: url('/fonts/zhaixinglou-body.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-body.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -26,7 +26,7 @@
 
 @font-face {
     font-family: 'ZhaixinglouCN';
-    src: url('/fonts/zhaixinglou-cn.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-cn.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
