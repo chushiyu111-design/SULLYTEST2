@@ -55,21 +55,24 @@ const ZhaixinglouApp: React.FC = () => {
     useTarotPreloader();
 
     // --- Progressive prefetch: preload sub-page chunks during user's natural interaction pauses ---
+    // NOTE: Safari/iOS does NOT support requestIdleCallback — use setTimeout fallback.
     useEffect(() => {
+        const rIC = window.requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1));
+        const cIC = window.cancelIdleCallback || window.clearTimeout;
         if (state.viewState === 'select') {
             // User is browsing the card carousel (2-3s) → prefetch the 2 most-used sub-pages
-            const id = requestIdleCallback(() => {
+            const id = rIC(() => {
                 import('./StarMirror');
                 import('./StarCalendar');
             });
-            return () => cancelIdleCallback(id);
+            return () => cIC(id);
         } else if (state.viewState === 'menu') {
             // User is viewing the menu → prefetch remaining sub-pages
-            const id = requestIdleCallback(() => {
+            const id = rIC(() => {
                 import('./StarOrbit');
                 import('./AkashicShadows');
             });
-            return () => cancelIdleCallback(id);
+            return () => cIC(id);
         }
     }, [state.viewState]);
 

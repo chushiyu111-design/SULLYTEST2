@@ -54,11 +54,11 @@ export function prefetchZhaixinglouAssets() {
     // Card back image (used in the card carousel first screen)
     preloadImage('https://i.postimg.cc/jS3qsYhB/MEITU-20260225-013328235.jpg');
 
-    // Inject <link rel="preload"> hints for font files — triggers early download
+    // Inject <link rel="preload"> hints for font files — now served locally from public/fonts/
     const fontUrls = [
-        'https://files.catbox.moe/87z9mp.ttf',  // ZhaixinglouTitle
-        'https://files.catbox.moe/klhpnz.ttf',  // ZhaixinglouFont
-        'https://files.catbox.moe/qkepro.ttf',   // ZhaixinglouCN
+        '/fonts/zhaixinglou-title.ttf',  // ZhaixinglouTitle (~38KB)
+        '/fonts/zhaixinglou-body.ttf',   // ZhaixinglouFont (~76KB)
+        '/fonts/zhaixinglou-cn.ttf',     // ZhaixinglouCN (~14MB Chinese font)
     ];
     for (const url of fontUrls) {
         if (!document.querySelector(`link[href="${url}"]`)) {

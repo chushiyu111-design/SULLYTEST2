@@ -285,15 +285,18 @@ const PhoneShell: React.FC = () => {
   // ── Idle Prefetch: Preload Zhaixinglou chunk + critical assets after unlock ──
   // This runs once when the user enters the Launcher, so the chunk is already
   // in browser cache by the time they tap the Zhaixinglou icon.
+  // NOTE: Safari/iOS does NOT support requestIdleCallback — use setTimeout fallback.
   useEffect(() => {
     if (isLocked) return;
-    const id = requestIdleCallback(() => {
+    const rIC = window.requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1));
+    const cIC = window.cancelIdleCallback || window.clearTimeout;
+    const id = rIC(() => {
       // Prefetch the ZhaixinglouApp JS chunk (download only, no mount)
       import('../apps/zhaixinglou/ZhaixinglouApp');
       // Prefetch critical first-screen assets (card back image + fonts)
       import('../apps/zhaixinglou/AssetPreloader').then(m => m.prefetchZhaixinglouAssets());
     }, { timeout: 4000 });
-    return () => cancelIdleCallback(id);
+    return () => cIC(id);
   }, [isLocked]);
 
   if (!isDataLoaded) {

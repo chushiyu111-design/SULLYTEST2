@@ -7,9 +7,10 @@
  */
 
 /* ━━━ Zhaixinglou Custom Font Faces ━━━ */
+/* Fonts are bundled locally in public/fonts/ for fast loading (no external CDN) */
 @font-face {
     font-family: 'ZhaixinglouTitle';
-    src: url('https://files.catbox.moe/87z9mp.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-title.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -17,7 +18,7 @@
 
 @font-face {
     font-family: 'ZhaixinglouFont';
-    src: url('https://files.catbox.moe/klhpnz.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-body.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -25,7 +26,7 @@
 
 @font-face {
     font-family: 'ZhaixinglouCN';
-    src: url('https://files.catbox.moe/qkepro.ttf') format('truetype');
+    src: url('/fonts/zhaixinglou-cn.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
