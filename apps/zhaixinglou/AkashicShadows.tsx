@@ -380,67 +380,69 @@ const AkashicShadows: React.FC<Props> = ({
                     }} />
 
                     {/* Oracle content area */}
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar px-5 py-5 flex flex-col justify-center">
-                        {assistantMessages.length === 0 && !isLoading && (
-                            <div className="flex items-center justify-center">
-                                <p className="text-[#c0c8d8]/25 text-xs tracking-[0.3em]" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>
-                                    ─ 深渊在凝视 ─
-                                </p>
-                            </div>
-                        )}
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar px-5 py-5 flex flex-col">
+                        <div style={{ margin: 'auto 0' }}>
+                            {assistantMessages.length === 0 && !isLoading && (
+                                <div className="flex items-center justify-center">
+                                    <p className="text-[#c0c8d8]/25 text-xs tracking-[0.3em]" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>
+                                        ─ 深渊在凝视 ─
+                                    </p>
+                                </div>
+                            )}
 
-                        {/* Previous assistant message dissolving away */}
-                        {fadingOutAssistant && (
-                            <div className="animate-[akashic-dissolve-up_1.2s_ease-out_forwards]">
-                                <p
-                                    className="text-[#d8dce8] text-[14px] leading-[2] tracking-wide"
-                                    style={{
-                                        fontFamily: 'ZhaixinglouCN, serif',
-                                        textShadow: '0 0 6px rgba(200,210,230,0.15), 0 1px 3px rgba(0,0,0,0.6)',
-                                    }}
-                                >
-                                    {fadingOutAssistant}
-                                </p>
-                            </div>
-                        )}
+                            {/* Previous assistant message dissolving away */}
+                            {fadingOutAssistant && (
+                                <div className="animate-[akashic-dissolve-up_1.2s_ease-out_forwards]">
+                                    <p
+                                        className="text-[#d8dce8] text-[14px] leading-[2] tracking-wide"
+                                        style={{
+                                            fontFamily: 'ZhaixinglouCN, serif',
+                                            textShadow: '0 0 6px rgba(200,210,230,0.15), 0 1px 3px rgba(0,0,0,0.6)',
+                                        }}
+                                    >
+                                        {fadingOutAssistant}
+                                    </p>
+                                </div>
+                            )}
 
-                        {/* Latest assistant message */}
-                        {assistantMessages.length > 0 && showLatestAssistant && (
-                            <div className="animate-[akashic-blur-in_2s_ease-out_both]" key={assistantMessages.length}>
-                                <p
-                                    className="text-[#d8dce8] text-[14px] leading-[2] tracking-wide"
-                                    style={{
-                                        fontFamily: 'ZhaixinglouCN, serif',
-                                        textShadow: '0 0 6px rgba(200,210,230,0.15), 0 1px 3px rgba(0,0,0,0.6)',
-                                    }}
-                                >
-                                    {assistantMessages[assistantMessages.length - 1].content}
-                                </p>
-                            </div>
-                        )}
+                            {/* Latest assistant message */}
+                            {assistantMessages.length > 0 && showLatestAssistant && (
+                                <div className="animate-[akashic-blur-in_2s_ease-out_both]" key={assistantMessages.length}>
+                                    <p
+                                        className="text-[#d8dce8] text-[14px] leading-[2] tracking-wide"
+                                        style={{
+                                            fontFamily: 'ZhaixinglouCN, serif',
+                                            textShadow: '0 0 6px rgba(200,210,230,0.15), 0 1px 3px rgba(0,0,0,0.6)',
+                                        }}
+                                    >
+                                        {assistantMessages[assistantMessages.length - 1].content}
+                                    </p>
+                                </div>
+                            )}
 
-                        {/* User message dissolve effect */}
-                        {dissolvingMessage && (
-                            <div className="mt-4 animate-[akashic-dissolve-up_2s_ease-out_forwards]">
-                                <p
-                                    className="text-[#e8ecf4]/50 text-[13px] leading-[1.9] tracking-wide text-right italic"
-                                    style={{
-                                        fontFamily: 'ZhaixinglouCN, serif',
-                                        textShadow: '0 0 8px rgba(232,236,244,0.3)',
-                                    }}
-                                >
-                                    {dissolvingMessage}
-                                </p>
-                            </div>
-                        )}
+                            {/* User message dissolve effect */}
+                            {dissolvingMessage && (
+                                <div className="mt-4 animate-[akashic-dissolve-up_2s_ease-out_forwards]">
+                                    <p
+                                        className="text-[#e8ecf4]/50 text-[13px] leading-[1.9] tracking-wide text-right italic"
+                                        style={{
+                                            fontFamily: 'ZhaixinglouCN, serif',
+                                            textShadow: '0 0 8px rgba(232,236,244,0.3)',
+                                        }}
+                                    >
+                                        {dissolvingMessage}
+                                    </p>
+                                </div>
+                            )}
 
-                        {/* Loading indicator */}
-                        {isLoading && (
-                            <div className="flex items-center justify-center gap-2">
-                                <span className="text-[#c0c8d8]/40 text-lg animate-pulse" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>✧</span>
-                                <span className="text-[#c0c8d8]/25 text-xs tracking-[0.3em]" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>深渊在回响</span>
-                            </div>
-                        )}
+                            {/* Loading indicator */}
+                            {isLoading && (
+                                <div className="flex items-center justify-center gap-2">
+                                    <span className="text-[#c0c8d8]/40 text-lg animate-pulse" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>✧</span>
+                                    <span className="text-[#c0c8d8]/25 text-xs tracking-[0.3em]" style={{ fontFamily: 'ZhaixinglouFont, serif' }}>深渊在回响</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Oracle panel bottom decorative line */}

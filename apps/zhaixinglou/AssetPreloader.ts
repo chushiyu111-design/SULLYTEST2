@@ -58,7 +58,7 @@ export function prefetchZhaixinglouAssets() {
     const fontUrls = [
         '/fonts/zhaixinglou-title.woff2',  // ZhaixinglouTitle (~16KB)
         '/fonts/zhaixinglou-body.woff2',   // ZhaixinglouFont (~31KB)
-        '/fonts/zhaixinglou-cn.woff2',     // ZhaixinglouCN (~1.1MB, subsetted)
+        '/fonts/zhaixinglou-cn.ttf',       // ZhaixinglouCN (full Chinese font)
     ];
     for (const url of fontUrls) {
         if (!document.querySelector(`link[href="${url}"]`)) {
