@@ -436,6 +436,7 @@ const BurnParticles: React.FC<BurnParticlesProps> = ({ active, onComplete }) => 
         // ── Cleanup function ──
         const cleanup = () => {
             cancelAnimationFrame(frameId);
+            renderer.forceContextLoss();
             renderer.dispose();
             dustGeom.dispose(); dustMat.dispose(); dustTexture.dispose();
             glowGeom.dispose(); glowMat.dispose(); glowTexture.dispose();

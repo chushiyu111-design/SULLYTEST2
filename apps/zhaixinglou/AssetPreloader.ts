@@ -65,7 +65,7 @@ export function prefetchZhaixinglouAssets() {
             const link = document.createElement('link');
             link.rel = 'preload';
             link.as = 'font';
-            link.type = 'font/woff2';
+            link.type = url.endsWith('.woff2') ? 'font/woff2' : 'font/ttf';
             link.href = url;
             link.crossOrigin = 'anonymous';
             document.head.appendChild(link);

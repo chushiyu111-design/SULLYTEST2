@@ -78,6 +78,14 @@ const ZhaixinglouApp: React.FC = () => {
 
     const isApiConfigured = !!(state.secondaryApiConfig.baseUrl && state.secondaryApiConfig.apiKey && state.secondaryApiConfig.model);
 
+    // Track flip animation timers for cleanup
+    const flipTimersRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
+    // Cleanup flip timers on unmount
+    useEffect(() => {
+        return () => { flipTimersRef.current.forEach(clearTimeout); };
+    }, []);
+
     // --- Card Selection Handler: Full 4-phase flip ---
     // Phase 1: front → back (1000ms CSS transition)
     // Phase 2: hold on back (600ms pause to show tarot art)
@@ -89,16 +97,20 @@ const ZhaixinglouApp: React.FC = () => {
         setFlippingCardId(flipId);
         setFlipPhase('toBack');
 
+        // Clear any previous timers
+        flipTimersRef.current.forEach(clearTimeout);
+        flipTimersRef.current = [];
+
         // Phase 2: Hold on back after flip completes
-        setTimeout(() => setFlipPhase('holdBack'), 1000);
+        flipTimersRef.current.push(setTimeout(() => setFlipPhase('holdBack'), 1000));
         // Phase 3: Flip back to front
-        setTimeout(() => setFlipPhase('toFront'), 1600);
+        flipTimersRef.current.push(setTimeout(() => setFlipPhase('toFront'), 1600));
         // Phase 4: Navigate after returning to front
-        setTimeout(() => {
+        flipTimersRef.current.push(setTimeout(() => {
             dispatch({ type: 'SELECT_CARD', card });
             setFlippingCardId(null);
             setFlipPhase('idle');
-        }, 2600);
+        }, 2600));
     }, [flippingCardId, dispatch]);
 
     const handleOpenSettings = useCallback(() => {

@@ -21,18 +21,20 @@ export async function fetchSecondaryApi(
 
     const url = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
+    const body: Record<string, any> = {
+        model: config.model,
+        messages,
+        temperature: options?.temperature ?? 0.9,
+    };
+    if (options?.max_tokens) body.max_tokens = options.max_tokens;
+
     const data = await safeFetchJson(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${config.apiKey}`,
         },
-        body: JSON.stringify({
-            model: config.model,
-            messages,
-            temperature: options?.temperature ?? 0.9,
-            max_tokens: options?.max_tokens ?? 2048,
-        }),
+        body: JSON.stringify(body),
     });
 
     return extractContent(data);

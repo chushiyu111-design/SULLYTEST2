@@ -17,15 +17,21 @@ import { TarotMode, buildTarotReadingPrompt, ReadingMode } from './divinationPro
 import { CharacterProfile } from '../../types';
 import MemoryDestinyModal from './MemoryDestinyModal';
 import ChatMessageBubble, { type MessageAction } from './components/ChatMessageBubble';
+import ShareCardModal, { type ShareContext } from './ShareCardModal';
+import { truncateMessages } from './chatUtils';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Types
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 interface ChatMessage {
+    id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
 }
+
+let _tarotMsgIdCounter = 0;
+const nextTarotMsgId = () => `tmsg-${Date.now()}-${++_tarotMsgIdCounter}`;
 
 /** 从 StarMirror 传入的单张牌信息 */
 export interface TarotDrawnCard {
@@ -71,6 +77,61 @@ const TarotReading: React.FC<TarotReadingProps> = ({
     const scrollRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<string>('');
     const [showModal, setShowModal] = useState(false);
+    const [shareVisible, setShareVisible] = useState(false);
+    const [shareContent, setShareContent] = useState('');
+    const [shareParagraphs, setShareParagraphs] = useState<string[]>([]);
+    // 多选模式
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+    const [selectedContents, setSelectedContents] = useState<Map<string, string>>(new Map());
+    const shareContext: ShareContext = {
+        source: 'tarot',
+        title: spreadNameEn,
+        subtitle: spreadName !== spreadNameEn ? spreadName : undefined,
+        date: new Date().toLocaleDateString('zh-CN'),
+    };
+
+    // 退出多选模式
+    const exitSelectionMode = useCallback(() => {
+        setIsSelectionMode(false);
+        setSelectedKeys(new Set());
+        setSelectedContents(new Map());
+    }, []);
+
+    // 切换某个段落的选中状态
+    const handleToggleSelect = useCallback((key: string, content: string) => {
+        setSelectedKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+        setSelectedContents(prev => {
+            const next = new Map(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.set(key, content);
+            }
+            return next;
+        });
+    }, []);
+
+    // 导出已选段落
+    const handleExportSelected = useCallback(() => {
+        // 按展示顺序排序：key 格式为 `${msgIdx}-${paraIdx}`
+        const sorted = [...selectedContents.entries()].sort((a, b) => {
+            const [ai, ap] = a[0].split('-').map(Number);
+            const [bi, bp] = b[0].split('-').map(Number);
+            return ai !== bi ? ai - bi : ap - bp;
+        });
+        setShareParagraphs(sorted.map(e => e[1]));
+        setShareVisible(true);
+    }, [selectedContents]);
+
 
     // ── Auto-scroll on new messages ──
     useEffect(() => {
@@ -107,15 +168,14 @@ const TarotReading: React.FC<TarotReadingProps> = ({
 
                 const reply = await fetchSecondaryApi(apiConfig, chatMessages, {
                     temperature: 0.85,
-                    max_tokens: 2048,
                 });
 
                 setMessages([
-                    { role: 'assistant', content: reply || '……牌面上的烛影摇曳不定，请再次叩问星镜。' },
+                    { id: nextTarotMsgId(), role: 'assistant', content: reply || '……牌面上的烛影摇曳不定，请再次叩问星镜。' },
                 ]);
             } catch (err: any) {
                 setMessages([
-                    { role: 'assistant', content: `⚠️ 星镜传讯受阻：${err.message}` },
+                    { id: nextTarotMsgId(), role: 'assistant', content: `⚠️ 星镜传讯受阻：${err.message}` },
                 ]);
             } finally {
                 setIsLoading(false);
@@ -131,29 +191,28 @@ const TarotReading: React.FC<TarotReadingProps> = ({
         const userMsg = input.trim();
         setInput('');
 
-        const newMessages = [...messages, { role: 'user' as const, content: userMsg }];
+        const newMessages = [...messages, { id: nextTarotMsgId(), role: 'user' as const, content: userMsg }];
         setMessages(newMessages);
         setIsLoading(true);
 
         try {
-            const chatMessages = [
+            const chatMessages = truncateMessages([
                 { role: 'system', content: systemPromptRef.current },
                 ...newMessages.map(m => ({ role: m.role, content: m.content })),
-            ];
+            ]);
 
             const reply = await fetchSecondaryApi(apiConfig, chatMessages, {
                 temperature: 0.85,
-                max_tokens: 1024,
             });
 
             setMessages(prev => [
                 ...prev,
-                { role: 'assistant', content: reply || '……（大祭司陷入了沉思）' },
+                { id: nextTarotMsgId(), role: 'assistant', content: reply || '……（大祭司陷入了沉思）' },
             ]);
         } catch (err: any) {
             setMessages(prev => [
                 ...prev,
-                { role: 'assistant', content: `⚠️ ${err.message}` },
+                { id: nextTarotMsgId(), role: 'assistant', content: `⚠️ ${err.message}` },
             ]);
         } finally {
             setIsLoading(false);
@@ -183,17 +242,16 @@ const TarotReading: React.FC<TarotReadingProps> = ({
     const regenerateFrom = useCallback(async (messagesUpTo: ChatMessage[]) => {
         setIsLoading(true);
         try {
-            const chatMessages = [
+            const chatMessages = truncateMessages([
                 { role: 'system', content: systemPromptRef.current },
                 ...messagesUpTo.map(m => ({ role: m.role, content: m.content })),
-            ];
+            ]);
             const reply = await fetchSecondaryApi(apiConfig, chatMessages, {
                 temperature: 0.85,
-                max_tokens: 1024,
             });
-            setMessages([...messagesUpTo, { role: 'assistant', content: reply || '……（大祭司陷入了沉思）' }]);
+            setMessages([...messagesUpTo, { id: nextTarotMsgId(), role: 'assistant', content: reply || '……（大祭司陷入了沉思）' }]);
         } catch (err: any) {
-            setMessages([...messagesUpTo, { role: 'assistant', content: `⚠️ ${err.message}` }]);
+            setMessages([...messagesUpTo, { id: nextTarotMsgId(), role: 'assistant', content: `⚠️ ${err.message}` }]);
         } finally {
             setIsLoading(false);
         }
@@ -235,6 +293,18 @@ const TarotReading: React.FC<TarotReadingProps> = ({
                 regenerateFrom(upTo);
             }
         }, [messages, regenerateFrom]),
+
+        onShare: useCallback((_index: number, paragraphContent: string) => {
+            setShareParagraphs([paragraphContent]);
+            setShareVisible(true);
+        }, []),
+
+        onEnterSelectMode: useCallback((paragraphKey: string, paragraphContent: string) => {
+            // 进入多选模式，预选该段落
+            setIsSelectionMode(true);
+            setSelectedKeys(new Set([paragraphKey]));
+            setSelectedContents(new Map([[paragraphKey, paragraphContent]]));
+        }, []),
     };
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -292,11 +362,14 @@ const TarotReading: React.FC<TarotReadingProps> = ({
                             {/* Chat messages */}
                             {messages.map((msg, i) => (
                                 <ChatMessageBubble
-                                    key={i}
+                                    key={msg.id}
                                     index={i}
                                     role={msg.role}
                                     content={msg.content}
                                     actions={messageActions}
+                                    isSelectionMode={isSelectionMode}
+                                    selectedKeys={selectedKeys}
+                                    onToggleSelect={handleToggleSelect}
                                 />
                             ))}
 
@@ -309,6 +382,26 @@ const TarotReading: React.FC<TarotReadingProps> = ({
                                 </div>
                             )}
                         </div>
+
+                        {/* 多选模式: 底部浮动操作栏 */}
+                        {isSelectionMode && (
+                            <div className="absolute bottom-0 left-0 right-0 z-50 px-4 py-3 flex items-center gap-3"
+                                style={{ background: 'linear-gradient(0deg, rgba(5,3,2,0.98) 0%, rgba(5,3,2,0.92) 100%)' }}>
+                                <button onClick={exitSelectionMode} className="text-xs text-white/40 px-3 py-2 rounded-xl border border-white/10 active:scale-95 transition-transform">
+                                    取消
+                                </button>
+                                <span className="flex-1 text-[11px] text-[#8c6b3e] text-center">
+                                    {selectedKeys.size > 0 ? `已选 ${selectedKeys.size} 段` : '轻触段落以选择'}
+                                </span>
+                                <button
+                                    onClick={handleExportSelected}
+                                    disabled={selectedKeys.size === 0}
+                                    className="text-xs text-[#d4af37] px-3 py-2 rounded-xl border border-[#d4af37]/40 bg-[#d4af37]/10 active:scale-95 transition-transform disabled:opacity-30"
+                                >
+                                    导出图片
+                                </button>
+                            </div>
+                        )}
 
                         {/* ═══ INPUT BAR ═══ */}
                         <div className="tarot-reading-input px-4 py-3 border-t border-[#d4af37]/10 bg-black/20 backdrop-blur-sm">
@@ -345,6 +438,13 @@ const TarotReading: React.FC<TarotReadingProps> = ({
                 characters={characters}
                 onClose={handleModalClose}
                 onBurn={handleBurn}
+            />
+            <ShareCardModal
+                visible={shareVisible}
+                onClose={() => { setShareVisible(false); setShareParagraphs([]); exitSelectionMode(); }}
+                paragraphs={shareParagraphs.length > 0 ? shareParagraphs : undefined}
+                content={shareParagraphs.length === 0 ? shareContent : undefined}
+                context={shareContext}
             />
         </>
     );

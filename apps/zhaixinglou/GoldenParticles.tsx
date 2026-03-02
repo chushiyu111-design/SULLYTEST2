@@ -287,6 +287,7 @@ const GoldenParticles: React.FC<{ paused?: boolean }> = ({ paused = false }) => 
         return () => {
             cancelAnimationFrame(frameRef.current);
             window.removeEventListener('resize', handleResize);
+            renderer.forceContextLoss();
             renderer.dispose();
             dustGeom.dispose(); dustMat.dispose(); dustTexture.dispose();
             glowGeom.dispose(); glowMat.dispose(); glowTexture.dispose();

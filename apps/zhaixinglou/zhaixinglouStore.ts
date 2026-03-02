@@ -93,7 +93,7 @@ function loadInitialState(): ZhaixinglouState {
     };
 }
 
-// --- Reducer ---
+// --- Reducer (PURE — no side effects) ---
 function reducer(state: ZhaixinglouState, action: Action): ZhaixinglouState {
     switch (action.type) {
         case 'SET_VIEW':
@@ -104,24 +104,19 @@ function reducer(state: ZhaixinglouState, action: Action): ZhaixinglouState {
             return { ...state, selectedCard: null, viewState: 'select', fateChatMessages: [] };
         case 'SET_SECONDARY_API': {
             const newConfig = { ...state.secondaryApiConfig, ...action.config };
-            localStorage.setItem(LS_API_CONFIG, JSON.stringify(newConfig));
             return { ...state, secondaryApiConfig: newConfig };
         }
         case 'SET_SECONDARY_PRESETS':
-            localStorage.setItem(LS_API_PRESETS, JSON.stringify(action.presets));
             return { ...state, secondaryApiPresets: action.presets };
         case 'ADD_SECONDARY_PRESET': {
             const newPresets = [...state.secondaryApiPresets, action.preset];
-            localStorage.setItem(LS_API_PRESETS, JSON.stringify(newPresets));
             return { ...state, secondaryApiPresets: newPresets };
         }
         case 'REMOVE_SECONDARY_PRESET': {
             const filtered = state.secondaryApiPresets.filter(p => p.id !== action.id);
-            localStorage.setItem(LS_API_PRESETS, JSON.stringify(filtered));
             return { ...state, secondaryApiPresets: filtered };
         }
         case 'SET_SECONDARY_MODELS':
-            localStorage.setItem(LS_API_MODELS, JSON.stringify(action.models));
             return { ...state, secondaryAvailableModels: action.models };
         case 'ADD_FATE_MESSAGE':
             return { ...state, fateChatMessages: [...state.fateChatMessages, action.message] };
@@ -143,6 +138,19 @@ function reducer(state: ZhaixinglouState, action: Action): ZhaixinglouState {
 // --- Hook ---
 export function useZhaixinglouStore() {
     const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
+
+    // --- Sync state → localStorage (side effects outside reducer) ---
+    useEffect(() => {
+        try { localStorage.setItem(LS_API_CONFIG, JSON.stringify(state.secondaryApiConfig)); } catch { }
+    }, [state.secondaryApiConfig]);
+
+    useEffect(() => {
+        try { localStorage.setItem(LS_API_PRESETS, JSON.stringify(state.secondaryApiPresets)); } catch { }
+    }, [state.secondaryApiPresets]);
+
+    useEffect(() => {
+        try { localStorage.setItem(LS_API_MODELS, JSON.stringify(state.secondaryAvailableModels)); } catch { }
+    }, [state.secondaryAvailableModels]);
 
     const goBack = useCallback(() => {
         switch (state.viewState) {

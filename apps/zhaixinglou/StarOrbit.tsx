@@ -132,6 +132,12 @@ const StarOrbit: React.FC<Props> = ({ onBack, selectedCard, userName, userProfil
         const lat = mode === 'char' ? parseFloat(charLat) || 0 : parseFloat(userLat) || 0;
         const lon = mode === 'char' ? parseFloat(charLon) || 0 : parseFloat(userLon) || 0;
 
+        // 经纬度范围校验
+        if ((lat !== 0 || lon !== 0) && (lat < -90 || lat > 90 || lon < -180 || lon > 180)) {
+            alert('经纬度格式有误：纬度范围 -90~90，经度范围 -180~180');
+            return;
+        }
+
         try {
             setChart(null);
             setChartVisible(false);
@@ -170,6 +176,16 @@ const StarOrbit: React.FC<Props> = ({ onBack, selectedCard, userName, userProfil
         const lonA = parseFloat(userLon) || 0;
         const latB = parseFloat(charLat) || 0;
         const lonB = parseFloat(charLon) || 0;
+
+        // 经纬度范围校验
+        if ((latA !== 0 || lonA !== 0) && (latA < -90 || latA > 90 || lonA < -180 || lonA > 180)) {
+            alert('我方经纬度格式有误：纬度范围 -90~90，经度范围 -180~180');
+            return;
+        }
+        if ((latB !== 0 || lonB !== 0) && (latB < -90 || latB > 90 || lonB < -180 || lonB > 180)) {
+            alert('对方经纬度格式有误：纬度范围 -90~90，经度范围 -180~180');
+            return;
+        }
 
         try {
             setSynastryResult(null);
