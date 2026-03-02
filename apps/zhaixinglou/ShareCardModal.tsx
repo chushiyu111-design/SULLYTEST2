@@ -21,7 +21,7 @@ interface ShareCardModalProps {
     context: ShareContext;
 }
 
-const G = '255,215,80';
+const G = '255,235,160';
 const S = '232,236,244';   // cold silver for akashic
 
 const SOURCE_LABELS: Record<ShareContext['source'], { icon: string; label: string }> = {
@@ -405,18 +405,25 @@ const GoldCard: React.FC<{
             ref={cardRef as React.RefObject<HTMLDivElement>}
             style={{
                 position: 'relative',
+                overflow: 'hidden',
                 background: `
-                    radial-gradient(ellipse at 30% 20%, rgba(80,15,25,0.6) 0%, transparent 50%),
-                    radial-gradient(ellipse at 70% 80%, rgba(60,10,20,0.5) 0%, transparent 50%),
-                    radial-gradient(ellipse at 50% 50%, rgba(45,8,18,0.4) 0%, transparent 70%),
-                    linear-gradient(165deg, #3a0a15 0%, #2a0812 30%, #1e0610 60%, #150408 100%)
+                    radial-gradient(ellipse at 25% 15%, rgba(70,12,22,0.65) 0%, transparent 45%),
+                    radial-gradient(ellipse at 75% 85%, rgba(55,8,18,0.55) 0%, transparent 45%),
+                    radial-gradient(ellipse at 50% 50%, rgba(40,6,15,0.45) 0%, transparent 65%),
+                    radial-gradient(ellipse at 80% 30%, rgba(50,10,20,0.3) 0%, transparent 50%),
+                    linear-gradient(165deg, #2e0810 0%, #220610 25%, #1a050c 55%, #100308 100%)
                 `,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.3)',
             }}
         >
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`, backgroundSize: '128px 128px', opacity: 0.6, pointerEvents: 'none', mixBlendMode: 'overlay' }} />
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', backgroundImage: `radial-gradient(1px 1px at 15% 25%, rgba(${G},0.5) 0%, transparent 100%), radial-gradient(1px 1px at 85% 15%, rgba(${G},0.4) 0%, transparent 100%), radial-gradient(1px 1px at 45% 75%, rgba(${G},0.6) 0%, transparent 100%), radial-gradient(1px 1px at 70% 55%, rgba(${G},0.3) 0%, transparent 100%), radial-gradient(1px 1px at 25% 90%, rgba(${G},0.4) 0%, transparent 100%), radial-gradient(1px 1px at 90% 70%, rgba(${G},0.5) 0%, transparent 100%)`, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: 'radial-gradient(ellipse at center, transparent 40%, rgba(10,2,5,0.4) 100%)', pointerEvents: 'none' }} />
+            {/* Primary noise texture — coarse grain */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E")`, backgroundSize: '128px 128px', opacity: 0.55, pointerEvents: 'none', mixBlendMode: 'overlay' }} />
+            {/* Secondary noise texture — fine grain for matte feel */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.03'/%3E%3C/svg%3E")`, backgroundSize: '96px 96px', opacity: 0.4, pointerEvents: 'none', mixBlendMode: 'soft-light' }} />
+            {/* Star dust — warm gold specks */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', backgroundImage: `radial-gradient(1px 1px at 15% 25%, rgba(${G},0.45) 0%, transparent 100%), radial-gradient(1px 1px at 85% 15%, rgba(${G},0.35) 0%, transparent 100%), radial-gradient(1px 1px at 45% 75%, rgba(${G},0.50) 0%, transparent 100%), radial-gradient(1px 1px at 70% 55%, rgba(${G},0.28) 0%, transparent 100%), radial-gradient(1px 1px at 25% 90%, rgba(${G},0.38) 0%, transparent 100%), radial-gradient(1px 1px at 90% 70%, rgba(${G},0.42) 0%, transparent 100%), radial-gradient(1px 1px at 55% 12%, rgba(${G},0.32) 0%, transparent 100%), radial-gradient(1px 1px at 35% 45%, rgba(${G},0.25) 0%, transparent 100%)`, pointerEvents: 'none' }} />
+            {/* Vignette — deeper edges for depth */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: 'radial-gradient(ellipse at center, transparent 30%, rgba(8,2,4,0.50) 100%)', pointerEvents: 'none' }} />
             <img src="/images/sun-wheel.png" alt="" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '75%', maxWidth: '300px', opacity: 0.05, pointerEvents: 'none', userSelect: 'none' }} />
             <img src="/images/corner-a.png" alt="" style={{ position: 'absolute', bottom: 0, right: 0, width: '140px', height: 'auto', opacity: 0.55, pointerEvents: 'none', userSelect: 'none' }} />
             <img src="/images/corner-a.png" alt="" style={{ position: 'absolute', top: 0, left: 0, width: '140px', height: 'auto', opacity: 0.55, pointerEvents: 'none', userSelect: 'none', transform: 'scale(-1,-1)' }} />
