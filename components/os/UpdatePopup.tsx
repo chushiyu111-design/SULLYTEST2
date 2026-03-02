@@ -1,37 +1,33 @@
 import React, { useState, useEffect } from 'react';
 
 const UPDATE_VERSION_KEY = 'sullyos_update_seen_version';
-export const CURRENT_VERSION = 'v2.5.1';
+export const CURRENT_VERSION = 'v2.6.0-beta';
 
 const UPDATE_LOGS = [
     {
-        title: '🔮 星镜 · 塔罗占卜',
-        desc: '内置完整韦特塔罗 78 张牌库，支持多种经典牌阵（时间之流、凯尔特十字等）。选牌后由大祭司 AI 进行深度解读，可持续对话追问。'
+        title: '🃏 星镜 · 塔罗占卜',
+        desc: '内置完整韦特塔罗 78 张牌库，支持多种经典牌阵（时间之流、凯尔特十字等）。选牌后由大祭司进行深度解读，可持续对话追问。'
     },
     {
         title: '🪐 星轨 · 星盘解读',
-        desc: '输入出生信息即可生成个人本命星盘（SVG 高精度渲染）。支持角色星盘查看与双人合盘，AI 占星师为你解读行星相位与宫位意义。'
+        desc: '输入出生信息即可生成个人本命星盘。支持角色星盘查看与双人合盘，命运之神为你解读行星相位与宫位意义。'
     },
     {
         title: '🌙 星历 · 天象仪表盘',
         desc: '实时宇宙天气：月相可视化、行星运行状态、当日天象事件一览。特殊天象（满月/新月/逆行等）自动触发专属塔罗牌阵。'
     },
     {
-        title: '👁️ 阿卡西之影',
-        desc: '沉浸式视觉小说风格的旧神对话。通过灰烬文字的仪式进入，以角色或自身视角向天王星神谕问答，探索命运深渊。'
+        title: '👁 阿卡西之影',
+        desc: '旧神对话。通过灰烬文字的仪式进入，以角色或自身视角向天王星神谕问答，探索命运深渊。'
     },
     {
         title: '📜 星痕铭刻 & 天机焚卷',
-        desc: '每次占卜结束可选择：铭刻记忆（AI 总结注入角色聊天记录），或天机焚卷（金色粒子焚毁特效，阅后即焚不留痕迹）。'
+        desc: '每次占卜结束可选择：铭刻记忆，或天机焚卷（天机不可泄露，阅后即焚不留痕迹）。'
     },
     {
         title: '✨ 系统体验升级',
         desc: '全新丝滑的 App 过渡动画与滑动解锁，触控震动反馈遍布全局。朋友圈支持自定义背景，大量界面交互细节与稳定性优化。'
     },
-    {
-        title: '🔧 修复 iOS 端黑屏问题',
-        desc: '修复了部分 iOS 机型解锁后出现黑屏的问题，同时优化了摘星楼字体加载速度，大幅提升移动端体验。'
-    }
 ];
 
 interface UpdatePopupProps {
@@ -70,9 +66,12 @@ const UpdatePopup: React.FC<UpdatePopupProps> = ({ canShow }) => {
             <div className="relative w-full max-w-sm bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white/30 overflow-hidden animate-slide-up">
                 {/* Header */}
                 <div className="pt-7 pb-4 px-6 text-center">
-                    <div className="text-4xl mb-3 animate-bounce">🎊</div>
-                    <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">发现新版本 {CURRENT_VERSION}</h2>
-                    <p className="text-[12px] text-slate-400 mt-1 font-medium">SullyOS Update Changelog</p>
+                    <div className="text-4xl mb-3 animate-bounce">🧪</div>
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">内测版 {CURRENT_VERSION}</h2>
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full tracking-wider">BETA</span>
+                    </div>
+                    <p className="text-[12px] text-slate-400 mt-1 font-medium">SullyOS 内测更新日志 · 仅限测试</p>
                 </div>
 
                 {/* Content */}
