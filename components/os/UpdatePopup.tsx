@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 const UPDATE_VERSION_KEY = 'sullyos_update_seen_version';
-export const CURRENT_VERSION = 'v2.6.0-beta';
+export const CURRENT_VERSION = 'v2.6.0';
 
 const UPDATE_LOGS = [
     {
@@ -66,12 +66,11 @@ const UpdatePopup: React.FC<UpdatePopupProps> = ({ canShow }) => {
             <div className="relative w-full max-w-sm bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white/30 overflow-hidden animate-slide-up">
                 {/* Header */}
                 <div className="pt-7 pb-4 px-6 text-center">
-                    <div className="text-4xl mb-3 animate-bounce">🧪</div>
+                    <div className="text-4xl mb-3 animate-bounce">🎊</div>
                     <div className="flex items-center justify-center gap-2 mb-1">
-                        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">内测版 {CURRENT_VERSION}</h2>
-                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full tracking-wider">BETA</span>
+                        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">发现新版本 {CURRENT_VERSION}</h2>
                     </div>
-                    <p className="text-[12px] text-slate-400 mt-1 font-medium">SullyOS 内测更新日志 · 仅限测试</p>
+                    <p className="text-[12px] text-slate-400 mt-1 font-medium">SullyOS 更新日志</p>
                 </div>
 
                 {/* Content */}
