@@ -7,8 +7,8 @@
  * 3. shareOrDownload: 系统分享 → fallback 下载
  *
  * ⚠️ html2canvas v1.4.1 不支持 oklch() / oklab() 色彩函数。
- * Tailwind CSS v4 在 <style> 标签中大量使用这两种函数。
- * 解决方案：在 onclone 阶段对克隆文档的所有 <style> 内容做正则替换。
+ * Tailwind CSS v4 使用这些函数。开发环境下 CSS 以 <style> 标签形式存在，
+ * 生产构建下 CSS 被打包为外部 <link> 文件。两种情况都需要处理。
  */
 import html2canvas from 'html2canvas';
 
@@ -27,18 +27,43 @@ export function splitParagraphs(content: string): string[] {
 /**
  * 在克隆的 DOM 中替换所有 oklch() / oklab() / color-mix() 等
  * html2canvas 不支持的现代 CSS 色彩函数为安全的回退值。
+ *
+ * ⚠️ 生产构建下 Vite 将 CSS 打包为外部 <link> 文件，
+ *    必须 fetch 该文件后替换再以 <style> 标签注入，
+ *    否则 html2canvas 在生产环境中会因解析 oklch 而崩溃。
  */
-function sanitizeModernColors(clonedDoc: Document) {
-    // 每次调用都新建正则实例，避免 g 标志共享 lastIndex 导致的跳过匹配 bug
+async function sanitizeModernColors(clonedDoc: Document): Promise<void> {
     const makeFnRegex = () =>
         /(?:oklch|oklab|color-mix|lch|lab|color)\([^()]*(?:\([^()]*\)[^()]*)*\)/g;
 
+    // 1. 处理 <style> 内联标签（开发环境）
     clonedDoc.querySelectorAll('style').forEach(styleEl => {
         if (styleEl.textContent) {
             styleEl.textContent = styleEl.textContent.replace(makeFnRegex(), 'transparent');
         }
     });
 
+    // 2. 处理外部 <link rel="stylesheet">（生产构建）
+    //    fetch 文件内容 → 替换 oklch → 转为 <style> 标签注入
+    const linkEls = Array.from(
+        clonedDoc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
+    );
+    await Promise.all(linkEls.map(async linkEl => {
+        const href = linkEl.href;
+        if (!href) return;
+        try {
+            const res = await fetch(href);
+            let css = await res.text();
+            css = css.replace(makeFnRegex(), 'transparent');
+            const styleEl = clonedDoc.createElement('style');
+            styleEl.textContent = css;
+            linkEl.parentNode?.replaceChild(styleEl, linkEl);
+        } catch {
+            // 跨域 / 网络错误：跳过该文件
+        }
+    }));
+
+    // 3. 处理 inline style 属性
     clonedDoc.querySelectorAll('[style]').forEach(el => {
         const styleAttr = el.getAttribute('style');
         if (styleAttr) {
@@ -69,8 +94,8 @@ export async function exportShareCard(cardElement: HTMLElement): Promise<Blob> {
         scrollY: -window.scrollY,
         windowWidth: document.documentElement.scrollWidth,
         windowHeight: Math.max(elH + Math.abs(rect.top) + 200, document.documentElement.scrollHeight),
-        onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
-            sanitizeModernColors(clonedDoc);
+        onclone: async (clonedDoc: Document, clonedEl: HTMLElement) => {
+            await sanitizeModernColors(clonedDoc);
             clonedEl.style.boxShadow = 'none';
             clonedEl.style.border = 'none';
         },
