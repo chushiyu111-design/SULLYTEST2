@@ -3,7 +3,7 @@
  *   - Gold (tarot / chart): dark red + bright gold
  *   - Akashic: deep-abyss dark blue/black + cold silver with Latin letter borders
  */
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { exportShareCard, shareOrDownload } from './shareUtils';
 
 export interface ShareContext {
@@ -522,17 +522,68 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({
     visible, onClose, content, paragraphs, context,
 }) => {
     const cardRef = useRef<HTMLDivElement>(null);
+    const [cachedBlob, setCachedBlob] = useState<Blob | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // ── 弹窗打开后自动在后台预生成截图 ──
+    useEffect(() => {
+        if (!visible) {
+            // 弹窗关闭时清理
+            setCachedBlob(null);
+            setIsGenerating(false);
+            return;
+        }
+
+        // 等一帧让卡片 DOM 渲染完成，再截图
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (!cardRef.current || cancelled) return;
+            setIsGenerating(true);
+            try {
+                const blob = await exportShareCard(cardRef.current);
+                if (!cancelled) setCachedBlob(blob);
+            } catch (err) {
+                console.error('[ShareCard] 预生成截图失败:', err);
+            } finally {
+                if (!cancelled) setIsGenerating(false);
+            }
+        }, 300); // 300ms 让 DOM + 字体渲染完毕
+
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [visible]);
+
     if (!visible) return null;
+
     const { title, subtitle, date, source } = context;
     const { label } = SOURCE_LABELS[source];
     const paragraphList: string[] = paragraphs && paragraphs.length > 0
         ? paragraphs
         : (content ? content.split(/\n+/).filter(p => p.trim()) : []);
+
+    // ── 用户点击"保存图片"——blob 已就绪，立即分享 ──
     const handleExport = async () => {
-        if (!cardRef.current) return;
-        const blob = await exportShareCard(cardRef.current);
+        // 如果 blob 还没生成好，现场生成（兜底）
+        let blob = cachedBlob;
+        if (!blob) {
+            if (!cardRef.current) return;
+            setIsGenerating(true);
+            try {
+                blob = await exportShareCard(cardRef.current);
+                setCachedBlob(blob);
+            } catch (err) {
+                console.error('[ShareCard] 截图失败:', err);
+                return;
+            } finally {
+                setIsGenerating(false);
+            }
+        }
+
         const filename = `zhaixinglou-${new Date().toISOString().slice(0, 10)}.png`;
-        await shareOrDownload(blob, filename);
+        try {
+            await shareOrDownload(blob, filename);
+        } catch (err) {
+            console.error('[ShareCard] 分享失败:', err);
+        }
     };
 
     const isAkashic = source === 'akashic';
@@ -567,7 +618,18 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({
 
                 <div className="flex gap-3 px-1">
                     <button onClick={onClose} className="flex-1 py-3 border border-white/15 rounded-xl text-white/50 text-sm active:scale-95 transition-transform">取消</button>
-                    <button onClick={handleExport} className="flex-2 flex-grow-[2] py-3 rounded-xl text-sm font-bold active:scale-95 transition-transform" style={{ background: `linear-gradient(135deg, rgba(${accentColor},0.25), rgba(${accentColor},0.15))`, border: `1px solid rgba(${accentColor},0.4)`, color: `rgba(${accentColor},0.9)` }}>保存图片</button>
+                    <button
+                        onClick={handleExport}
+                        disabled={isGenerating}
+                        className="flex-2 flex-grow-[2] py-3 rounded-xl text-sm font-bold active:scale-95 transition-transform disabled:opacity-50"
+                        style={{
+                            background: `linear-gradient(135deg, rgba(${accentColor},0.25), rgba(${accentColor},0.15))`,
+                            border: `1px solid rgba(${accentColor},0.4)`,
+                            color: `rgba(${accentColor},0.9)`,
+                        }}
+                    >
+                        {isGenerating ? '生成中...' : '保存图片'}
+                    </button>
                 </div>
             </div>
         </div>

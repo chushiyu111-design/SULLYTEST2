@@ -27,42 +27,32 @@ export function splitParagraphs(content: string): string[] {
 /**
  * 在克隆的 DOM 中替换所有 oklch() / oklab() / color-mix() 等
  * html2canvas 不支持的现代 CSS 色彩函数为安全的回退值。
- *
- * 策略：
- * 1. 遍历所有 <style> 标签 → 正则替换文本内容
- * 2. 遍历所有元素的 inline style → 正则替换
- * 3. 这样从源头上消除 html2canvas 的解析错误
  */
 function sanitizeModernColors(clonedDoc: Document) {
-    // 匹配 oklch(...), oklab(...), color-mix(...), lch(...), lab(...), 
-    // color(...) 等 html2canvas 不支持的色彩函数
-    // 注意：括号嵌套处理——匹配最外层括号对
-    const COLOR_FN_REGEX = /(?:oklch|oklab|color-mix|lch|lab|color)\([^()]*(?:\([^()]*\)[^()]*)*\)/g;
+    // 每次调用都新建正则实例，避免 g 标志共享 lastIndex 导致的跳过匹配 bug
+    const makeFnRegex = () =>
+        /(?:oklch|oklab|color-mix|lch|lab|color)\([^()]*(?:\([^()]*\)[^()]*)*\)/g;
 
-    // 1. 替换所有 <style> 标签中的内容
     clonedDoc.querySelectorAll('style').forEach(styleEl => {
-        if (styleEl.textContent && COLOR_FN_REGEX.test(styleEl.textContent)) {
-            styleEl.textContent = styleEl.textContent.replace(COLOR_FN_REGEX, 'transparent');
+        if (styleEl.textContent) {
+            styleEl.textContent = styleEl.textContent.replace(makeFnRegex(), 'transparent');
         }
-        // 重置 lastIndex（全局正则）
-        COLOR_FN_REGEX.lastIndex = 0;
     });
 
-    // 2. 替换所有元素的 inline style 属性
     clonedDoc.querySelectorAll('[style]').forEach(el => {
         const styleAttr = el.getAttribute('style');
-        if (styleAttr && COLOR_FN_REGEX.test(styleAttr)) {
-            el.setAttribute('style', styleAttr.replace(COLOR_FN_REGEX, 'transparent'));
+        if (styleAttr) {
+            el.setAttribute('style', styleAttr.replace(makeFnRegex(), 'transparent'));
         }
-        COLOR_FN_REGEX.lastIndex = 0;
     });
 }
 
 // ─── 分享卡片导出 ───
 
 export async function exportShareCard(cardElement: HTMLElement): Promise<Blob> {
-    // 等待所有自定义字体就绪
     await document.fonts.ready;
+    // 等一帧让布局稳定（getBoundingClientRect 准确）
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 100)));
 
     const elW = cardElement.scrollWidth;
     const elH = cardElement.scrollHeight;
@@ -70,25 +60,17 @@ export async function exportShareCard(cardElement: HTMLElement): Promise<Blob> {
 
     const canvas = await html2canvas(cardElement, {
         useCORS: true,
-        allowTaint: true,
-        scale: Math.max(window.devicePixelRatio || 2, 2),
+        scale: Math.max(window.devicePixelRatio || 3, 3),
         logging: false,
         backgroundColor: null,
-        // ⚠️ 关键修复：显式传入元素完整尺寸，防止 html2canvas 按视口高度分段截取
-        // 分段截取时每段会重新绘制背景渐变，导致导出图出现"两截色"断层
         width: elW,
         height: elH,
-        // 修正滚动偏移，确保从元素实际位置开始捕获
         scrollX: -window.scrollX,
         scrollY: -window.scrollY,
-        // 将虚拟窗口高度设为元素高度，确保单次完整捕获
         windowWidth: document.documentElement.scrollWidth,
         windowHeight: Math.max(elH + Math.abs(rect.top) + 200, document.documentElement.scrollHeight),
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
-            // 在 html2canvas 解析之前清洗掉所有不支持的色彩函数
             sanitizeModernColors(clonedDoc);
-            // ⚠️ 消除边缘色差：移除 boxShadow 和 border
-            // boxShadow 会在元素外部渲染光晕，与卡片背景色叠加后产生色差边框
             clonedEl.style.boxShadow = 'none';
             clonedEl.style.border = 'none';
         },
@@ -104,35 +86,45 @@ export async function exportShareCard(cardElement: HTMLElement): Promise<Blob> {
 
 // ─── 分享 / 下载 ───
 
+/**
+ * 保存或分享已生成的图片 Blob。
+ *
+ * ⚠️ 调用者必须确保在用户手势（click）处理期间**立即**调用此函数，
+ * 不要在调用前做任何 await（html2canvas 等慢操作）。
+ * 否则 navigator.share() 会因 User Activation 超时被浏览器拒绝。
+ *
+ * 优先级：navigator.share → window.open → <a download>
+ */
 export async function shareOrDownload(blob: Blob, filename: string): Promise<void> {
-    // 1. 优先尝试系统原生分享
-    try {
-        if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    // 1. navigator.share — 最佳体验
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        try {
             const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file] });
                 return;
             }
+        } catch (err: any) {
+            // AbortError = 用户主动取消，直接返回
+            if (err?.name === 'AbortError') return;
+            // NotAllowedError / 其他 = activation 过期等，走 fallback
         }
-    } catch {
-        // 用户取消或 API 不可用
     }
 
-    // 2. fallback：使用 Blob URL 触发下载
+    // 2. window.open — 移动端可长按保存（已验证有效）
     const url = URL.createObjectURL(blob);
-    try {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 1000);
-    } catch {
-        URL.revokeObjectURL(url);
-        throw new Error('下载失败');
+    const w = window.open(url, '_blank');
+    if (w) {
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return;
     }
+
+    // 3. <a download> — 最终兜底（桌面端有效）
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
