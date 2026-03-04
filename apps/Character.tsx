@@ -14,6 +14,7 @@ import ImpressionPanel from '../components/character/ImpressionPanel';
 import MemoryArchivist from '../components/character/MemoryArchivist';
 import { safeResponseJson } from '../utils/safeApi';
 
+
 const CharacterCard: React.FC<{
     char: CharacterProfile;
     onClick: () => void;
@@ -457,6 +458,8 @@ const Character: React.FC = () => {
                 addToast(`后台任务完成：为 ${formData.name} 生成了 ${newMemories.length} 条记忆`, 'success');
             }
 
+
+
         } catch (e: any) {
             setBatchProgress(`Error: ${e.message}`);
             setIsBatchProcessing(false);
@@ -612,6 +615,8 @@ ${isInitialGeneration ? `
                 updateCharacter(targetId, { impression: parsed });
                 addToast('后台任务完成：印象已更新到原角色', 'success');
             }
+
+
 
         } catch (e: any) {
             console.error(e);

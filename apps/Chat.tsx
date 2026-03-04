@@ -74,9 +74,20 @@ const Chat: React.FC = () => {
     // Which messages are currently showing "译" version (toggle state only, no API calls)
     const [showingTargetIds, setShowingTargetIds] = useState<Set<number>>(new Set());
 
+    // --- Timestamp State (per-character, theme can force-enable) ---
+    const [showTimestampSetting, setShowTimestampSetting] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(`chat_show_timestamp_${activeCharacterId}`) || 'false'); } catch { return false; }
+    });
+
     const char = characters.find(c => c.id === activeCharacterId) || characters[0];
     const currentThemeId = char?.bubbleStyle || 'default';
     const activeTheme = useMemo(() => customThemes.find(t => t.id === currentThemeId) || PRESET_THEMES[currentThemeId] || PRESET_THEMES.default, [currentThemeId, customThemes]);
+
+    // Timestamp: theme can force-enable (e.g. WeChat), otherwise per-character user setting
+    const isTimestampForced = !!activeTheme.showTimestamp;
+    const effectiveShowTimestamp = isTimestampForced || showTimestampSetting;
+    const timestampInterval = activeTheme.timestampIntervalMs ?? 180000; // default 3 minutes
+
     const draftKey = `chat_draft_${activeCharacterId}`;
 
     // Filter categories and emojis by active character's visibility (used for both AI prompt and UI)
@@ -179,6 +190,10 @@ const Chat: React.FC = () => {
             setSelectionMode(false);
             setSelectedMsgIds(new Set());
             setShowingTargetIds(new Set());
+            // Per-character timestamp toggle
+            try {
+                setShowTimestampSetting(JSON.parse(localStorage.getItem(`chat_show_timestamp_${activeCharacterId}`) || 'false'));
+            } catch { setShowTimestampSetting(false); }
         }
     }, [activeCharacterId, reloadMessages]);
 
@@ -861,6 +876,14 @@ const Chat: React.FC = () => {
                 onSetTranslateLang={(lang: string) => { setTranslateTargetLang(lang); localStorage.setItem('chat_translate_lang', lang); setShowingTargetIds(new Set()); }}
                 xhsEnabled={!!char.xhsEnabled}
                 onToggleXhs={() => updateCharacter(char.id, { xhsEnabled: !char.xhsEnabled })}
+                showTimestampSetting={isTimestampForced || showTimestampSetting}
+                isTimestampForced={isTimestampForced}
+                onToggleTimestamp={() => {
+                    if (isTimestampForced) return;
+                    const next = !showTimestampSetting;
+                    setShowTimestampSetting(next);
+                    localStorage.setItem(`chat_show_timestamp_${activeCharacterId}`, JSON.stringify(next));
+                }}
             />
 
             <ChatHeader
@@ -892,6 +915,8 @@ const Chat: React.FC = () => {
                 {displayMessages.map((m, i) => {
                     const prevRole = i > 0 ? displayMessages[i - 1].role : null;
                     const nextRole = i < displayMessages.length - 1 ? displayMessages[i + 1].role : null;
+                    const prevMsg = i > 0 ? displayMessages[i - 1] : null;
+                    const showTs = effectiveShowTimestamp && (!prevMsg || (m.timestamp - prevMsg.timestamp) >= timestampInterval);
                     return (
                         <MessageItem
                             key={m.id || i}
@@ -910,6 +935,8 @@ const Chat: React.FC = () => {
                             isShowingTarget={showingTargetIds.has(m.id)}
                             onTranslateToggle={handleTranslateToggle}
                             onTransferAction={handleTransferAction}
+                            showTimestamp={showTs}
+                            timestampValue={m.timestamp}
                         />
                     );
                 })}

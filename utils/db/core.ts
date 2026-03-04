@@ -7,7 +7,7 @@ import {
 } from '../../types';
 
 const DB_NAME = 'AetherOS_Data';
-const DB_VERSION = 35; // Bumped for XHS Activities
+const DB_VERSION = 36; // Bumped for Letters (Spacetime Post Office)
 
 export const STORE_CHARACTERS = 'characters';
 export const STORE_MESSAGES = 'messages';
@@ -34,6 +34,7 @@ export const STORE_BANK_TX = 'bank_transactions';
 export const STORE_BANK_DATA = 'bank_data';
 export const STORE_XHS_STOCK = 'xhs_stock';
 export const STORE_XHS_ACTIVITIES = 'xhs_activities';
+export const STORE_LETTERS = 'letters';
 
 export interface ScheduledMessage {
     id: string;
@@ -140,6 +141,11 @@ export const openDB = (): Promise<IDBDatabase> => {
             if (!db.objectStoreNames.contains(STORE_XHS_ACTIVITIES)) {
                 const xhsActStore = db.createObjectStore(STORE_XHS_ACTIVITIES, { keyPath: 'id' });
                 xhsActStore.createIndex('characterId', 'characterId', { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains(STORE_LETTERS)) {
+                const letterStore = db.createObjectStore(STORE_LETTERS, { keyPath: 'id' });
+                letterStore.createIndex('charId', 'charId', { unique: false });
             }
         };
     });

@@ -75,6 +75,10 @@ interface ChatModalsProps {
     // XHS toggle
     xhsEnabled?: boolean;
     onToggleXhs?: () => void;
+    // Timestamp toggle
+    showTimestampSetting?: boolean;
+    isTimestampForced?: boolean;
+    onToggleTimestamp?: () => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -96,7 +100,8 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     onSetHistoryStart, onEnterSelectionMode, onReplyMessage, onEditMessageStart, onConfirmEditMessage, onDeleteMessage, onCopyMessage, onDeleteEmoji, onDeleteCategory,
     allCharacters = [], onSaveCategoryVisibility,
     translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang,
-    xhsEnabled, onToggleXhs
+    xhsEnabled, onToggleXhs,
+    showTimestampSetting, isTimestampForced, onToggleTimestamp
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
@@ -187,6 +192,22 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
                             开启后，将不再显示 Date/App 产生的上下文提示文本（转账、戳一戳、图片发送提示除外）。
+                        </p>
+                    </div>
+
+                    {/* Timestamp Toggle */}
+                    <div className="pt-2 border-t border-slate-100">
+                        <div className={`flex justify-between items-center ${isTimestampForced ? 'opacity-60' : 'cursor-pointer'}`} onClick={isTimestampForced ? undefined : onToggleTimestamp}>
+                            <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">消息时间戳</label>
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${showTimestampSetting ? 'bg-primary' : 'bg-slate-200'}`}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${showTimestampSetting ? 'translate-x-4' : ''}`}></div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                            {isTimestampForced
+                                ? '当前主题（微信）强制显示时间戳'
+                                : '开启后，消息间隔超过 3 分钟时显示时间戳分隔符'
+                            }
                         </p>
                     </div>
 

@@ -406,6 +406,14 @@ export async function importSystemData(
 
     await DB.importFullData(data);
 
+    // ── Write config to localStorage directly (NO React setState!) ──────
+    // All DB data is already written by importFullData above.
+    // After reload, initData() will read everything from DB.
+    // We only need localStorage writes for settings that are loaded from localStorage on boot.
+    // Triggering React setState here would cause cross-version import crashes
+    // (insertBefore error) because the UI re-renders with potentially incompatible data
+    // right before reload.
+
     if (data.theme) {
         const cleanTheme = { ...data.theme } as any;
         if (cleanTheme.wallpaper && cleanTheme.wallpaper.startsWith('data:')) { delete cleanTheme.wallpaper; }
@@ -416,12 +424,18 @@ export async function importSystemData(
             cleanTheme.launcherWidgets = Object.keys(cw).length > 0 ? cw : undefined;
         }
         if (cleanTheme.customFont && cleanTheme.customFont.startsWith('data:')) { delete cleanTheme.customFont; }
-        callbacks.updateTheme(cleanTheme);
+        if (cleanTheme.desktopDecorations) {
+            cleanTheme.desktopDecorations = cleanTheme.desktopDecorations.map((d: any) => ({
+                ...d,
+                content: (d.content && d.content.startsWith('data:') && d.type === 'image') ? '' : d.content
+            }));
+        }
+        localStorage.setItem('os_theme', JSON.stringify(cleanTheme));
     }
-    if (data.apiConfig) callbacks.updateApiConfig(data.apiConfig);
-    if (data.availableModels) callbacks.saveModels(data.availableModels);
-    if (data.apiPresets) callbacks.savePresets(data.apiPresets);
-    if (data.realtimeConfig) callbacks.updateRealtimeConfig(data.realtimeConfig);
+    if (data.apiConfig) localStorage.setItem('os_api_config', JSON.stringify(data.apiConfig));
+    if (data.availableModels) localStorage.setItem('os_available_models', JSON.stringify(data.availableModels));
+    if (data.apiPresets) localStorage.setItem('os_api_presets', JSON.stringify(data.apiPresets));
+    if (data.realtimeConfig) localStorage.setItem('os_realtime_config', JSON.stringify(data.realtimeConfig));
 
     if (data.socialAppData) {
         if (data.socialAppData.charHandles) localStorage.setItem('spark_char_handles', JSON.stringify(data.socialAppData.charHandles));
@@ -433,29 +447,6 @@ export async function importSystemData(
     if (data.roomCustomAssets) {
         await DB.saveAsset('room_custom_assets_list', JSON.stringify(data.roomCustomAssets));
     }
-
-    const chars = await DB.getAllCharacters();
-    const groupsList = await DB.getGroups();
-    const themes = await DB.getThemes();
-    const user = await DB.getUserProfile();
-    const books = await DB.getAllWorldbooks();
-    const novelList = await DB.getAllNovels();
-
-    if (data.assets) {
-        const assets = await DB.getAllAssets();
-        const loadedIcons: Record<string, string> = {};
-        if (Array.isArray(assets)) {
-            assets.forEach(a => { if (a.id.startsWith('icon_')) loadedIcons[a.id.replace('icon_', '')] = a.data; });
-        }
-        callbacks.setCustomIcons(loadedIcons);
-    }
-
-    if (chars.length > 0) callbacks.setCharacters(chars);
-    if (groupsList.length > 0) callbacks.setGroups(groupsList);
-    if (themes.length > 0) callbacks.setCustomThemes(themes);
-    if (user) callbacks.setUserProfile(user);
-    if (books.length > 0) callbacks.setWorldbooks(books);
-    if (novelList.length > 0) callbacks.setNovels(novelList);
 
     callbacks.addToast('恢复成功，系统即将重启...', 'success');
     setTimeout(() => window.location.reload(), 1500);

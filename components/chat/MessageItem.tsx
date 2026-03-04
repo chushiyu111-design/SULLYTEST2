@@ -28,6 +28,16 @@ const SelectionCheckbox: React.FC<{ isSelected: boolean; onToggle: () => void }>
     </div>
 );
 
+/** Format timestamp in WeChat style: today → "上午 10:30", this year → "3月4日 上午 10:30", other → with year */
+const formatWeChatTime = (ts: number): string => {
+    const now = new Date();
+    const d = new Date(ts);
+    const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    if (d.toDateString() === now.toDateString()) return timeStr;
+    if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日 ${timeStr}`;
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${timeStr}`;
+};
+
 interface MessageItemProps {
     msg: Message;
     isFirstInGroup: boolean;
@@ -46,6 +56,9 @@ interface MessageItemProps {
     onTranslateToggle?: (msgId: number) => void;
     // Transfer card actions
     onTransferAction?: (msg: Message) => void;
+    // Timestamp separator (computed by parent Chat.tsx)
+    showTimestamp?: boolean;
+    timestampValue?: number;
 }
 
 const MessageItem = React.memo(({
@@ -64,6 +77,8 @@ const MessageItem = React.memo(({
     isShowingTarget,
     onTranslateToggle,
     onTransferAction,
+    showTimestamp,
+    timestampValue,
 }: MessageItemProps) => {
     const isUser = m.role === 'user';
     const isSystem = m.role === 'system';
@@ -145,6 +160,13 @@ const MessageItem = React.memo(({
 
     const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
+    // Reusable timestamp separator element (only rendered when showTimestamp is true)
+    const timestampSeparator = showTimestamp && timestampValue ? (
+        <div className="sully-msg-timestamp flex justify-center w-full py-2">
+            <span className="text-[11px] text-gray-400">{formatWeChatTime(timestampValue)}</span>
+        </div>
+    ) : null;
+
     const renderAvatar = (src: string) => (
         <div className="relative w-9 h-9 shrink-0 z-0">
             <img
@@ -196,52 +218,61 @@ const MessageItem = React.memo(({
         }
 
         return (
-            <div className={`flex flex-col items-center w-full ${selectionMode ? 'pl-8' : ''} animate-fade-in relative transition-[padding] duration-300`}>
-                {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
-                <div className="text-[10px] text-slate-400 mt-4 mb-0.5 opacity-70">{formatTime(m.timestamp)}</div>
-                <div className="flex justify-center mb-4 px-10 w-full" {...interactionProps}>
-                    {noticeCard || (
-                        /* Fallback: Legacy grey pill for untagged system messages */
-                        <div className="sully-system-pill flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
-                            {displayText.includes('任务') ? '✨' :
-                                displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
-                                    displayText.includes('转账') ? '💰' : '🔔'}
-                            <span className="text-[10px] font-medium tracking-wide">{displayText}</span>
-                        </div>
-                    )}
+            <>
+                {timestampSeparator}
+                <div className={`flex flex-col items-center w-full ${selectionMode ? 'pl-8' : ''} animate-fade-in relative transition-[padding] duration-300`}>
+                    {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
+                    {!showTimestamp && <div className="text-[10px] text-slate-400 mt-4 mb-0.5 opacity-70">{formatTime(m.timestamp)}</div>}
+                    <div className="flex justify-center mb-4 px-10 w-full" {...interactionProps}>
+                        {noticeCard || (
+                            /* Fallback: Legacy grey pill for untagged system messages */
+                            <div className="sully-system-pill flex items-center gap-1.5 bg-slate-200/40 backdrop-blur-md text-slate-500 px-3 py-1 rounded-full shadow-sm border border-white/20 select-none cursor-pointer active:scale-95 transition-transform">
+                                {displayText.includes('任务') ? '✨' :
+                                    displayText.includes('纪念日') || displayText.includes('Event') ? '📅' :
+                                        displayText.includes('转账') ? '💰' : '🔔'}
+                                <span className="text-[10px] font-medium tracking-wide">{displayText}</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            </>
         );
     }
 
     if (m.type === 'interaction') {
         return (
-            <div className={`flex flex-col items-center ${marginBottom} w-full animate-fade-in relative transition-[padding] duration-300 ${selectionMode ? 'pl-8' : ''}`}>
-                {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
-                <div className="text-[10px] text-slate-400 mb-1 opacity-70">{formatTime(m.timestamp)}</div>
-                <div {...interactionProps}>
-                    <InteractionPill isUser={isUser} charName={charName} />
+            <>
+                {timestampSeparator}
+                <div className={`flex flex-col items-center ${marginBottom} w-full animate-fade-in relative transition-[padding] duration-300 ${selectionMode ? 'pl-8' : ''}`}>
+                    {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
+                    {!showTimestamp && <div className="text-[10px] text-slate-400 mb-1 opacity-70">{formatTime(m.timestamp)}</div>}
+                    <div {...interactionProps}>
+                        <InteractionPill isUser={isUser} charName={charName} />
+                    </div>
                 </div>
-            </div>
+            </>
         );
     }
 
     const commonLayout = (content: React.ReactNode) => (
-        <div className={`flex items-start ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative transition-[padding] duration-300 ${selectionMode ? (isUser ? 'pr-14' : 'pl-14') : ''}`}>
-            {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
+        <>
+            {timestampSeparator}
+            <div className={`flex items-start ${isUser ? 'justify-end' : 'justify-start'} ${marginBottom} px-3 group select-none relative transition-[padding] duration-300 ${selectionMode ? (isUser ? 'pr-14' : 'pl-14') : ''}`}>
+                {selectionMode && <SelectionCheckbox isSelected={isSelected} onToggle={() => onToggleSelect(m.id)} />}
 
-            {/* Avatar for AI */}
-            {!isUser && renderAvatar(charAvatar)}
+                {/* Avatar for AI */}
+                {!isUser && renderAvatar(charAvatar)}
 
-            <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[70%] min-w-0 mx-2.5`} {...interactionProps}>
-                <div className={`${selectionMode ? 'pointer-events-none' : ''} relative w-full`}>
-                    {content}
+                <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[70%] min-w-0 mx-2.5`} {...interactionProps}>
+                    <div className={`${selectionMode ? 'pointer-events-none' : ''} relative w-full`}>
+                        {content}
+                    </div>
                 </div>
-            </div>
 
-            {/* Avatar for User */}
-            {isUser && renderAvatar(userAvatar)}
-        </div>
+                {/* Avatar for User */}
+                {isUser && renderAvatar(userAvatar)}
+            </div>
+        </>
     );
 
     // [New] Social Card Rendering
@@ -348,7 +379,8 @@ const MessageItem = React.memo(({
         prev.selectionMode === next.selectionMode &&
         prev.isSelected === next.isSelected &&
         prev.translationEnabled === next.translationEnabled &&
-        prev.isShowingTarget === next.isShowingTarget;
+        prev.isShowingTarget === next.isShowingTarget &&
+        prev.showTimestamp === next.showTimestamp;
 });
 
 export default MessageItem;

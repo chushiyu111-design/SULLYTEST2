@@ -86,6 +86,10 @@ export interface ChatTheme {
     user: BubbleStyle;
     ai: BubbleStyle;
     customCss?: string;
+    /** Theme-level: force-enable timestamp separators (e.g. WeChat). undefined/false = off */
+    showTimestamp?: boolean;
+    /** Minimum ms gap between messages to show a timestamp separator (default 180000 = 3min) */
+    timestampIntervalMs?: number;
 }
 
 export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card' | 'moments';

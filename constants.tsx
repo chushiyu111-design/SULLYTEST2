@@ -26,6 +26,7 @@ import {
   Sparkle,
   GlobeSimple,
   Star,
+
 } from '@phosphor-icons/react';
 
 // SVG 图标库 - Phosphor Icons
@@ -55,6 +56,7 @@ export const Icons: Record<string, React.FC<{ className?: string }>> = {
   SpecialMoments: ({ className }) => <Sparkle className={className} weight="bold" />,
   Browser: ({ className }) => <GlobeSimple className={className} weight="bold" />,
   Zhaixinglou: ({ className }) => <Star className={className} weight="fill" />,
+
 };
 
 export const INSTALLED_APPS: AppConfig[] = [
@@ -83,6 +85,7 @@ export const INSTALLED_APPS: AppConfig[] = [
   { id: AppID.Settings, name: '设置', icon: 'Settings', color: 'slate' },
   { id: AppID.SpecialMoments, name: '特别时光', icon: 'SpecialMoments', color: 'pink' },
   { id: AppID.Zhaixinglou, name: '摘星楼', icon: 'Zhaixinglou', color: 'red' },
+
 ];
 
 export const DOCK_APPS = [AppID.Chat, AppID.GroupChat, AppID.Social, AppID.Settings];

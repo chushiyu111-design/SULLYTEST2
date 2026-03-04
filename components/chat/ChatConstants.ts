@@ -10,7 +10,9 @@ export const PRESET_THEMES: Record<string, ChatTheme> = {
         id: 'default', name: 'WeChat(绿)', type: 'preset',
         user: { textColor: '#000000', backgroundColor: '#95ec69', borderRadius: 8, opacity: 1 },
         ai: { textColor: '#000000', backgroundColor: '#ffffff', borderRadius: 8, opacity: 1 },
-        customCss: wechatCss
+        customCss: wechatCss,
+        showTimestamp: true,
+        timestampIntervalMs: 180000,  // 3 minutes, same as real WeChat
     },
     waterdrop: {
         id: 'waterdrop', name: '拟态水滴(Gloss)', type: 'preset',

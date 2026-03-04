@@ -353,6 +353,32 @@ const AkashicShadows: React.FC<Props> = ({
                 </div>
             )}
 
+            <style>{`
+                @keyframes akashic-entrance-rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes akashic-word-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes akashic-float-0 { 0% { translate: 0 0; opacity: 0.45; } 100% { translate: 6px -12px; opacity: 0.15; } }
+                @keyframes akashic-float-1 { 0% { translate: 0 0; opacity: 0.15; } 100% { translate: -8px -10px; opacity: 0.45; } }
+                @keyframes akashic-float-2 { 0% { translate: 0 0; opacity: 0.35; } 100% { translate: 5px 10px; opacity: 0.1; } }
+                @keyframes akashic-float-3 { 0% { translate: 0 0; opacity: 0.1; } 100% { translate: -6px 8px; opacity: 0.4; } }
+                @keyframes akashic-ring-fill {
+                    from { stroke-dashoffset: ${2 * Math.PI * 36}; }
+                    to { stroke-dashoffset: 0; }
+                }
+                @keyframes akashic-symbol-glow {
+                    0% { filter: drop-shadow(0 0 4px rgba(232,236,244,0.15)); }
+                    100% { filter: drop-shadow(0 0 12px rgba(200,210,230,0.35)) drop-shadow(0 0 24px rgba(180,195,220,0.15)); }
+                }
+                @keyframes akashic-hint-pulse {
+                    0%, 100% { opacity: 0.35; }
+                    50% { opacity: 0.6; }
+                }
+            `}</style>
 
         </div>
     );
@@ -667,6 +693,29 @@ const AkashicShadows: React.FC<Props> = ({
                     </div>
                 </div>
 
+                <style>{`
+                @keyframes akashic-blur-in {
+                    0% { opacity: 0; filter: blur(8px); transform: translateY(12px); }
+                    100% { opacity: 1; filter: blur(0); transform: translateY(0); }
+                }
+                @keyframes akashic-dissolve-up {
+                    0% { opacity: 0.7; transform: translateY(0); filter: blur(0); }
+                    60% { opacity: 0.3; transform: translateY(-15px); filter: blur(2px); }
+                    100% { opacity: 0; transform: translateY(-30px); filter: blur(6px); }
+                }
+                @keyframes akashic-breathe {
+                    0%, 100% { opacity: 0.3; }
+                    50% { opacity: 1; }
+                }
+                @keyframes akashic-sigil-rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes akashic-sigil-rotate-reverse {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(-360deg); }
+                }
+            `}</style>
 
 
                 <ShareCardModal

@@ -161,3 +161,15 @@
     --card-text-secondary: #666666;
     --card-text-muted: #999999;
 }
+
+/* ===== WeChat Timestamp Separator ===== */
+.theme-default .sully-msg-timestamp {
+    padding: 8px 0 4px !important;
+}
+
+.theme-default .sully-msg-timestamp span {
+    font-size: 11px !important;
+    color: #b2b2b2 !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.3px !important;
+}
