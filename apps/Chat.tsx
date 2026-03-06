@@ -1003,41 +1003,50 @@ const Chat: React.FC = () => {
             setTranscribingMsgIds(prev => new Set(prev).add(voiceMsgId));
             setSttProcessing(true);
 
-            // 4. Run Whisper STT in background
+            // 4. Run Whisper STT in background (with 15s timeout)
             let transcribedText = '';
+            let sttFailed = false;
+
             try {
-                const result = await WhisperStt.transcribe(blob, 'tiny', (progress) => {
+                const sttPromise = WhisperStt.transcribe(blob, 'tiny', (progress) => {
                     if (progress.status === 'progress' && progress.progress !== undefined) {
                         console.log(`🎤 [STT] Model download: ${progress.progress.toFixed(0)}%`);
                     }
                 });
+
+                // 15s timeout — if model download is blocked (e.g. China firewall), don't hang forever
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('STT timeout (15s)')), 15000)
+                );
+
+                const result = await Promise.race([sttPromise, timeoutPromise]);
                 transcribedText = result.text;
             } catch (sttErr) {
                 console.error('🎤 [STT] Transcription failed:', sttErr);
-                addToast('语音识别失败，请重试', 'error');
-                // Update message status to failed
-                await DB.updateMessageMetadata(voiceMsgId, { sttStatus: 'failed' });
-                setTranscribingMsgIds(prev => { const s = new Set(prev); s.delete(voiceMsgId); return s; });
-                setSttProcessing(false);
-                return;
+                sttFailed = true;
             }
-
-            if (!transcribedText.trim()) {
-                addToast('未识别到语音内容', 'error');
-                await DB.updateMessageMetadata(voiceMsgId, { sttStatus: 'failed' });
-                setTranscribingMsgIds(prev => { const s = new Set(prev); s.delete(voiceMsgId); return s; });
-                setSttProcessing(false);
-                return;
-            }
-
-            // 5. Update voice message with transcribed text
-            await DB.updateMessage(voiceMsgId, transcribedText);
-            await DB.updateMessageMetadata(voiceMsgId, { sttStatus: 'done', transcribedText });
 
             setTranscribingMsgIds(prev => { const s = new Set(prev); s.delete(voiceMsgId); return s; });
             setSttProcessing(false);
 
-            // 6. Trigger AI (re-fetch messages to include updated voice msg)
+            if (transcribedText.trim()) {
+                // ✅ STT 成功 — 正常流程
+                await DB.updateMessage(voiceMsgId, transcribedText);
+                await DB.updateMessageMetadata(voiceMsgId, { sttStatus: 'done', transcribedText });
+            } else {
+                // ❌ STT 失败或识别为空 — fallback：告诉 AI 用户发了语音但没法识别
+                await DB.updateMessage(voiceMsgId, `[语音消息 ${duration}秒]`);
+                await DB.updateMessageMetadata(voiceMsgId, {
+                    sttStatus: sttFailed ? 'failed' : 'empty',
+                    transcribedText: '',
+                });
+
+                if (sttFailed) {
+                    addToast('语音识别暂不可用，已直接发送', 'info');
+                }
+            }
+
+            // 5. Trigger AI — 无论 STT 成功还是失败，都让 AI 回应
             const latestMsgs = await DB.getMessagesByCharId(char.id);
             setMessages(latestMsgs);
             triggerAI(latestMsgs);

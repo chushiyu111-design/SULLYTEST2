@@ -84,17 +84,22 @@ const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
     };
 
     // --- Touch / Mouse handlers for press-hold recording ---
-    const handlePointerDown = React.useCallback(async (e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
+    const handlePointerDown = React.useCallback((e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
         if (!onStartRecording || voiceRecorderState !== 'idle') return;
+
+        e.preventDefault();
 
         const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
         startYRef.current = clientY;
         setIsOverCancel(false);
 
-        const ok = await onStartRecording();
-        if (ok) {
-            isRecordingRef.current = true;
-        }
+        // 同步标记开始，异步启动录音（不阻塞触摸事件）
+        isRecordingRef.current = true;
+        onStartRecording().then(ok => {
+            if (!ok) isRecordingRef.current = false;
+        }).catch(() => {
+            isRecordingRef.current = false;
+        });
     }, [voiceRecorderState, onStartRecording]);
 
     const handlePointerMove = React.useCallback((e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
@@ -116,8 +121,8 @@ const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
         }
 
         const result = await onStopRecording?.();
-        if (result && result.blob.size > 0 && result.duration >= 1) {
-            onVoiceMessage?.(result.blob, result.duration);
+        if (result && result.blob.size > 0) {
+            onVoiceMessage?.(result.blob, Math.max(1, result.duration));
         }
         setIsOverCancel(false);
     }, [isOverCancel, onCancelRecording, onStopRecording, onVoiceMessage]);
@@ -278,8 +283,8 @@ const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
 
                     {/* Recording indicator card (WeChat style) */}
                     <div className={`relative pointer-events-none w-[150px] h-[150px] flex flex-col items-center justify-center rounded-2xl transition-all duration-200 ${isOverCancel
-                            ? 'bg-red-500/90'
-                            : 'bg-black/60 backdrop-blur-md'
+                        ? 'bg-red-500/90'
+                        : 'bg-black/60 backdrop-blur-md'
                         }`}>
                         {/* Waveform animation */}
                         <div className="flex items-center justify-center gap-1.5 h-12 mb-2">

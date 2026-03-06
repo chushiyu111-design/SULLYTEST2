@@ -56,17 +56,25 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
     // --- Touch / Mouse handlers for press-hold recording ---
 
-    const handlePointerDown = useCallback(async (e: React.TouchEvent | React.MouseEvent) => {
+    const handlePointerDown = useCallback((e: React.TouchEvent | React.MouseEvent) => {
         if (disabled || recorderState !== 'idle') return;
+
+        // Prevent default to stop text selection / context menu on long press
+        e.preventDefault();
 
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         startYRef.current = clientY;
         setIsOverCancel(false);
 
-        const ok = await onStartRecording();
-        if (ok) {
-            isRecordingRef.current = true;
-        }
+        // 同步标记开始，异步启动录音（不阻塞触摸事件）
+        isRecordingRef.current = true;
+        onStartRecording().then(ok => {
+            if (!ok) {
+                isRecordingRef.current = false;
+            }
+        }).catch(() => {
+            isRecordingRef.current = false;
+        });
     }, [disabled, recorderState, onStartRecording]);
 
     const handlePointerMove = useCallback((e: React.TouchEvent | React.MouseEvent) => {
@@ -88,8 +96,8 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         }
 
         const result = await onStopRecording();
-        if (result && result.blob.size > 0 && result.duration >= 1) {
-            onVoiceMessage(result.blob, result.duration);
+        if (result && result.blob.size > 0) {
+            onVoiceMessage(result.blob, Math.max(1, result.duration));
         }
         setIsOverCancel(false);
     }, [isOverCancel, onCancelRecording, onStopRecording, onVoiceMessage]);
@@ -149,8 +157,8 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
                     {/* Recording indicator card */}
                     <div className={`relative pointer-events-none px-8 py-5 rounded-3xl backdrop-blur-2xl shadow-2xl border transition-all duration-200 ${isOverCancel
-                            ? 'bg-red-500/90 border-red-400/50 scale-105'
-                            : 'bg-black/70 border-white/10'
+                        ? 'bg-red-500/90 border-red-400/50 scale-105'
+                        : 'bg-black/70 border-white/10'
                         }`}>
                         {/* Cancel hint */}
                         <div className={`text-center text-xs font-bold mb-3 transition-colors ${isOverCancel ? 'text-white' : 'text-white/50'
