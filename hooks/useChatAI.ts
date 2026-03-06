@@ -192,34 +192,16 @@ export const useChatAI = ({
 
             const fullMessages = [{ role: 'system', content: systemPrompt }, ...cleanedApiMessages];
 
-            // 2.55 Handle user voice messages: tag transcribed text and inject STT tolerance prompt
-            let hasUserVoiceMsg = false;
-            for (const msg of fullMessages) {
-                // Find user voice messages by checking the original contextMsgs metadata
-                if (msg.role === 'user' && typeof msg.content === 'string') {
-                    const originalMsg = contextMsgs.find((m: any) =>
-                        m.role === 'user' && m.type === 'voice'
-                        && m.metadata?.source === 'user-recording'
-                        && m.metadata?.sttStatus === 'done'
-                        && (m.content === msg.content || m.metadata?.transcribedText === msg.content)
-                    );
-                    if (originalMsg && originalMsg.metadata?.transcribedText) {
-                        msg.content = `[🎤用户语音] ${originalMsg.metadata.transcribedText}`;
-                        hasUserVoiceMsg = true;
-                    }
-                }
-            }
-            // If the latest user message is a voice message, inject tolerance prompt
-            if (hasUserVoiceMsg) {
-                const lastUserIdx = fullMessages.map(m => m.role).lastIndexOf('user');
-                if (lastUserIdx >= 0) {
-                    const lastUserMsg = fullMessages[lastUserIdx];
-                    if (typeof lastUserMsg.content === 'string' && lastUserMsg.content.startsWith('[🎤用户语音]')) {
-                        fullMessages.splice(lastUserIdx + 1, 0, {
-                            role: 'system',
-                            content: '[系统提示：用户刚才发送了一条语音消息。以下文字由设备语音识别自动转换，可能存在同音字错误或漏字，请结合上下文理解原意，并按照原意进行回复]'
-                        });
-                    }
+            // 2.55 Inject STT tolerance prompt if last user message is a voice recording
+            // Voice messages are now properly formatted by buildMessageHistory with [🎤用户语音] prefix
+            const lastUserIdx = fullMessages.map(m => m.role).lastIndexOf('user');
+            if (lastUserIdx >= 0) {
+                const lastUserMsg = fullMessages[lastUserIdx];
+                if (typeof lastUserMsg.content === 'string' && lastUserMsg.content.includes('[🎤用户语音]')) {
+                    fullMessages.splice(lastUserIdx + 1, 0, {
+                        role: 'system',
+                        content: '[系统提示：用户刚才发送了一条语音消息。以下文字由设备语音识别自动转换，可能存在同音字错误或漏字，请结合上下文理解原意，并按照原意进行回复]'
+                    });
                 }
             }
 

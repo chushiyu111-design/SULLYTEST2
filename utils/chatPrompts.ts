@@ -487,8 +487,15 @@ ${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Bool
     ) => {
         // Filter Logic
         const effectiveHistory = messages.filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId);
-        // Exclude voice messages — their text content is already covered by the paired text message
-        const nonVoiceHistory = effectiveHistory.filter(m => m.type !== 'voice');
+        // Exclude AI-generated voice messages (their text already appears in paired text bubbles).
+        // Keep user voice recordings — they are the ONLY representation of the user's speech.
+        const nonVoiceHistory = effectiveHistory.filter(m => {
+            if (m.type !== 'voice') return true;
+            // User recordings: keep (content = transcribed text, this is the primary message)
+            if (m.role === 'user' && m.metadata?.source === 'user-recording') return true;
+            // AI voice / read-aloud: filter out (paired text bubble carries the same content)
+            return false;
+        });
         const historySlice = nonVoiceHistory.slice(-limit);
 
         let timeGapHint = "";
@@ -548,6 +555,15 @@ ${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Bool
                         content = `${timeStr} [用户转发了与 ${fwd.fromCharName || '另一个角色'} 的 ${fwd.count || lines.length} 条聊天记录]\n${lines.join('\n')}`;
                     } catch {
                         content = `${timeStr} [用户转发了一段聊天记录]`;
+                    }
+                }
+                else if (m.type === 'voice' && m.role === 'user') {
+                    // User voice recording: show as voice message with transcribed text
+                    const sttStatus = m.metadata?.sttStatus;
+                    if (sttStatus === 'done' && m.content) {
+                        content = `${timeStr} [🎤用户语音] ${m.content}`;
+                    } else {
+                        content = `${timeStr} [🎤用户发送了一条语音消息（${m.metadata?.duration || '?'}秒）]`;
                     }
                 }
                 else content = `${timeStr} ${content}`;

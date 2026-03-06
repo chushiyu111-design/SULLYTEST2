@@ -996,8 +996,7 @@ const Chat: React.FC = () => {
             await DB.saveVoiceAudio(voiceMsgId, blob);
 
             // 3. Update UI immediately — user sees their voice bubble
-            const updatedMsgs = await DB.getMessagesByCharId(char.id);
-            setMessages(updatedMsgs);
+            await reloadMessages(visibleCountRef.current);
 
             // Mark as transcribing
             setTranscribingMsgIds(prev => new Set(prev).add(voiceMsgId));
@@ -1046,16 +1045,14 @@ const Chat: React.FC = () => {
                 }
             }
 
-            // 5. Trigger AI — 无论 STT 成功还是失败，都让 AI 回应
-            const latestMsgs = await DB.getMessagesByCharId(char.id);
-            setMessages(latestMsgs);
-            triggerAI(latestMsgs);
+            // 5. Refresh UI — 不自动触发 AI（与文字消息一致，用户点按钮手动触发）
+            await reloadMessages(visibleCountRef.current);
         } catch (err) {
             console.error('🎤 [VoiceRecord] Error:', err);
             addToast('语音消息发送失败', 'error');
             setSttProcessing(false);
         }
-    }, [char, addToast, triggerAI]);
+    }, [char, addToast, reloadMessages]);
 
     return (
         <div
