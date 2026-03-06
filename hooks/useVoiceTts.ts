@@ -55,6 +55,9 @@ export function useVoiceTts() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const currentUrlRef = useRef<string | null>(null);
 
+    // AbortController for in-flight synthesis — cancel previous on new call or unmount
+    const abortRef = useRef<AbortController | null>(null);
+
     // ── Stop any currently playing audio ──────────────────────────────
     const stopVoice = useCallback(() => {
         if (audioRef.current) {
@@ -124,8 +127,13 @@ export function useVoiceTts() {
             return next;
         });
 
+        // Cancel any previous in-flight synthesis
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+
         try {
-            const result = await MinimaxTts.synthesize(text, ttsConfig, onStatus);
+            const result = await MinimaxTts.synthesize(text, ttsConfig, onStatus, controller.signal);
             if (!result || !result.blob) return null;
 
             // Persist audio blob to IDB

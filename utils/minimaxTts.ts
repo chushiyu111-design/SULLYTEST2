@@ -22,11 +22,17 @@ import type {
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
+const DEFAULT_BASE_URL = 'https://api.minimaxi.com';
 const POLL_INITIAL_INTERVAL = 2000;  // 首次轮询间隔 2s
 const POLL_MAX_INTERVAL = 5000;      // 最大轮询间隔 5s
 const POLL_TIMEOUT = 120000;         // 总超时 120s
 
 // ─── 内部工具 ────────────────────────────────────────────────────────────
+
+/** 统一解析 baseUrl，去除尾部斜杠，提供默认值 */
+function resolveBaseUrl(url?: string): string {
+    return (url || DEFAULT_BASE_URL).replace(/\/+$/, '');
+}
 
 /** 构建请求头 */
 function makeHeaders(apiKey: string, groupId: string): Record<string, string> {
@@ -162,7 +168,7 @@ export const MinimaxTts = {
 
         const body = buildRequestBody(text, config);
 
-        const baseUrl = (config.baseUrl || 'https://api.minimaxi.com').replace(/\/+$/, '');
+        const baseUrl = resolveBaseUrl(config.baseUrl);
         const response = await fetch(`${baseUrl}/v1/t2a_async_v2`, {
             method: 'POST',
             headers: makeHeaders(config.apiKey, config.groupId || ''),
@@ -184,7 +190,7 @@ export const MinimaxTts = {
      * 查询异步任务状态
      */
     async queryTask(taskId: string, apiKey: string, groupId: string, baseUrlConfig: string): Promise<TtsQueryTaskResponse> {
-        const baseUrl = (baseUrlConfig || 'https://api.minimaxi.com').replace(/\/+$/, '');
+        const baseUrl = resolveBaseUrl(baseUrlConfig);
         const url = `${baseUrl}/v1/query/t2a_async_query_v2?task_id=${taskId}`;
 
         const response = await fetch(url, {
@@ -205,7 +211,7 @@ export const MinimaxTts = {
      * 下载音频文件
      */
     async downloadAudio(fileId: number, apiKey: string, groupId: string, baseUrlConfig: string): Promise<Blob> {
-        const baseUrl = (baseUrlConfig || 'https://api.minimaxi.com').replace(/\/+$/, '');
+        const baseUrl = resolveBaseUrl(baseUrlConfig);
         const url = `${baseUrl}/v1/files/retrieve_content?file_id=${fileId}`;
 
         const response = await fetch(url, {
@@ -231,13 +237,17 @@ export const MinimaxTts = {
     async synthesize(
         text: string,
         config: TtsConfig,
-        onStatus?: (status: TtsSynthesisStatus, message: string) => void
+        onStatus?: (status: TtsSynthesisStatus, message: string) => void,
+        signal?: AbortSignal
     ): Promise<TtsSynthesisResult> {
         const notify = (s: TtsSynthesisStatus, m: string) => {
             onStatus?.(s, m);
             if (s === 'error') console.error(`[TTS] ${m}`);
             else console.log(`[TTS] ${m}`);
         };
+
+        // 检查是否已取消
+        if (signal?.aborted) throw new DOMException('TTS synthesis aborted', 'AbortError');
 
         // 0. AI 预处理（可选）— 在文本发给 MiniMax 之前插入语气词标签
         let textToSynthesize = text;
@@ -267,6 +277,9 @@ export const MinimaxTts = {
         let lastStatus = '';
 
         while (true) {
+            // 检查取消信号
+            if (signal?.aborted) throw new DOMException('TTS synthesis aborted', 'AbortError');
+
             const elapsed = Math.round((Date.now() - startTime) / 1000);
             if (elapsed * 1000 > POLL_TIMEOUT) {
                 notify('error', `语音合成超时（${elapsed}s, 最后状态: ${lastStatus || '未知'}）`);
@@ -349,7 +362,7 @@ export const MinimaxTts = {
                     { role: 'user', content: text },
                 ],
                 temperature: 0.3,
-                max_tokens: Math.max(text.length * 2, 2000),
+                max_tokens: Math.min(Math.max(Math.ceil(text.length * 1.5), 512), 4096),
             }),
         });
 

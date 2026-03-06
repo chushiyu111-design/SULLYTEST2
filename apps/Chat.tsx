@@ -92,6 +92,8 @@ const Chat: React.FC = () => {
     const voiceRecorder = useVoiceRecorder();
     const [sttProcessing, setSttProcessing] = useState(false);
     const [transcribingMsgIds, setTranscribingMsgIds] = useState<Set<number>>(new Set());
+    // --- Voice transcript expansion (inline "转文字") ---
+    const [expandedVoiceTextIds, setExpandedVoiceTextIds] = useState<Set<number>>(new Set());
 
     // 录音错误可视化 — 移动端 title 属性不显示，需要 toast
     useEffect(() => {
@@ -752,14 +754,28 @@ const Chat: React.FC = () => {
         }
     }, [selectedMessage, ttsConfig, char, synthesizeForMessage, reloadMessages]);
 
-    // --- Voice: Convert to Text ---
+    // --- Voice: Convert to Text (toggle inline transcript) ---
     const handleVoiceToText = useCallback(() => {
         if (!selectedMessage || selectedMessage.type !== 'voice') return;
-        const sourceText = selectedMessage.metadata?.sourceText || selectedMessage.content;
-        addToast(sourceText.length > 60 ? sourceText.substring(0, 60) + '...' : sourceText, 'info');
+        const msgId = selectedMessage.id;
+        setExpandedVoiceTextIds(prev => {
+            const next = new Set(prev);
+            if (next.has(msgId)) next.delete(msgId);
+            else next.add(msgId);
+            return next;
+        });
         setModalType('none');
         setSelectedMessage(null);
-    }, [selectedMessage, addToast]);
+    }, [selectedMessage]);
+
+    const toggleVoiceText = useCallback((msgId: number) => {
+        setExpandedVoiceTextIds(prev => {
+            const next = new Set(prev);
+            if (next.has(msgId)) next.delete(msgId);
+            else next.add(msgId);
+            return next;
+        });
+    }, []);
 
     // --- Voice: Download Audio ---
     const handleDownloadVoice = useCallback(async () => {
@@ -1196,6 +1212,8 @@ const Chat: React.FC = () => {
                             } : undefined}
                             playingMsgId={playingMsgId}
                             loadingMsgIds={loadingMsgIds}
+                            isVoiceTextExpanded={expandedVoiceTextIds.has(m.id)}
+                            onToggleVoiceText={toggleVoiceText}
                         />
                     );
                 })}

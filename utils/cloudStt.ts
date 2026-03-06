@@ -37,6 +37,14 @@ export async function transcribe(
         throw new SttNotConfiguredError();
     }
 
+    // 空录音 / 过大录音拦截
+    if (!blob || blob.size === 0) {
+        throw new Error('录音数据为空，请检查麦克风权限');
+    }
+    if (blob.size > 25 * 1024 * 1024) {
+        throw new Error('录音文件过大（超过 25MB），请缩短录音时长');
+    }
+
     const defaults = STT_PROVIDER_DEFAULTS[config.provider];
     const baseUrl = (config.baseUrl || defaults.baseUrl).replace(/\/+$/, '');
     const model = config.model || defaults.model;
@@ -53,7 +61,10 @@ export async function transcribe(
     const formData = new FormData();
     formData.append('file', blob, fileName);
     formData.append('model', model);
-    formData.append('language', 'zh');              // 中文优先
+    // 语言偏好：用户配置了就传，否则让 Whisper 自动检测（对中英混合更友好）
+    if (config.language) {
+        formData.append('language', config.language);
+    }
     formData.append('response_format', 'json');
 
     // ── 3. 发送请求（带超时） ──

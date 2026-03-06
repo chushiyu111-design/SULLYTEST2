@@ -23,6 +23,8 @@ export interface SttConfig {
     baseUrl?: string;
     /** 可选：覆盖默认模型名 */
     model?: string;
+    /** 语言偏好，不填则自动检测（推荐中英混合场景留空） */
+    language?: string;
 }
 
 // ─── 识别结果 ────────────────────────────────────────────────────────

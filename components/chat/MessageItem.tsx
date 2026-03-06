@@ -66,6 +66,9 @@ interface MessageItemProps {
     onRetryVoice?: (msgId: number) => void;
     playingMsgId?: number | null;
     loadingMsgIds?: Set<number>;
+    // Voice transcript
+    isVoiceTextExpanded?: boolean;
+    onToggleVoiceText?: (msgId: number) => void;
 }
 
 const MessageItem = React.memo(({
@@ -91,6 +94,8 @@ const MessageItem = React.memo(({
     onRetryVoice,
     playingMsgId,
     loadingMsgIds,
+    isVoiceTextExpanded,
+    onToggleVoiceText,
 }: MessageItemProps) => {
     const isUser = m.role === 'user';
     const isSystem = m.role === 'system';
@@ -362,18 +367,49 @@ const MessageItem = React.memo(({
     if (m.type === 'voice') {
         const isVoiceLoading = !!loadingMsgIds?.has(m.id);
         const hasAudio = !!m.metadata?.hasAudio;
+        const sourceText = m.metadata?.sourceText || m.content;
+        const hasSourceText = !!sourceText && sourceText.trim().length > 0;
         return commonLayout(
-            <VoiceBubble
-                duration={m.metadata?.duration ?? 0}
-                isPlaying={playingMsgId === m.id}
-                isLoading={isVoiceLoading}
-                hasFailed={!hasAudio && !isVoiceLoading}
-                isUser={isUser}
-                onPlay={() => onPlayVoice?.(m.id)}
-                onStop={() => onStopVoice?.()}
-                onRetry={() => onRetryVoice?.(m.id)}
-                styleConfig={styleConfig}
-            />
+            <div className="flex flex-col gap-1">
+                <div className={`flex items-center gap-1.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <VoiceBubble
+                        duration={m.metadata?.duration ?? 0}
+                        isPlaying={playingMsgId === m.id}
+                        isLoading={isVoiceLoading}
+                        hasFailed={!hasAudio && !isVoiceLoading}
+                        isUser={isUser}
+                        onPlay={() => onPlayVoice?.(m.id)}
+                        onStop={() => onStopVoice?.()}
+                        onRetry={() => onRetryVoice?.(m.id)}
+                        styleConfig={styleConfig}
+                    />
+                    {hasSourceText && (
+                        <button
+                            className="shrink-0 text-[10px] active:scale-95 transition-all px-1.5 py-0.5 rounded-full border backdrop-blur-sm select-none"
+                            style={{
+                                color: styleConfig?.textColor ? `${styleConfig.textColor}99` : '#9ca3af',
+                                borderColor: styleConfig?.textColor ? `${styleConfig.textColor}30` : 'rgba(209,213,219,0.6)',
+                                backgroundColor: styleConfig?.textColor ? `${styleConfig.textColor}10` : 'rgba(255,255,255,0.5)',
+                            }}
+                            onClick={(e) => { e.stopPropagation(); onToggleVoiceText?.(m.id); }}
+                        >
+                            {isVoiceTextExpanded ? '收起' : '转文字'}
+                        </button>
+                    )}
+                </div>
+                {isVoiceTextExpanded && hasSourceText && (
+                    <div
+                        className="text-[12px] leading-relaxed px-3 py-2 rounded-lg animate-fade-in max-w-[200px] break-words"
+                        style={{
+                            borderRadius: `${styleConfig?.borderRadius ?? 6}px`,
+                            color: styleConfig?.textColor ? `${styleConfig.textColor}cc` : '#4b5563',
+                            backgroundColor: styleConfig?.textColor ? `${styleConfig.textColor}08` : 'rgba(0,0,0,0.03)',
+                        }}
+                    >
+                        {sourceText}
+                    </div>
+                )}
+            </div>
         );
     }
 
@@ -414,7 +450,8 @@ const MessageItem = React.memo(({
         prev.showTimestamp === next.showTimestamp &&
         prev.playingMsgId === next.playingMsgId &&
         prev.loadingMsgIds?.size === next.loadingMsgIds?.size &&
-        !!prev.loadingMsgIds?.has(prev.msg.id) === !!next.loadingMsgIds?.has(next.msg.id);
+        !!prev.loadingMsgIds?.has(prev.msg.id) === !!next.loadingMsgIds?.has(next.msg.id) &&
+        prev.isVoiceTextExpanded === next.isVoiceTextExpanded;
 });
 
 export default MessageItem;
