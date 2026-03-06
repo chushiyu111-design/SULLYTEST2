@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/minimax-api/:path*",
+      "destination": "https://api.minimaxi.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

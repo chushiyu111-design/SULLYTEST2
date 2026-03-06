@@ -919,7 +919,7 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const exportSystem = async (mode: 'text_only' | 'media_only' | 'full'): Promise<Blob> => {
         try {
             setSysOperation({ status: 'processing', message: '正在初始化...', progress: 0 });
-            const stateSnapshot: ExportStateSnapshot = { apiConfig, apiPresets, availableModels, realtimeConfig, ttsConfig, theme };
+            const stateSnapshot: ExportStateSnapshot = { apiConfig, apiPresets, availableModels, realtimeConfig, ttsConfig, sttConfig, theme };
             const blob = await exportSystemData(mode, stateSnapshot, (message, progress) => {
                 setSysOperation({ status: 'processing', message, progress });
             });

@@ -6,7 +6,7 @@
  */
 
 import type { SttConfig, SttResult } from '../types/stt';
-import { STT_PROVIDER_DEFAULTS } from '../types/stt';
+import { STT_PROVIDER_DEFAULTS, getActiveApiKey } from '../types/stt';
 
 // ─── 自定义错误 ──────────────────────────────────────────────────────
 
@@ -32,7 +32,8 @@ export async function transcribe(
     timeoutMs = 15000
 ): Promise<SttResult> {
     // ── 1. 前置检查 ──
-    if (!config.apiKey || !config.apiKey.trim()) {
+    const apiKey = getActiveApiKey(config);
+    if (!apiKey || !apiKey.trim()) {
         throw new SttNotConfiguredError();
     }
 
@@ -65,7 +66,7 @@ export async function transcribe(
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${config.apiKey}`,
+                'Authorization': `Bearer ${apiKey}`,
                 // 注意：FormData 自动设置 Content-Type 含 boundary，不能手动设
             },
             body: formData,

@@ -15,8 +15,10 @@ export type SttProvider = 'groq' | 'siliconflow';
 export interface SttConfig {
     /** 当前使用的供应商 */
     provider: SttProvider;
-    /** API Key */
-    apiKey: string;
+    /** Groq API Key */
+    groqApiKey: string;
+    /** 硅基流动 API Key */
+    siliconflowApiKey: string;
     /** 可选：覆盖默认 API 地址（用于代理） */
     baseUrl?: string;
     /** 可选：覆盖默认模型名 */
@@ -60,5 +62,13 @@ export const STT_PROVIDER_DEFAULTS: Record<SttProvider, {
 
 export const DEFAULT_STT_CONFIG: SttConfig = {
     provider: 'groq',
-    apiKey: '',
+    groqApiKey: '',
+    siliconflowApiKey: '',
 };
+
+// ─── 工具函数 ────────────────────────────────────────────────────────
+
+/** 根据当前 provider 获取对应的 API Key */
+export function getActiveApiKey(config: SttConfig): string {
+    return config.provider === 'groq' ? config.groqApiKey : config.siliconflowApiKey;
+}

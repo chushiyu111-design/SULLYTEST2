@@ -29,8 +29,8 @@ const Settings: React.FC = () => {
 
     // STT 配置本地状态
     const [sttProvider, setSttProvider] = useState<SttProvider>(sttConfig.provider);
-    const [sttApiKey, setSttApiKey] = useState(sttConfig.apiKey);
-    const [sttTestStatus, setSttTestStatus] = useState('');
+    const [sttGroqKey, setSttGroqKey] = useState(sttConfig.groqApiKey);
+    const [sttSiliconKey, setSttSiliconKey] = useState(sttConfig.siliconflowApiKey);
 
     const [localKey, setLocalKey] = useState(apiConfig.apiKey);
     const [localUrl, setLocalUrl] = useState(apiConfig.baseUrl);
@@ -703,15 +703,15 @@ const Settings: React.FC = () => {
                     <div className="relative space-y-4">
                         {/* 供应商选择 */}
                         <div>
-                            <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">供应商</label>
+                            <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">当前供应商</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {(Object.keys(STT_PROVIDER_DEFAULTS) as SttProvider[]).map(p => (
                                     <button
                                         key={p}
                                         onClick={() => setSttProvider(p)}
                                         className={`py-3 rounded-xl text-xs font-bold transition-all ${sttProvider === p
-                                                ? 'bg-[#7b8db8]/15 text-[#5a6f94] ring-1 ring-[#7b8db8]/30'
-                                                : 'bg-white/50 text-[#8b9bb1] border border-[#d4e4f7]/60'
+                                            ? 'bg-[#7b8db8]/15 text-[#5a6f94] ring-1 ring-[#7b8db8]/30'
+                                            : 'bg-white/50 text-[#8b9bb1] border border-[#d4e4f7]/60'
                                             }`}
                                     >
                                         {STT_PROVIDER_DEFAULTS[p].label}
@@ -720,30 +720,40 @@ const Settings: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* API Key */}
+                        {/* Groq API Key */}
                         <div>
-                            <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">API Key</label>
+                            <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">Groq API Key</label>
                             <input
                                 type="password"
-                                value={sttApiKey}
-                                onChange={e => setSttApiKey(e.target.value)}
+                                value={sttGroqKey}
+                                onChange={e => setSttGroqKey(e.target.value)}
+                                placeholder="gsk_..."
+                                className="w-full bg-white/60 border border-[#d4e4f7]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                            />
+                            <a href={STT_PROVIDER_DEFAULTS.groq.registerUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#7b8db8] hover:underline mt-1.5 inline-block pl-1">
+                                → 免费获取 Groq Key
+                            </a>
+                        </div>
+
+                        {/* 硅基流动 API Key */}
+                        <div>
+                            <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">硅基流动 API Key</label>
+                            <input
+                                type="password"
+                                value={sttSiliconKey}
+                                onChange={e => setSttSiliconKey(e.target.value)}
                                 placeholder="sk-..."
                                 className="w-full bg-white/60 border border-[#d4e4f7]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                             />
-                            <a
-                                href={STT_PROVIDER_DEFAULTS[sttProvider].registerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-[#7b8db8] hover:underline mt-1.5 inline-block pl-1"
-                            >
-                                → 免费获取 {STT_PROVIDER_DEFAULTS[sttProvider].label} Key
+                            <a href={STT_PROVIDER_DEFAULTS.siliconflow.registerUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#7b8db8] hover:underline mt-1.5 inline-block pl-1">
+                                → 免费获取硅基流动 Key
                             </a>
                         </div>
 
                         {/* 保存按钮 */}
                         <button
                             onClick={() => {
-                                updateSttConfig({ provider: sttProvider, apiKey: sttApiKey });
+                                updateSttConfig({ provider: sttProvider, groqApiKey: sttGroqKey, siliconflowApiKey: sttSiliconKey });
                                 addToast('语音识别配置已保存', 'success');
                             }}
                             className="w-full py-3 rounded-2xl font-bold text-white shadow-lg shadow-[#7b8db8]/20 bg-gradient-to-r from-[#7b8db8] to-[#8ba3c8] active:scale-95 transition-all"
@@ -753,13 +763,17 @@ const Settings: React.FC = () => {
                     </div>
 
                     {/* 状态指示 */}
-                    <div className="relative grid grid-cols-2 gap-3 text-center mt-4">
-                        <div className={`py-3.5 rounded-2xl text-xs font-bold backdrop-blur-sm ${sttConfig.apiKey ? 'bg-[#e6f5ee]/60 text-[#7faa95] border border-[#d0e8da]/50' : 'bg-[#f0ebe5]/60 text-[#b8aaa0] border border-[#e5ddd4]/50'}`}>
-                            <div className="text-sm mb-1.5 opacity-70">{sttConfig.apiKey ? '●' : '○'}</div>
-                            {sttConfig.apiKey ? '已配置' : '未配置'}
+                    <div className="relative grid grid-cols-3 gap-2 text-center mt-4">
+                        <div className={`py-3 rounded-2xl text-[10px] font-bold backdrop-blur-sm ${sttConfig.groqApiKey ? 'bg-[#e6f5ee]/60 text-[#7faa95] border border-[#d0e8da]/50' : 'bg-[#f0ebe5]/60 text-[#b8aaa0] border border-[#e5ddd4]/50'}`}>
+                            <div className="text-xs mb-1 opacity-70">{sttConfig.groqApiKey ? '●' : '○'}</div>
+                            Groq
                         </div>
-                        <div className="py-3.5 rounded-2xl text-xs font-bold bg-[#eef4fb]/60 backdrop-blur-sm text-[#7b8db8] border border-[#d4e4f7]/50">
-                            <div className="text-[10px] mb-1.5 font-mono opacity-70">PROVIDER</div>
+                        <div className={`py-3 rounded-2xl text-[10px] font-bold backdrop-blur-sm ${sttConfig.siliconflowApiKey ? 'bg-[#e6f5ee]/60 text-[#7faa95] border border-[#d0e8da]/50' : 'bg-[#f0ebe5]/60 text-[#b8aaa0] border border-[#e5ddd4]/50'}`}>
+                            <div className="text-xs mb-1 opacity-70">{sttConfig.siliconflowApiKey ? '●' : '○'}</div>
+                            硅基流动
+                        </div>
+                        <div className="py-3 rounded-2xl text-[10px] font-bold bg-[#eef4fb]/60 backdrop-blur-sm text-[#7b8db8] border border-[#d4e4f7]/50">
+                            <div className="text-[9px] mb-1 font-mono opacity-70">ACTIVE</div>
                             {STT_PROVIDER_DEFAULTS[sttConfig.provider].label.split(' ')[0]}
                         </div>
                     </div>
