@@ -87,16 +87,14 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         setError(null);
         cancelledRef.current = false;
 
-        // 安全上下文检查 —— HTTP 非 localhost 无法使用麦克风
+        // 安全上下文检查 —— 非 HTTPS 非 localhost 时浏览器禁止使用麦克风
         if (!isSupported) {
             const isLocalhost = typeof location !== 'undefined' &&
                 (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
             if (!isLocalhost && location.protocol !== 'https:') {
-                setError('录音需要 HTTPS 安全连接（当前为 HTTP）');
-            } else if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
-                setError('当前浏览器不支持录音');
+                setError('录音需要 HTTPS 连接，请使用 HTTPS 部署或 localhost 测试');
             } else {
-                setError('当前环境不支持录音');
+                setError('当前浏览器不支持录音（请使用 Chrome / Safari）');
             }
             console.error('🎤 [Recorder] Not supported. isSecureContext:', typeof window !== 'undefined' && window.isSecureContext, 'mediaDevices:', !!navigator?.mediaDevices);
             return false;

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig, TtsConfig, DEFAULT_TTS_CONFIG } from '../types';
+import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig, TtsConfig, DEFAULT_TTS_CONFIG, SttConfig, DEFAULT_STT_CONFIG } from '../types';
 import { DB } from '../utils/db';
 import { onSystemLog } from '../utils/systemInterceptor';
 import { exportSystemData, importSystemData, ExportStateSnapshot, ImportCallbacks } from '../utils/systemBackup';
@@ -82,6 +82,10 @@ interface OSContextType extends AppContextType, NotificationContextType {
     // TTS 语音合成配置
     ttsConfig: TtsConfig;
     updateTtsConfig: (updates: Partial<TtsConfig>) => void;
+
+    // STT 语音识别配置
+    sttConfig: SttConfig;
+    updateSttConfig: (updates: Partial<SttConfig>) => void;
 
     customThemes: ChatTheme[];
     addCustomTheme: (theme: ChatTheme) => void;
@@ -320,6 +324,7 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const [apiPresets, setApiPresets] = useState<ApiPreset[]>([]);
     const [realtimeConfig, setRealtimeConfig] = useState<RealtimeConfig>(defaultRealtimeConfig);
     const [ttsConfig, setTtsConfig] = useState<TtsConfig>(DEFAULT_TTS_CONFIG);
+    const [sttConfig, setSttConfig] = useState<SttConfig>(DEFAULT_STT_CONFIG);
     const [customThemes, setCustomThemes] = useState<ChatTheme[]>([]);
     const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
 
@@ -435,6 +440,16 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
                     }));
                 } catch (e) {
                     console.error('Failed to load TTS config', e);
+                }
+            }
+
+            // 加载 STT 配置
+            const savedSttConfig = localStorage.getItem('os_stt_config');
+            if (savedSttConfig) {
+                try {
+                    setSttConfig(prev => ({ ...prev, ...JSON.parse(savedSttConfig) }));
+                } catch (e) {
+                    console.error('Failed to load STT config', e);
                 }
             }
 
@@ -773,6 +788,14 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
             return newConfig;
         });
     };
+    // STT 配置更新
+    const updateSttConfig = (updates: Partial<SttConfig>) => {
+        setSttConfig(prev => {
+            const newConfig = { ...prev, ...updates };
+            localStorage.setItem('os_stt_config', JSON.stringify(newConfig));
+            return newConfig;
+        });
+    };
     const saveModels = (models: string[]) => { setAvailableModels(models); localStorage.setItem('os_available_models', JSON.stringify(models)); };
     const addApiPreset = (name: string, config: APIConfig) => { setApiPresets(prev => { const next = [...prev, { id: Date.now().toString(), name, config }]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
     const removeApiPreset = (id: string) => { setApiPresets(prev => { const next = prev.filter(p => p.id !== id); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
@@ -970,6 +993,8 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
         updateRealtimeConfig,
         ttsConfig,
         updateTtsConfig,
+        sttConfig,
+        updateSttConfig,
         customThemes,
         addCustomTheme,
         removeCustomTheme,

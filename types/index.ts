@@ -11,3 +11,4 @@ export * from './xhs';
 export * from './realtime';
 export * from './backup';
 export * from './tts';
+export * from './stt';

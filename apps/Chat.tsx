@@ -15,11 +15,11 @@ import Modal from '../components/os/Modal';
 import { useChatAI } from '../hooks/useChatAI';
 import { useVoiceTts } from '../hooks/useVoiceTts';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
-import { WhisperStt } from '../utils/whisperStt';
+import { CloudStt, SttNotConfiguredError } from '../utils/cloudStt';
 import { haptic } from '../utils/haptics';
 
 const Chat: React.FC = () => {
-    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, openApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig, ttsConfig } = useOS();
+    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, openApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig, ttsConfig, sttConfig } = useOS();
     const [messages, setMessages] = useState<Message[]>([]);
     const [totalMsgCount, setTotalMsgCount] = useState(0);
     const [visibleCount, setVisibleCount] = useState(30);
@@ -1007,22 +1007,21 @@ const Chat: React.FC = () => {
             let sttFailed = false;
 
             try {
-                const sttPromise = WhisperStt.transcribe(blob, 'tiny', (progress) => {
-                    if (progress.status === 'progress' && progress.progress !== undefined) {
-                        console.log(`🎤 [STT] Model download: ${progress.progress.toFixed(0)}%`);
-                    }
-                });
-
-                // 15s timeout — if model download is blocked (e.g. China firewall), don't hang forever
-                const timeoutPromise = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('STT timeout (15s)')), 15000)
-                );
-
-                const result = await Promise.race([sttPromise, timeoutPromise]);
+                const result = await CloudStt.transcribe(blob, sttConfig, 15000);
                 transcribedText = result.text;
-            } catch (sttErr) {
+
+                // 如果 SenseVoice 返回了情绪标签，写入 metadata
+                if (result.emotion) {
+                    await DB.updateMessageMetadata(voiceMsgId, { emotion: result.emotion });
+                }
+            } catch (sttErr: any) {
                 console.error('🎤 [STT] Transcription failed:', sttErr);
                 sttFailed = true;
+
+                // 未配置 Key — 给用户明确提示
+                if (sttErr instanceof SttNotConfiguredError) {
+                    addToast('请先在设置中配置语音识别 API Key', 'error');
+                }
             }
 
             setTranscribingMsgIds(prev => { const s = new Set(prev); s.delete(voiceMsgId); return s; });
