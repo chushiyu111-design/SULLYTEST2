@@ -7,7 +7,7 @@ import {
 } from '../../types';
 
 const DB_NAME = 'AetherOS_Data';
-const DB_VERSION = 36; // Bumped for Letters (Spacetime Post Office)
+const DB_VERSION = 37; // Bumped for Voice Audio store
 
 export const STORE_CHARACTERS = 'characters';
 export const STORE_MESSAGES = 'messages';
@@ -35,6 +35,7 @@ export const STORE_BANK_DATA = 'bank_data';
 export const STORE_XHS_STOCK = 'xhs_stock';
 export const STORE_XHS_ACTIVITIES = 'xhs_activities';
 export const STORE_LETTERS = 'letters';
+export const STORE_VOICE_AUDIO = 'voice_audio';
 
 export interface ScheduledMessage {
     id: string;
@@ -147,6 +148,8 @@ export const openDB = (): Promise<IDBDatabase> => {
                 const letterStore = db.createObjectStore(STORE_LETTERS, { keyPath: 'id' });
                 letterStore.createIndex('charId', 'charId', { unique: false });
             }
+
+            createStore(STORE_VOICE_AUDIO, { keyPath: 'msgId' });
         };
     });
 };

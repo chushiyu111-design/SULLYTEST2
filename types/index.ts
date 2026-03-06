@@ -10,3 +10,4 @@ export * from './bank';
 export * from './xhs';
 export * from './realtime';
 export * from './backup';
+export * from './tts';

@@ -4,6 +4,7 @@ import { ShareNetwork, Trash, Plus, Smiley, PaperPlaneTilt, Money, BookOpenText,
 import { CharacterProfile, ChatTheme, EmojiCategory, Emoji } from '../../types';
 import { PRESET_THEMES } from './ChatConstants';
 import { THEME_PLUGINS } from './ThemeRegistry';
+import VoiceRecordButton from './VoiceRecordButton';
 
 // WeChat-specific icons and input bar are now in ./plugins/WeChatInputBar.tsx
 // Loaded via ThemeRegistry at runtime.
@@ -36,6 +37,15 @@ interface ChatInputAreaProps {
     // Reroll Support
     onReroll: () => void;
     canReroll: boolean;
+    // Voice Recording Support
+    onVoiceMessage?: (blob: Blob, duration: number) => void;
+    voiceRecorderState?: 'idle' | 'recording' | 'processing';
+    voiceRecordingDuration?: number;
+    onStartRecording?: () => Promise<boolean>;
+    onStopRecording?: () => Promise<{ blob: Blob; duration: number } | null>;
+    onCancelRecording?: () => void;
+    voiceRecorderError?: string | null;
+    isVoiceProcessing?: boolean;
 }
 
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
@@ -45,7 +55,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     customThemes, onUpdateTheme, onRemoveTheme, activeThemeId,
     onPanelAction, onImageSelect, isSummarizing,
     categories = [], activeCategory = 'default',
-    onReroll, canReroll
+    onReroll, canReroll,
+    onVoiceMessage, voiceRecorderState = 'idle', voiceRecordingDuration = 0,
+    onStartRecording, onStopRecording, onCancelRecording,
+    voiceRecorderError, isVoiceProcessing = false
 }) => {
     const chatImageInputRef = useRef<HTMLInputElement>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -186,7 +199,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                 ) : THEME_PLUGINS[pluginThemeId]?.InputBar ? (
                     /* ===== Theme Plugin Input Bar (e.g. WeChat) ===== */
                     React.createElement(THEME_PLUGINS[pluginThemeId].InputBar!, {
-                        input, setInput, showPanel, setShowPanel, onSend
+                        input, setInput, showPanel, setShowPanel, onSend,
+                        onVoiceMessage, voiceRecorderState, voiceRecordingDuration,
+                        onStartRecording, onStopRecording, onCancelRecording,
+                        voiceRecorderError, isVoiceProcessing
                     })
                 ) : (
                     /* ===== Default Pill Layout (all other themes) ===== */
@@ -208,13 +224,34 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                 <Smiley className="w-6 h-6" weight="regular" />
                             </button>
                         </div>
-                        <button
-                            onClick={onSend}
-                            disabled={!input.trim()}
-                            className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-all ${input.trim() ? 'bg-primary text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
-                        >
-                            <PaperPlaneTilt className="w-5 h-5" weight="fill" />
-                        </button>
+                        {input.trim() ? (
+                            <button
+                                onClick={onSend}
+                                className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-all bg-primary text-white shadow-lg"
+                            >
+                                <PaperPlaneTilt className="w-5 h-5" weight="fill" />
+                            </button>
+                        ) : onVoiceMessage && onStartRecording && onStopRecording && onCancelRecording ? (
+                            <VoiceRecordButton
+                                onVoiceMessage={onVoiceMessage}
+                                isProcessing={isVoiceProcessing}
+                                disabled={isTyping}
+                                recorderState={voiceRecorderState}
+                                recordingDuration={voiceRecordingDuration}
+                                onStartRecording={onStartRecording}
+                                onStopRecording={onStopRecording}
+                                onCancelRecording={onCancelRecording}
+                                error={voiceRecorderError}
+                            />
+                        ) : (
+                            <button
+                                onClick={onSend}
+                                disabled={!input.trim()}
+                                className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-all bg-slate-200 text-slate-400"
+                            >
+                                <PaperPlaneTilt className="w-5 h-5" weight="fill" />
+                            </button>
+                        )}
                     </div>
                 )}
 

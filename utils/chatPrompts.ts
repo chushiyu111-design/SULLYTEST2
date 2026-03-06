@@ -487,7 +487,9 @@ ${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Bool
     ) => {
         // Filter Logic
         const effectiveHistory = messages.filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId);
-        const historySlice = effectiveHistory.slice(-limit);
+        // Exclude voice messages — their text content is already covered by the paired text message
+        const nonVoiceHistory = effectiveHistory.filter(m => m.type !== 'voice');
+        const historySlice = nonVoiceHistory.slice(-limit);
 
         let timeGapHint = "";
         if (historySlice.length >= 2) {

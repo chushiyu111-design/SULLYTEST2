@@ -18,6 +18,7 @@ import ForwardCard from './cards/ForwardCard';
 import WeChatMomentsCard from './cards/WeChatMomentsCard';
 import ChatBubble from './ChatBubble';
 import InteractionPill from './InteractionPill';
+import VoiceBubble from './VoiceBubble';
 
 // --- Deduplicated Selection Checkbox ---
 const SelectionCheckbox: React.FC<{ isSelected: boolean; onToggle: () => void }> = ({ isSelected, onToggle }) => (
@@ -59,6 +60,12 @@ interface MessageItemProps {
     // Timestamp separator (computed by parent Chat.tsx)
     showTimestamp?: boolean;
     timestampValue?: number;
+    // Voice playback
+    onPlayVoice?: (msgId: number) => void;
+    onStopVoice?: () => void;
+    onRetryVoice?: (msgId: number) => void;
+    playingMsgId?: number | null;
+    loadingMsgIds?: Set<number>;
 }
 
 const MessageItem = React.memo(({
@@ -79,6 +86,11 @@ const MessageItem = React.memo(({
     onTransferAction,
     showTimestamp,
     timestampValue,
+    onPlayVoice,
+    onStopVoice,
+    onRetryVoice,
+    playingMsgId,
+    loadingMsgIds,
 }: MessageItemProps) => {
     const isUser = m.role === 'user';
     const isSystem = m.role === 'system';
@@ -346,6 +358,25 @@ const MessageItem = React.memo(({
         );
     }
 
+    // --- Voice Message Rendering ---
+    if (m.type === 'voice') {
+        const isVoiceLoading = !!loadingMsgIds?.has(m.id);
+        const hasAudio = !!m.metadata?.hasAudio;
+        return commonLayout(
+            <VoiceBubble
+                duration={m.metadata?.duration ?? 0}
+                isPlaying={playingMsgId === m.id}
+                isLoading={isVoiceLoading}
+                hasFailed={!hasAudio && !isVoiceLoading}
+                isUser={isUser}
+                onPlay={() => onPlayVoice?.(m.id)}
+                onStop={() => onStopVoice?.()}
+                onRetry={() => onRetryVoice?.(m.id)}
+                styleConfig={styleConfig}
+            />
+        );
+    }
+
     // --- Bilingual content parsing ---
     const rawContent = m.content;
     const bilingualIdx = rawContent.toLowerCase().indexOf('%%bilingual%%');
@@ -380,7 +411,10 @@ const MessageItem = React.memo(({
         prev.isSelected === next.isSelected &&
         prev.translationEnabled === next.translationEnabled &&
         prev.isShowingTarget === next.isShowingTarget &&
-        prev.showTimestamp === next.showTimestamp;
+        prev.showTimestamp === next.showTimestamp &&
+        prev.playingMsgId === next.playingMsgId &&
+        prev.loadingMsgIds?.size === next.loadingMsgIds?.size &&
+        !!prev.loadingMsgIds?.has(prev.msg.id) === !!next.loadingMsgIds?.has(next.msg.id);
 });
 
 export default MessageItem;

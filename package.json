@@ -21,6 +21,7 @@
     "@capacitor/local-notifications": "^6.0.0",
     "@capacitor/share": "^6.0.0",
     "@capacitor/status-bar": "^6.0.0",
+    "@huggingface/transformers": "^3.8.1",
     "@phosphor-icons/react": "^2.1.10",
     "@types/three": "^0.183.1",
     "astronomy-engine": "^2.1.19",

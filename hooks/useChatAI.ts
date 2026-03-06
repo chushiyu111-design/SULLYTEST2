@@ -23,6 +23,8 @@ interface UseChatAIProps {
     setMessages: (msgs: Message[]) => void; // Callback to update UI messages
     realtimeConfig?: RealtimeConfig; // 新增：实时配置
     translationConfig?: { enabled: boolean; sourceLang: string; targetLang: string };
+    autoVoice?: boolean; // 开启后向 AI 注入语音消息格式指引
+    onVoiceMessageSaved?: (msgId: number, text: string) => void; // 语音消息保存后的回调（用于触发 TTS）
 }
 
 export const useChatAI = ({
@@ -35,7 +37,9 @@ export const useChatAI = ({
     addToast,
     setMessages,
     realtimeConfig,  // 新增
-    translationConfig
+    translationConfig,
+    autoVoice,
+    onVoiceMessageSaved
 }: UseChatAIProps) => {
 
     const [isTyping, setIsTyping] = useState(false);
@@ -105,6 +109,26 @@ export const useChatAI = ({
             // 1. Build System Prompt (包含实时世界信息)
             let systemPrompt = await ChatPrompts.buildSystemPrompt(char, userProfile, groups, emojis, categories, currentMsgs, realtimeConfig);
 
+            // 1.1 Inject voice message format instruction (only when autoVoice is enabled)
+            if (autoVoice) {
+                systemPrompt += `
+
+[系统功能: 语音消息]
+你现在可以发送语音消息。当你想发语音（比如叫名字、撒娇、说一句重要的话），请使用以下严格格式：
+【语音消息：你说的话】
+
+格式规则（必须遵守）：
+- 必须用全角中文括号【】包裹，冒号为全角：
+- 括号里只写你开口说的话，不写动作描述或"嗯""啊"等语气词
+- 可以单独一条发，也可以出现在文字消息里
+- 不是每次都要发语音，在合适时机偶尔使用即可
+- 严禁写成 [语音消息] 或 (语音消息) 等其他形式
+
+示例：
+【语音消息：喂，你在吗？】
+【语音消息：我刚下班，等一下啊。】`;
+            }
+
             // 1.5 Inject bilingual output instruction when translation is enabled
             const bilingualActive = translationConfig?.enabled && translationConfig.sourceLang && translationConfig.targetLang;
             if (bilingualActive) {
@@ -167,6 +191,37 @@ export const useChatAI = ({
             });
 
             const fullMessages = [{ role: 'system', content: systemPrompt }, ...cleanedApiMessages];
+
+            // 2.55 Handle user voice messages: tag transcribed text and inject STT tolerance prompt
+            let hasUserVoiceMsg = false;
+            for (const msg of fullMessages) {
+                // Find user voice messages by checking the original contextMsgs metadata
+                if (msg.role === 'user' && typeof msg.content === 'string') {
+                    const originalMsg = contextMsgs.find((m: any) =>
+                        m.role === 'user' && m.type === 'voice'
+                        && m.metadata?.source === 'user-recording'
+                        && m.metadata?.sttStatus === 'done'
+                        && (m.content === msg.content || m.metadata?.transcribedText === msg.content)
+                    );
+                    if (originalMsg && originalMsg.metadata?.transcribedText) {
+                        msg.content = `[🎤用户语音] ${originalMsg.metadata.transcribedText}`;
+                        hasUserVoiceMsg = true;
+                    }
+                }
+            }
+            // If the latest user message is a voice message, inject tolerance prompt
+            if (hasUserVoiceMsg) {
+                const lastUserIdx = fullMessages.map(m => m.role).lastIndexOf('user');
+                if (lastUserIdx >= 0) {
+                    const lastUserMsg = fullMessages[lastUserIdx];
+                    if (typeof lastUserMsg.content === 'string' && lastUserMsg.content.startsWith('[🎤用户语音]')) {
+                        fullMessages.splice(lastUserIdx + 1, 0, {
+                            role: 'system',
+                            content: '[系统提示：用户刚才发送了一条语音消息。以下文字由设备语音识别自动转换，可能存在同音字错误或漏字，请结合上下文理解原意，并按照原意进行回复]'
+                        });
+                    }
+                }
+            }
 
             // Debug: Log context composition
             const systemPromptLength = systemPrompt.length;
@@ -827,6 +882,93 @@ export const useChatAI = ({
                     if (themePlugin?.notificationSound) playThemeNotification(themePlugin.notificationSound);
                 };
 
+                // --- Voice Message Detection — shared helper for both bilingual and normal paths ---
+                // Regex moved here so both branches can use them
+                // Pattern A: duration-based tag followed by (optionally quoted) content
+                // e.g. [语音消息: 8秒] "喏？喏？..." or [语音消息:8s]「内容」
+                const VOICE_DURATION_RE = /[【\[]语音(?:消息)?[：:]\s*(\d+)\s*(?:秒|s|sec)?[】\]]\s*["\u201C\u201D「『]?([\s\S]*?)["\u201C\u201D」』]?\s*(?:$|(?=[\n【\[]))/;
+                // Pattern B: content fully wrapped in brackets
+                // e.g. 【语音消息：喏？喏？...】or [语音消息：内容]
+                const VOICE_WRAP_RE = /^([\s\S]*?)[【\[]语音(?:消息)?[：:]\s*([\s\S]+?)\s*[】\]](.*)$/;
+
+                /**
+                 * Save a text chunk — if it contains a voice tag, split into text + voice message;
+                 * otherwise save as plain text. Returns how many messages were saved.
+                 */
+                const saveTextOrVoiceChunk = async (
+                    cleanChunk: string,
+                    replyData: { id: number; content: string; name: string } | undefined
+                ): Promise<number> => {
+                    let saved = 0;
+                    const durMatch = cleanChunk.match(VOICE_DURATION_RE);
+                    const wrapMatch = !durMatch ? cleanChunk.match(VOICE_WRAP_RE) : null;
+
+                    if (durMatch) {
+                        const tagStart = cleanChunk.search(/[【\[]语音(?:消息)?[：:]\s*\d/);
+                        const textBefore = tagStart > 0 ? cleanChunk.slice(0, tagStart).trim() : '';
+                        const durationSecs = parseInt(durMatch[1], 10) || 5;
+                        const voiceText = durMatch[2].trim();
+
+                        if (textBefore) {
+                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: textBefore, replyTo: replyData });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                        if (voiceText) {
+                            const savedVoiceId = await DB.saveMessage({
+                                charId: char.id, role: 'assistant', type: 'voice',
+                                content: voiceText,
+                                metadata: { duration: durationSecs, sourceText: voiceText, hasAudio: false },
+                                replyTo: textBefore ? undefined : replyData,
+                            });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            onVoiceMessageSaved?.(savedVoiceId, voiceText);
+                        }
+                    } else if (wrapMatch) {
+                        const textBefore = wrapMatch[1].trim();
+                        const voiceText = wrapMatch[2].trim();
+                        const textAfter = wrapMatch[3].trim();
+                        const estimatedDuration = Math.max(2, Math.ceil(voiceText.length / 4));
+
+                        if (textBefore) {
+                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: textBefore, replyTo: replyData });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                        if (voiceText) {
+                            const savedVoiceId2 = await DB.saveMessage({
+                                charId: char.id, role: 'assistant', type: 'voice',
+                                content: voiceText,
+                                metadata: { duration: estimatedDuration, sourceText: voiceText, hasAudio: false },
+                                replyTo: textBefore ? undefined : replyData,
+                            });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            onVoiceMessageSaved?.(savedVoiceId2, voiceText);
+                        }
+                        if (textAfter) {
+                            await new Promise(r => setTimeout(r, 400));
+                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: textAfter });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            saved++;
+                        }
+                    } else {
+                        // Normal text message
+                        await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: cleanChunk, replyTo: replyData });
+                        setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                        playFirstNotification();
+                        saved++;
+                    }
+                    return saved;
+                };
+
                 if (hasTranslationTags) {
                     // ─── New bilingual format: each <翻译> block = one bubble ───
                     // Extract emojis for bilingual path (splitResponse not used here)
@@ -853,10 +995,8 @@ export const useChatAI = ({
                                     if (!chunk) continue;
                                     const replyData = globalMsgIndex === 0 ? aiReplyTarget : undefined;
                                     await new Promise(r => setTimeout(r, Math.min(Math.max(chunk.length * 50, 500), 2000)));
-                                    await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: chunk, replyTo: replyData });
-                                    setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
-                                    playFirstNotification();
-                                    globalMsgIndex++;
+                                    const saved = await saveTextOrVoiceChunk(chunk, replyData);
+                                    globalMsgIndex += saved;
                                 }
                             }
                         }
@@ -890,10 +1030,8 @@ export const useChatAI = ({
                                 if (!chunk) continue;
                                 const replyData = globalMsgIndex === 0 ? aiReplyTarget : undefined;
                                 await new Promise(r => setTimeout(r, Math.min(Math.max(chunk.length * 50, 500), 2000)));
-                                await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: chunk, replyTo: replyData });
-                                setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
-                                playFirstNotification();
-                                globalMsgIndex++;
+                                const saved = await saveTextOrVoiceChunk(chunk, replyData);
+                                globalMsgIndex += saved;
                             }
                         }
                     }
@@ -957,11 +1095,9 @@ export const useChatAI = ({
                                 if (ChatParser.hasDisplayContent(chunk)) {
                                     const cleanChunk = ChatParser.sanitize(chunk);
                                     if (cleanChunk) {
-                                        await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: cleanChunk, replyTo: replyData });
-                                        setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
-                                        // Haptic + sound on AI reply
-                                        playFirstNotification();
-                                        globalMsgIndex++;
+                                        // Use shared voice detection helper
+                                        const saved = await saveTextOrVoiceChunk(cleanChunk, replyData);
+                                        globalMsgIndex += saved;
                                     }
                                 }
                             }

@@ -92,7 +92,7 @@ export interface ChatTheme {
     timestampIntervalMs?: number;
 }
 
-export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card' | 'moments';
+export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card' | 'moments' | 'voice';
 
 export interface Message {
     id: number;

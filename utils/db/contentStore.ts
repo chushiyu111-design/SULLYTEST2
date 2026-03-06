@@ -2,7 +2,7 @@ import { ChatTheme, Emoji, EmojiCategory, UserProfile, GalleryImage, XhsStockIma
 import {
     openDB, STORE_THEMES, STORE_EMOJIS, STORE_EMOJI_CATEGORIES, STORE_ASSETS,
     STORE_USER, STORE_GALLERY, STORE_JOURNAL_STICKERS,
-    STORE_XHS_STOCK, STORE_XHS_ACTIVITIES,
+    STORE_XHS_STOCK, STORE_XHS_ACTIVITIES, STORE_VOICE_AUDIO,
     SULLY_CATEGORY_ID, SULLY_PRESET_EMOJIS
 } from './core';
 
@@ -205,4 +205,22 @@ export const clearXhsActivities = async (characterId: string): Promise<void> => 
     const db = await openDB();
     const store = db.transaction(STORE_XHS_ACTIVITIES, 'readwrite').objectStore(STORE_XHS_ACTIVITIES);
     for (const a of activities) store.delete(a.id);
+};
+
+// --- Voice Audio ---
+export const saveVoiceAudio = async (msgId: number, blob: Blob): Promise<void> => {
+    const db = await openDB();
+    db.transaction(STORE_VOICE_AUDIO, 'readwrite').objectStore(STORE_VOICE_AUDIO).put({ msgId, blob, createdAt: Date.now() });
+};
+export const getVoiceAudio = async (msgId: number): Promise<Blob | null> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const request = db.transaction(STORE_VOICE_AUDIO, 'readonly').objectStore(STORE_VOICE_AUDIO).get(msgId);
+        request.onsuccess = () => resolve(request.result?.blob ?? null);
+        request.onerror = () => reject(request.error);
+    });
+};
+export const deleteVoiceAudio = async (msgId: number): Promise<void> => {
+    const db = await openDB();
+    db.transaction(STORE_VOICE_AUDIO, 'readwrite').objectStore(STORE_VOICE_AUDIO).delete(msgId);
 };

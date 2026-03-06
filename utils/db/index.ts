@@ -157,4 +157,9 @@ export const DB = {
     getAllTransactions: bankStore.getAllTransactions,
     saveTransaction: bankStore.saveTransaction,
     deleteTransaction: bankStore.deleteTransaction,
+
+    // Voice Audio
+    saveVoiceAudio: contentStore.saveVoiceAudio,
+    getVoiceAudio: contentStore.getVoiceAudio,
+    deleteVoiceAudio: contentStore.deleteVoiceAudio,
 };

@@ -10,6 +10,7 @@ import {
 } from './social';
 import { BankFullState, BankTransaction, DollhouseState } from './bank';
 import { XhsActivityRecord, XhsStockImage } from './xhs';
+import { TtsConfig } from './tts';
 
 export interface FullBackupData {
     timestamp: number;
@@ -19,6 +20,7 @@ export interface FullBackupData {
     apiPresets?: ApiPreset[];
     availableModels?: string[];
     realtimeConfig?: RealtimeConfig;  // 实时感知配置（天气/新闻/Notion）
+    ttsConfig?: TtsConfig;            // 语音合成配置
     customIcons?: Record<string, string>;
     characters?: CharacterProfile[];
     groups?: GroupProfile[];

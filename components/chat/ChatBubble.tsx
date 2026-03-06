@@ -58,11 +58,11 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
         if (!bubbleRef.current) return;
         const el = bubbleRef.current;
         if (styleConfig.backgroundColor) {
-            el.style.setProperty('background', styleConfig.backgroundColor, 'important');
+            el.style.setProperty('background', styleConfig.backgroundColor);
         }
-        el.style.setProperty('border-radius', `${radius}px`, 'important');
+        el.style.setProperty('border-radius', `${radius}px`);
         if (styleConfig.textColor) {
-            el.style.setProperty('color', styleConfig.textColor, 'important');
+            el.style.setProperty('color', styleConfig.textColor);
         }
         if (styleConfig.opacity !== undefined) {
             el.style.setProperty('opacity', String(styleConfig.opacity));

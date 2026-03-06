@@ -1,5 +1,5 @@
 
-import { APIConfig, OSTheme, CharacterProfile, ChatTheme, FullBackupData, UserProfile, ApiPreset, GroupProfile, Worldbook, NovelBook, Message, RealtimeConfig } from '../types';
+import { APIConfig, OSTheme, CharacterProfile, ChatTheme, FullBackupData, UserProfile, ApiPreset, GroupProfile, Worldbook, NovelBook, Message, RealtimeConfig, TtsConfig } from '../types';
 import { DB } from './db';
 
 // ─── JSZip Dynamic Loader ───────────────────────────────────────────────
@@ -184,6 +184,7 @@ export interface ExportStateSnapshot {
     apiPresets: ApiPreset[];
     availableModels: string[];
     realtimeConfig: RealtimeConfig;
+    ttsConfig: TtsConfig;
     theme: OSTheme;
 }
 
@@ -215,6 +216,7 @@ export async function exportSystemData(
         apiPresets: (mode === 'text_only' || mode === 'full') ? state.apiPresets : undefined,
         availableModels: (mode === 'text_only' || mode === 'full') ? state.availableModels : undefined,
         realtimeConfig: (mode === 'text_only' || mode === 'full') ? state.realtimeConfig : undefined,
+        ttsConfig: (mode === 'text_only' || mode === 'full') ? state.ttsConfig : undefined,
         theme: state.theme,
 
         socialAppData: (mode === 'text_only' || mode === 'media_only' || mode === 'full') ? {
@@ -436,6 +438,7 @@ export async function importSystemData(
     if (data.availableModels) localStorage.setItem('os_available_models', JSON.stringify(data.availableModels));
     if (data.apiPresets) localStorage.setItem('os_api_presets', JSON.stringify(data.apiPresets));
     if (data.realtimeConfig) localStorage.setItem('os_realtime_config', JSON.stringify(data.realtimeConfig));
+    if (data.ttsConfig) localStorage.setItem('os_tts_config', JSON.stringify(data.ttsConfig));
 
     if (data.socialAppData) {
         if (data.socialAppData.charHandles) localStorage.setItem('spark_char_handles', JSON.stringify(data.socialAppData.charHandles));

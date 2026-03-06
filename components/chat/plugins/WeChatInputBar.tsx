@@ -48,6 +48,15 @@ interface WeChatInputBarProps {
     showPanel: 'none' | 'actions' | 'emojis' | 'chars';
     setShowPanel: (v: 'none' | 'actions' | 'emojis' | 'chars') => void;
     onSend: () => void;
+    // Voice Recording Support
+    onVoiceMessage?: (blob: Blob, duration: number) => void;
+    voiceRecorderState?: 'idle' | 'recording' | 'processing';
+    voiceRecordingDuration?: number;
+    onStartRecording?: () => Promise<boolean>;
+    onStopRecording?: () => Promise<{ blob: Blob; duration: number } | null>;
+    onCancelRecording?: () => void;
+    voiceRecorderError?: string | null;
+    isVoiceProcessing?: boolean;
 }
 
 /**
@@ -55,9 +64,66 @@ interface WeChatInputBarProps {
  * Contains its own auto-expand textarea logic and WeChat-specific SVG icons.
  */
 const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
-    input, setInput, showPanel, setShowPanel, onSend
+    input, setInput, showPanel, setShowPanel, onSend,
+    onVoiceMessage, voiceRecorderState = 'idle', voiceRecordingDuration = 0,
+    onStartRecording, onStopRecording, onCancelRecording,
+    voiceRecorderError, isVoiceProcessing = false
 }) => {
     const wxTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // --- Voice Recording State ---
+    const [isOverCancel, setIsOverCancel] = React.useState(false);
+    const startYRef = React.useRef(0);
+    const isRecordingRef = React.useRef(false);
+    const CANCEL_THRESHOLD = 50;
+
+    const formatDuration = (s: number) => {
+        const min = Math.floor(s / 60);
+        const sec = s % 60;
+        return `${min}:${sec.toString().padStart(2, '0')}`;
+    };
+
+    // --- Touch / Mouse handlers for press-hold recording ---
+    const handlePointerDown = React.useCallback(async (e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
+        if (!onStartRecording || voiceRecorderState !== 'idle') return;
+
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        startYRef.current = clientY;
+        setIsOverCancel(false);
+
+        const ok = await onStartRecording();
+        if (ok) {
+            isRecordingRef.current = true;
+        }
+    }, [voiceRecorderState, onStartRecording]);
+
+    const handlePointerMove = React.useCallback((e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
+        if (!isRecordingRef.current) return;
+
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        const dy = startYRef.current - clientY; // positive = moved up
+        setIsOverCancel(dy > CANCEL_THRESHOLD);
+    }, []);
+
+    const handlePointerUp = React.useCallback(async () => {
+        if (!isRecordingRef.current) return;
+        isRecordingRef.current = false;
+
+        if (isOverCancel) {
+            onCancelRecording?.();
+            setIsOverCancel(false);
+            return;
+        }
+
+        const result = await onStopRecording?.();
+        if (result && result.blob.size > 0 && result.duration >= 1) {
+            onVoiceMessage?.(result.blob, result.duration);
+        }
+        setIsOverCancel(false);
+    }, [isOverCancel, onCancelRecording, onStopRecording, onVoiceMessage]);
+
+    const isRecording = voiceRecorderState === 'recording';
+    const showOverlay = isRecording;
 
     // Auto-expand textarea height (up to ~5 lines = 120px)
     useEffect(() => {
@@ -88,16 +154,33 @@ const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
                 transition: 'min-height 0.15s ease',
             }}
         >
-            {/* Voice Button — decorative only */}
+            {/* Voice Button */}
             <button
+                onTouchStart={handlePointerDown}
+                onTouchMove={handlePointerMove}
+                onTouchEnd={handlePointerUp}
+                onMouseDown={handlePointerDown}
+                onMouseMove={handlePointerMove}
+                onMouseUp={handlePointerUp}
+                onMouseLeave={() => { if (isRecordingRef.current) handlePointerUp(); }}
+                onContextMenu={(e) => e.preventDefault()}
+                disabled={isVoiceProcessing}
                 style={{
                     width: '36px', height: '36px', display: 'flex',
                     alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0, background: 'transparent', border: 'none',
+                    flexShrink: 0, background: isRecording ? '#e5e5e5' : 'transparent', border: 'none',
+                    borderRadius: '50%',
                     padding: 0, cursor: 'pointer',
+                    opacity: isVoiceProcessing ? 0.5 : 1,
+                    transition: 'background 0.2s'
                 }}
+                title={voiceRecorderError || '按住说话'}
             >
-                <WxIconVoice className="w-[27px] h-[27px]" />
+                {isVoiceProcessing ? (
+                    <div className="w-5 h-5 border-2 border-[#2A2A2A]/30 border-t-[#2A2A2A] rounded-full animate-spin" />
+                ) : (
+                    <WxIconVoice className="w-[27px] h-[27px]" />
+                )}
             </button>
 
             {/* Input Field */}
@@ -175,6 +258,50 @@ const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
                 >
                     <WxIconPlus className="w-[27px] h-[27px]" />
                 </button>
+            )}
+
+            {/* Recording Overlay */}
+            {showOverlay && (
+                <div
+                    className="fixed inset-0 z-[9999] flex flex-col items-center justify-center pb-32 pointer-events-none"
+                    style={{ background: 'transparent' }}
+                >
+                    {/* Transparent touch catcher for gestures — pointer events on */}
+                    <div
+                        className="absolute inset-0 pointer-events-auto"
+                        onTouchMove={handlePointerMove}
+                        onTouchEnd={handlePointerUp}
+                        onMouseMove={handlePointerMove}
+                        onMouseUp={handlePointerUp}
+                        style={{ touchAction: 'none' }}
+                    />
+
+                    {/* Recording indicator card (WeChat style) */}
+                    <div className={`relative pointer-events-none w-[150px] h-[150px] flex flex-col items-center justify-center rounded-2xl transition-all duration-200 ${isOverCancel
+                            ? 'bg-red-500/90'
+                            : 'bg-black/60 backdrop-blur-md'
+                        }`}>
+                        {/* Waveform animation */}
+                        <div className="flex items-center justify-center gap-1.5 h-12 mb-2">
+                            {[...Array(5)].map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="w-[4px] rounded-full bg-white transition-all"
+                                    style={{
+                                        height: `${12 + Math.sin(Date.now() / 200 + i * 1.2) * 16}px`,
+                                        animation: isOverCancel ? 'none' : `voice-wave ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
+                                    }}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Cancel hint */}
+                        <div className={`text-center text-sm font-medium mt-2 px-3 py-1 rounded-md transition-colors ${isOverCancel ? 'bg-red-600/50 text-white' : 'text-white/80'
+                            }`}>
+                            {isOverCancel ? '松开手指，取消发送' : '手指上滑，取消发送'}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

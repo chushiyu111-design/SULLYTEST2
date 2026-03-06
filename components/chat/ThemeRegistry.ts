@@ -33,6 +33,15 @@ export interface ThemePlugin {
         showPanel: 'none' | 'actions' | 'emojis' | 'chars';
         setShowPanel: (v: 'none' | 'actions' | 'emojis' | 'chars') => void;
         onSend: () => void;
+        // Voice Recording Support
+        onVoiceMessage?: (blob: Blob, duration: number) => void;
+        voiceRecorderState?: 'idle' | 'recording' | 'processing';
+        voiceRecordingDuration?: number;
+        onStartRecording?: () => Promise<boolean>;
+        onStopRecording?: () => Promise<{ blob: Blob; duration: number } | null>;
+        onCancelRecording?: () => void;
+        voiceRecorderError?: string | null;
+        isVoiceProcessing?: boolean;
     }>;
     /** Custom transfer card component (undefined = use neutral fallback card) */
     TransferCard?: React.FC<TransferCardProps>;

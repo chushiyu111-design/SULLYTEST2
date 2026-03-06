@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig } from '../types';
+import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, Message, RealtimeConfig, TtsConfig, DEFAULT_TTS_CONFIG } from '../types';
 import { DB } from '../utils/db';
 import { onSystemLog } from '../utils/systemInterceptor';
 import { exportSystemData, importSystemData, ExportStateSnapshot, ImportCallbacks } from '../utils/systemBackup';
@@ -78,6 +78,10 @@ interface OSContextType extends AppContextType, NotificationContextType {
     // 实时配置 (天气、新闻、Notion等)
     realtimeConfig: RealtimeConfig;
     updateRealtimeConfig: (updates: Partial<RealtimeConfig>) => void;
+
+    // TTS 语音合成配置
+    ttsConfig: TtsConfig;
+    updateTtsConfig: (updates: Partial<TtsConfig>) => void;
 
     customThemes: ChatTheme[];
     addCustomTheme: (theme: ChatTheme) => void;
@@ -315,6 +319,7 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [apiPresets, setApiPresets] = useState<ApiPreset[]>([]);
     const [realtimeConfig, setRealtimeConfig] = useState<RealtimeConfig>(defaultRealtimeConfig);
+    const [ttsConfig, setTtsConfig] = useState<TtsConfig>(DEFAULT_TTS_CONFIG);
     const [customThemes, setCustomThemes] = useState<ChatTheme[]>([]);
     const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
 
@@ -413,6 +418,23 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
                     setRealtimeConfig({ ...defaultRealtimeConfig, ...JSON.parse(savedRealtimeConfig) });
                 } catch (e) {
                     console.error('Failed to load realtime config', e);
+                }
+            }
+
+            // 加载 TTS 配置
+            const savedTtsConfig = localStorage.getItem('os_tts_config');
+            if (savedTtsConfig) {
+                try {
+                    const parsed = JSON.parse(savedTtsConfig);
+                    setTtsConfig(prev => ({
+                        ...prev,
+                        ...parsed,
+                        voiceSetting: { ...prev.voiceSetting, ...(parsed.voiceSetting || {}) },
+                        audioSetting: { ...prev.audioSetting, ...(parsed.audioSetting || {}) },
+                        preprocessConfig: { ...prev.preprocessConfig, ...(parsed.preprocessConfig || {}) },
+                    }));
+                } catch (e) {
+                    console.error('Failed to load TTS config', e);
                 }
             }
 
@@ -729,6 +751,28 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     };
     const updateApiConfig = (updates: Partial<APIConfig>) => { const newConfig = { ...apiConfig, ...updates }; setApiConfig(newConfig); localStorage.setItem('os_api_config', JSON.stringify(newConfig)); };
     const updateRealtimeConfig = (updates: Partial<RealtimeConfig>) => { const newConfig = { ...realtimeConfig, ...updates }; setRealtimeConfig(newConfig); localStorage.setItem('os_realtime_config', JSON.stringify(newConfig)); };
+    // TTS 配置更新 — 深层 merge 嵌套对象（voiceSetting / audioSetting / voiceModify / preprocessConfig）
+    const updateTtsConfig = (updates: Partial<TtsConfig>) => {
+        setTtsConfig(prev => {
+            const newConfig: TtsConfig = {
+                ...prev,
+                ...updates,
+                voiceSetting: { ...prev.voiceSetting, ...(updates.voiceSetting || {}) },
+                audioSetting: { ...prev.audioSetting, ...(updates.audioSetting || {}) },
+                preprocessConfig: { ...prev.preprocessConfig, ...(updates.preprocessConfig || {}) },
+            };
+            // voiceModify 可选，只在有值时 merge
+            if (updates.voiceModify !== undefined) {
+                newConfig.voiceModify = updates.voiceModify === null ? undefined : { ...(prev.voiceModify || { pitch: 0, intensity: 0, timbre: 0 }), ...updates.voiceModify };
+            }
+            // pronunciationDict 可选
+            if (updates.pronunciationDict !== undefined) {
+                newConfig.pronunciationDict = updates.pronunciationDict;
+            }
+            localStorage.setItem('os_tts_config', JSON.stringify(newConfig));
+            return newConfig;
+        });
+    };
     const saveModels = (models: string[]) => { setAvailableModels(models); localStorage.setItem('os_available_models', JSON.stringify(models)); };
     const addApiPreset = (name: string, config: APIConfig) => { setApiPresets(prev => { const next = [...prev, { id: Date.now().toString(), name, config }]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
     const removeApiPreset = (id: string) => { setApiPresets(prev => { const next = prev.filter(p => p.id !== id); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
@@ -852,7 +896,7 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const exportSystem = async (mode: 'text_only' | 'media_only' | 'full'): Promise<Blob> => {
         try {
             setSysOperation({ status: 'processing', message: '正在初始化...', progress: 0 });
-            const stateSnapshot: ExportStateSnapshot = { apiConfig, apiPresets, availableModels, realtimeConfig, theme };
+            const stateSnapshot: ExportStateSnapshot = { apiConfig, apiPresets, availableModels, realtimeConfig, ttsConfig, theme };
             const blob = await exportSystemData(mode, stateSnapshot, (message, progress) => {
                 setSysOperation({ status: 'processing', message, progress });
             });
@@ -924,6 +968,8 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
         removeApiPreset,
         realtimeConfig,
         updateRealtimeConfig,
+        ttsConfig,
+        updateTtsConfig,
         customThemes,
         addCustomTheme,
         removeCustomTheme,
