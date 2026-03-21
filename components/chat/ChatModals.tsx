@@ -79,6 +79,14 @@ interface ChatModalsProps {
     showTimestampSetting?: boolean;
     isTimestampForced?: boolean;
     onToggleTimestamp?: () => void;
+    // Voice / TTS
+    onReadAloud?: () => void;
+    onVoiceToText?: () => void;
+    onDownloadVoice?: () => void;
+    autoTts?: boolean;
+    onToggleAutoTts?: () => void;
+    autoCall?: boolean;
+    onToggleAutoCall?: () => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -101,7 +109,9 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     allCharacters = [], onSaveCategoryVisibility,
     translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang,
     xhsEnabled, onToggleXhs,
-    showTimestampSetting, isTimestampForced, onToggleTimestamp
+    showTimestampSetting, isTimestampForced, onToggleTimestamp,
+    onReadAloud, onVoiceToText, onDownloadVoice, autoTts, onToggleAutoTts,
+    autoCall, onToggleAutoCall
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
@@ -275,6 +285,32 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                         </p>
                     </div>
 
+                    {/* Auto TTS Toggle */}
+                    <div className="pt-2 border-t border-slate-100">
+                        <div className="flex justify-between items-center cursor-pointer" onClick={onToggleAutoTts}>
+                            <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">AI 自动语音回复</label>
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${autoTts ? 'bg-primary' : 'bg-slate-200'}`}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${autoTts ? 'translate-x-4' : ''}`}></div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                            开启后，AI 每次回复时会自动生成语音消息。需要先在全局设置中配置 TTS。
+                        </p>
+                    </div>
+
+                    {/* AI Incoming Call Toggle */}
+                    <div className="pt-2 border-t border-slate-100">
+                        <div className="flex justify-between items-center cursor-pointer" onClick={onToggleAutoCall}>
+                            <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">AI 来电</label>
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${autoCall ? 'bg-primary' : 'bg-slate-200'}`}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${autoCall ? 'translate-x-4' : ''}`}></div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                            开启后，AI 会在合适的时机主动给你拨打语音电话。
+                        </p>
+                    </div>
+
                     <div className="pt-2 border-t border-slate-100">
                         <button onClick={() => setModalType('history-manager')} className="w-full py-3 bg-slate-50 text-slate-600 font-bold rounded-2xl border border-slate-200 active:scale-95 transition-transform flex items-center justify-center gap-2">
                             管理上下文 / 隐藏历史
@@ -400,6 +436,24 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                             复制文字
                         </button>
                     )}
+                    {/* Voice: Read Aloud for text messages */}
+                    {selectedMessage?.type === 'text' && onReadAloud && (
+                        <button onClick={onReadAloud} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                            🔊 朗读
+                        </button>
+                    )}
+                    {/* Voice: Convert to text for voice messages */}
+                    {selectedMessage?.type === 'voice' && onVoiceToText && (
+                        <button onClick={onVoiceToText} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                            📝 转文字
+                        </button>
+                    )}
+                    {/* Voice: Download audio for voice messages */}
+                    {selectedMessage?.type === 'voice' && selectedMessage?.metadata?.hasAudio && onDownloadVoice && (
+                        <button onClick={onDownloadVoice} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                            ⬇️ 下载语音
+                        </button>
+                    )}
                     <button onClick={onDeleteMessage} className="w-full py-3 bg-red-50 text-red-500 font-medium rounded-2xl active:bg-red-100 transition-colors flex items-center justify-center gap-2">
                         删除消息
                     </button>
@@ -455,9 +509,27 @@ const ChatModals: React.FC<ChatModalsProps> = ({
             >
                 <div className="space-y-3">
                     <p className="text-xs text-slate-400 leading-relaxed">
-                        选择哪些角色可以使用此表情分组。不勾选任何角色表示所有角色均可使用。
+                        选择谁可以使用此表情分组。不勾选任何选项表示所有人均可使用。
                     </p>
                     <div className="space-y-2 max-h-[40vh] overflow-y-auto no-scrollbar">
+                        {/* User (self) option */}
+                        <div
+                            onClick={() => toggleVisibilityChar('__user__')}
+                            className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${visibilitySelection.has('__user__') ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-100 hover:bg-slate-50'}`}
+                        >
+                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${visibilitySelection.has('__user__') ? 'bg-blue-500 border-blue-500' : 'bg-slate-100 border-slate-300'}`}>
+                                {visibilitySelection.has('__user__') && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-lg">👤</div>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-sm text-slate-700">用户（我）</div>
+                                <div className="text-[10px] text-slate-400">勾选后可在所有聊天中使用此分组</div>
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-2 px-1"><div className="flex-1 h-px bg-slate-100" /><span className="text-[10px] text-slate-300">角色</span><div className="flex-1 h-px bg-slate-100" /></div>
+
                         {allCharacters.map(c => (
                             <div
                                 key={c.id}
@@ -477,7 +549,10 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                     </div>
                     {visibilitySelection.size > 0 && (
                         <div className="text-[11px] text-center text-slate-500 bg-slate-50 rounded-lg py-2">
-                            已选 <span className="font-bold text-primary">{visibilitySelection.size}</span> 个角色可使用此分组
+                            {visibilitySelection.size === 1 && visibilitySelection.has('__user__')
+                                ? <>仅 <span className="font-bold text-blue-500">用户</span> 可发送此分组表情，AI 无法使用</>
+                                : <>已选 <span className="font-bold text-primary">{visibilitySelection.size}</span> 个可使用此分组</>
+                            }
                         </div>
                     )}
                 </div>

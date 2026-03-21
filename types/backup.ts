@@ -2,7 +2,7 @@
 import { OSTheme, APIConfig, ApiPreset } from './core';
 import { RealtimeConfig } from './realtime';
 import { CharacterProfile, GroupProfile, Worldbook, PhoneEvidence, PhoneCustomApp } from './character';
-import { ChatTheme, Message, Emoji, EmojiCategory, BubbleStyle } from './chat';
+import { ChatTheme, Message, Emoji, EmojiCategory, BubbleStyle, VectorMemory } from './chat';
 import { RoomItem, RoomTodo, RoomNote } from './room';
 import {
     SocialPost, SubAccount, SocialAppProfile, GalleryImage, DiaryEntry,
@@ -10,6 +10,8 @@ import {
 } from './social';
 import { BankFullState, BankTransaction, DollhouseState } from './bank';
 import { XhsActivityRecord, XhsStockImage } from './xhs';
+import { TtsConfig } from './tts';
+import { SttConfig } from './stt';
 
 export interface FullBackupData {
     timestamp: number;
@@ -19,6 +21,8 @@ export interface FullBackupData {
     apiPresets?: ApiPreset[];
     availableModels?: string[];
     realtimeConfig?: RealtimeConfig;  // 实时感知配置（天气/新闻/Notion）
+    ttsConfig?: TtsConfig;            // 语音合成配置
+    sttConfig?: SttConfig;            // 语音识别配置
     customIcons?: Record<string, string>;
     characters?: CharacterProfile[];
     groups?: GroupProfile[];
@@ -65,4 +69,7 @@ export interface FullBackupData {
 
     xhsActivities?: XhsActivityRecord[];
     xhsStockImages?: XhsStockImage[];
+
+    // Vector Memory Data
+    vectorMemories?: VectorMemory[];
 }

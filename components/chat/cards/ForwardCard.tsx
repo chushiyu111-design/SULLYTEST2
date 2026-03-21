@@ -80,7 +80,21 @@ const ForwardCard: React.FC<ForwardCardProps> = ({ forwardData, commonLayout, se
                                         <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-all ${isUser ? 'bg-primary text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm border border-slate-100'}`}>
                                             {msg.type === 'image' ? <img src={msg.content} className="max-w-[200px] rounded-xl" /> :
                                                 msg.type === 'emoji' ? <img src={msg.content} className="max-w-[100px]" /> :
-                                                    msg.content}
+                                                    msg.type === 'voice' ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-xs opacity-75">
+                                                                    语音{msg.metadata?.duration ? ` ${msg.metadata.duration}″` : ''}
+                                                                </span>
+                                                            </div>
+                                                            {msg.metadata?.sourceText && (
+                                                                <div className={`text-xs italic ${isUser ? 'text-white/70' : 'text-slate-400'}`}>
+                                                                    「{msg.metadata.sourceText}」
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) :
+                                                        msg.content}
                                         </div>
                                     </div>
                                 </div>

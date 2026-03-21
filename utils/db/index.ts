@@ -12,6 +12,7 @@ import * as contentStore from './contentStore';
 import * as appDataStore from './appDataStore';
 import * as bankStore from './bankStore';
 import * as backupStore from './backupStore';
+import * as vectorMemoryStore from './vectorMemoryStore';
 
 
 // Compose the same `DB` object shape as the original monolithic file
@@ -29,12 +30,15 @@ export const DB = {
 
     // Messages
     getMessagesByCharId: characterStore.getMessagesByCharId,
+    getMessagesByCharIdAfterTimestamp: characterStore.getMessagesByCharIdAfterTimestamp,
     getRecentMessagesByCharId: characterStore.getRecentMessagesByCharId,
     getRecentMessagesWithCount: characterStore.getRecentMessagesWithCount,
     getMessagesFromId: characterStore.getMessagesFromId,
+    getMessagesByIds: characterStore.getMessagesByIds,
     saveMessage: characterStore.saveMessage,
     updateMessage: characterStore.updateMessage,
     updateMessageMetadata: characterStore.updateMessageMetadata,
+    updateMessageType: characterStore.updateMessageType,
     deleteMessage: characterStore.deleteMessage,
     deleteMessages: characterStore.deleteMessages,
     clearMessages: characterStore.clearMessages,
@@ -157,4 +161,19 @@ export const DB = {
     getAllTransactions: bankStore.getAllTransactions,
     saveTransaction: bankStore.saveTransaction,
     deleteTransaction: bankStore.deleteTransaction,
+
+    // Voice Audio
+    saveVoiceAudio: contentStore.saveVoiceAudio,
+    getVoiceAudio: contentStore.getVoiceAudio,
+    deleteVoiceAudio: contentStore.deleteVoiceAudio,
+
+    // Vector Memories
+    getAllVectorMemories: vectorMemoryStore.getAllVectorMemories,
+    getVectorMemoryHeaders: vectorMemoryStore.getVectorMemoryHeaders,
+    getVectorMemoryById: vectorMemoryStore.getVectorMemoryById,
+    getVectorMemoriesByIds: vectorMemoryStore.getVectorMemoriesByIds,
+    saveVectorMemory: vectorMemoryStore.saveVectorMemory,
+    deleteVectorMemory: vectorMemoryStore.deleteVectorMemory,
+    clearVectorMemories: vectorMemoryStore.clearVectorMemories,
+    countVectorMemories: vectorMemoryStore.countVectorMemories,
 };

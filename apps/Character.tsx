@@ -11,8 +11,11 @@ import { DB } from '../utils/db';
 import { ContextBuilder } from '../utils/context';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../constants/archivePrompts';
 import ImpressionPanel from '../components/character/ImpressionPanel';
-import MemoryArchivist from '../components/character/MemoryArchivist';
+import MemoryCenter from '../components/character/MemoryCenter';
 import { safeResponseJson } from '../utils/safeApi';
+import { VectorMemoryExtractor } from '../utils/vectorMemoryExtractor';
+import { EmbeddingService, getEmbeddingConfig } from '../utils/embeddingService';
+import { VectorMemory } from '../types';
 
 
 const CharacterCard: React.FC<{
@@ -311,7 +314,59 @@ const Character: React.FC = () => {
         addToast('核心记忆已删除', 'success');
     };
 
-    const handleExportPreview = () => { if (!formData) return; const mems = formData.memories as any[]; if (!mems || mems.length === 0) { addToast('暂无记忆数据可导出', 'info'); return; } const sortedMemories = [...mems].sort((a, b) => a.date.localeCompare(b.date)); let text = `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}\n\n`; if (formData.refinedMemories) { text += `=== 核心记忆 ===\n`; Object.entries(formData.refinedMemories).sort().forEach(([k, v]) => { text += `[${k}]: ${v}\n`; }); text += `\n=== 详细日志 ===\n`; } let currentYear = '', currentMonth = ''; sortedMemories.forEach(mem => { const match = mem.date.match(/(\d{4})[-/年](\d{1,2})/); if (match) { const y = match[1], m = match[2]; if (y !== currentYear) { text += `\n[ ${y}年 ]\n`; currentYear = y; currentMonth = ''; } if (m !== currentMonth) { text += `\n-- ${parseInt(m)}月 --\n\n`; currentMonth = m; } } text += `📅 ${mem.date} ${mem.mood ? `(#${mem.mood})` : ''}\n${mem.summary}\n\n--------------------------\n\n`; }); setExportText(text); setShowExportModal(true); navigator.clipboard.writeText(text).then(() => addToast('内容已自动复制到剪贴板', 'info')).catch(() => { }); };
+    const handleExportPreview = async () => {
+        if (!formData) return;
+        const mems = formData.memories as any[] || [];
+        const sortedMemories = [...mems].sort((a, b) => a.date.localeCompare(b.date));
+        let text = `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}\n\n`;
+
+        // 核心记忆
+        if (formData.refinedMemories && Object.keys(formData.refinedMemories).length > 0) {
+            text += `=== 核心记忆 ===\n`;
+            Object.entries(formData.refinedMemories).sort().forEach(([k, v]) => { text += `[${k}]: ${v}\n`; });
+            text += `\n`;
+        }
+
+        // 传统日志
+        if (sortedMemories.length > 0) {
+            text += `=== 详细日志 (${sortedMemories.length} 条) ===\n`;
+            let currentYear = '', currentMonth = '';
+            sortedMemories.forEach(mem => {
+                const match = mem.date.match(/(\d{4})[-/年](\d{1,2})/);
+                if (match) {
+                    const y = match[1], m = match[2];
+                    if (y !== currentYear) { text += `\n[ ${y}年 ]\n`; currentYear = y; currentMonth = ''; }
+                    if (m !== currentMonth) { text += `\n-- ${parseInt(m)}月 --\n\n`; currentMonth = m; }
+                }
+                text += `📅 ${mem.date} ${mem.mood ? `(#${mem.mood})` : ''}\n${mem.summary}\n\n--------------------------\n\n`;
+            });
+        }
+
+        // 向量记忆
+        try {
+            const vmList = await DB.getAllVectorMemories(formData.id);
+            if (vmList.length > 0) {
+                text += `\n=== 向量记忆 (${vmList.length} 条) ===\n\n`;
+                vmList.sort((a, b) => b.createdAt - a.createdAt).forEach(vm => {
+                    const date = new Date(vm.createdAt).toLocaleDateString();
+                    text += `🧠 [LV.${vm.importance}] ${vm.title}\n`;
+                    text += `   ${vm.content}\n`;
+                    if (vm.emotionalJourney) text += `   情感: ${vm.emotionalJourney}\n`;
+                    text += `   创建: ${date} | 调用: ${vm.mentionCount}次${vm.deprecated ? ' | ⚠️已过时' : ''}\n`;
+                    text += `--------------------------\n\n`;
+                });
+            }
+        } catch (e) { /* ignore if vector store not available */ }
+
+        if (text.trim() === `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}`) {
+            addToast('暂无记忆数据可导出', 'info');
+            return;
+        }
+
+        setExportText(text);
+        setShowExportModal(true);
+        navigator.clipboard.writeText(text).then(() => addToast('内容已自动复制到剪贴板', 'info')).catch(() => { });
+    };
     const handleNativeShare = async () => { if (!exportText) return; if (Capacitor.isNativePlatform()) { try { const fileName = `${formData?.name || 'character'}_memories.txt`; await Filesystem.writeFile({ path: fileName, data: exportText, directory: Directory.Cache, encoding: Encoding.UTF8 }); const uri = await Filesystem.getUri({ directory: Directory.Cache, path: fileName }); await Share.share({ title: '记忆档案', files: [uri.uri] }); } catch (e: any) { console.error("Native share failed", e); addToast('分享组件调起失败，请直接复制文本', 'error'); } } };
     const handleWebFileDownload = () => { const fileName = `${formData?.name || 'character'}_memories.txt`; const blob = new Blob([exportText], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); addToast('已触发浏览器下载', 'success'); };
 
@@ -390,6 +445,7 @@ const Character: React.FC = () => {
 
                 const dayMsgs = msgsByDate[date];
                 const rawLog = dayMsgs.map(m => {
+                    if (m.type === 'call_log') return m.content; // 已含 [电话记录] 标记，直接透传
                     const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                     let content = m.content;
                     if (m.type === 'image') content = '[图片/Image]';
@@ -639,6 +695,8 @@ ${isInitialGeneration ? `
 
         const {
             id, memories, refinedMemories, activeMemoryMonths, impression,
+            vectorMemoryEnabled, vectorMemoryAutoExtract, vectorMemoryExtractInterval,
+            vectorMemoryLastExtractAt, vectorMemoryTakeover, vectorMemoryMode,
             ...cardProps
         } = formData;
 
@@ -888,7 +946,10 @@ ${isInitialGeneration ? `
                                     <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">导入/清洗</button>
                                     <button onClick={handleExportPreview} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">备份</button>
                                 </div>
-                                <MemoryArchivist
+
+                                
+                                {/* ====== 统一记忆中心 ====== */}
+                                <MemoryCenter
                                     memories={formData.memories || []}
                                     refinedMemories={formData.refinedMemories || {}}
                                     activeMemoryMonths={formData.activeMemoryMonths || []}
@@ -900,6 +961,10 @@ ${isInitialGeneration ? `
                                     onToggleActiveMonth={handleToggleActiveMonth}
                                     onUpdateRefinedMemory={handleUpdateRefinedMemory}
                                     onDeleteRefinedMemory={handleDeleteRefinedMemory}
+                                    formData={formData}
+                                    handleChange={handleChange}
+                                    addToast={addToast}
+                                    apiConfig={apiConfig}
                                 />
                             </div>
                         )}

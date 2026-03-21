@@ -109,7 +109,7 @@ export const renderMarkdown = (text: string): React.ReactNode => {
 // --- Robust content cleanup: strip legacy markers, separators, bilingual tags, stray formatting ---
 export const stripJunk = (s: string): string => s
     .replace(/%%TRANS%%[\s\S]*/gi, '')           // legacy translation marker
-    .replace(/%%BILINGUAL%%/gi, '\n')            // raw bilingual marker → newline
+    .replace(/%%\s*BILINGUAL\s*%%/gi, '\n')    // raw bilingual marker → newline (both old and new format)
     .replace(/<\/?翻译>|<\/?原文>|<\/?译文>/g, '')  // stray bilingual XML tags
     .replace(/\[\[(?:QU[OA]TE|引用)[：:][\s\S]*?\]\]/g, '')  // residual double-bracket quotes (incl. typos & Chinese)
     .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')     // residual single-bracket quotes (incl. typos & Chinese)

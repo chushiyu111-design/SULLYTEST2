@@ -26,10 +26,14 @@ export const ContextBuilder = {
      * 构建核心人设上下文
      * @param char 角色档案
      * @param user 用户档案
-     * @param includeDetailedMemories 是否包含激活月份的详细 Log (默认 true)
+     * @param includeDetailedMemories 是否包含激活月份的详细 Log (默认 true, 仅 'traditional' 模式生效)
+     * @param memoryMode 记忆注入模式:
+     *   - 'traditional' (默认): 全量注入 refinedMemories + activeLogs（若同时开启向量检索，则三者叠加）
+     *   - 'hybrid': 注入 refinedMemories，跳过 activeLogs（由向量检索补充细节）
+     *   - 'vector': 跳过所有传统记忆（完全由向量检索接管）
      * @returns 标准化的 Markdown 格式 System Prompt
      */
-    buildCoreContext: (char: CharacterProfile, user: UserProfile, includeDetailedMemories: boolean = true): string => {
+    buildCoreContext: (char: CharacterProfile, user: UserProfile, includeDetailedMemories: boolean = true, memoryMode: 'traditional' | 'hybrid' | 'vector' = 'traditional'): string => {
         let context = `[System: Roleplay Configuration]\n\n`;
 
         // 预处理：将已挂载世界书按 position 分为 4 个区
@@ -79,49 +83,66 @@ export const ContextBuilder = {
         // ====== 【区域：印象之后的世界书】 ======
         context += renderWbBlock(wbAfterImpression, '扩展设定集 · 补充 (Worldbooks · After Impression)');
 
-        // 5. 记忆库 (Memory Bank)
-        context += `### 记忆系统 (Memory Bank)\n`;
+        // 5. 记忆库 — behavior depends on memoryMode
+        context += `### 记忆系统\n`;
         let memoryContent = "";
 
-        // 5a. 长期核心记忆 (Refined Memories)
-        if (char.refinedMemories && Object.keys(char.refinedMemories).length > 0) {
-            memoryContent += `**长期核心记忆 (Key Memories)**:\n`;
-            Object.entries(char.refinedMemories).sort().forEach(([date, summary]) => {
-                memoryContent += `- [${date}]: ${summary}\n`;
-            });
-        }
-
-        // 5b. 激活的详细记忆 (Active Detailed Logs)
-        if (includeDetailedMemories && char.activeMemoryMonths && char.activeMemoryMonths.length > 0 && char.memories) {
-            let details = "";
-            char.activeMemoryMonths.forEach(monthKey => {
-                const logs = char.memories.filter(m => {
-                    let normDate = m.date.replace(/[\/年月]/g, '-').replace('日', '');
-                    const parts = normDate.split('-');
-                    if (parts.length >= 2) {
-                        const y = parts[0];
-                        const mo = parts[1].padStart(2, '0');
-                        normDate = `${y}-${mo}`;
-                    }
-                    return normDate.startsWith(monthKey);
+        if (memoryMode === 'vector') {
+            // Pure vector mode: skip all traditional memories
+            memoryContent = "(记忆由向量检索系统动态注入，下方将附加与当前话题最相关的记忆碎片)";
+        } else {
+            // Both 'traditional' and 'hybrid' inject refinedMemories
+            // 5a. 长期核心记忆 (Refined Memories)
+            if (char.refinedMemories && Object.keys(char.refinedMemories).length > 0) {
+                memoryContent += `**你的记忆 · 脉络**\n`;
+                Object.entries(char.refinedMemories).sort().forEach(([date, summary]) => {
+                    memoryContent += `- [${date}]: ${summary}\n`;
                 });
+            }
 
-                if (logs.length > 0) {
-                    details += `\n> 详细回忆 [${monthKey}]:\n`;
-                    logs.forEach(m => {
-                        details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`;
+            // 5b. 激活的详细记忆 (Active Detailed Logs) — only in 'traditional' mode
+            if (memoryMode === 'traditional' && includeDetailedMemories && char.activeMemoryMonths && char.activeMemoryMonths.length > 0 && char.memories) {
+                let details = "";
+                char.activeMemoryMonths.forEach(monthKey => {
+                    const logs = char.memories.filter(m => {
+                        let normDate = m.date.replace(/[\/年月]/g, '-').replace('日', '');
+                        const parts = normDate.split('-');
+                        if (parts.length >= 2) {
+                            const y = parts[0];
+                            const mo = parts[1].padStart(2, '0');
+                            normDate = `${y}-${mo}`;
+                        }
+                        return normDate.startsWith(monthKey);
                     });
+
+                    if (logs.length > 0) {
+                        details += `\n> 详细回忆 [${monthKey}]:\n`;
+                        logs.forEach(m => {
+                            details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`;
+                        });
+                    }
+                });
+                if (details) {
+                    memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
                 }
-            });
-            if (details) {
-                memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
+            }
+
+            if (!memoryContent) {
+                memoryContent = "(暂无特定记忆，请基于当前对话互动)";
             }
         }
-
-        if (!memoryContent) {
-            memoryContent = "(暂无特定记忆，请基于当前对话互动)";
-        }
         context += `${memoryContent}\n\n`;
+
+        // 6. 角色状态栏 (Character State Bar) — only inject when emotion is notable
+        if (char.moodState && char.moodState.intensity >= 4) {
+            const ms = char.moodState;
+            let stateBar = `### 你此刻的内心状态\n`;
+            stateBar += `情绪: ${ms.mood} (强度: ${ms.intensity}/10, 已持续${ms.roundCount}轮对话)\n`;
+            if (ms.cause) stateBar += `起因: ${ms.cause}\n`;
+            if (ms.unresolved) stateBar += `悬而未决: ${ms.unresolved}\n`;
+            stateBar += `\n注意: 你的情绪应自然延续。强烈情绪不会因一两句话瞬间消散。即使表面上说"没关系"，内心的感受也需要时间消化。\n\n`;
+            context += stateBar;
+        }
 
         // ====== 【区域：最底部世界书】 ======
         context += renderWbBlock(wbBottom, '扩展设定集 · 最终指令 (Worldbooks · Bottom)');

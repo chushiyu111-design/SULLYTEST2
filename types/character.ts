@@ -63,6 +63,16 @@ export interface GroupProfile {
     createdAt: number;
 }
 
+export interface MoodState {
+    mood: string;           // 情绪词 (2-4字): "委屈", "放松", "心动"
+    intensity: number;      // 1-10 情绪强度
+    cause: string;          // 情绪原因 (15字以内)
+    innerVoice: string;     // 心声: 角色心里想但没说出口的话
+    unresolved?: string;    // 未解决的事 (15字以内)
+    roundCount: number;     // 当前情绪已持续几轮
+    updatedAt: number;      // 上次更新时间戳
+}
+
 export interface CharacterProfile {
     id: string;
     name: string;
@@ -77,7 +87,7 @@ export interface CharacterProfile {
     writerPersona?: string;
     writerPersonaGeneratedAt?: number;
 
-    mountedWorldbooks?: { id: string; title: string; content: string; category?: string; position?: 'top' | 'after_worldview' | 'after_impression' | 'bottom' }[];
+    mountedWorldbooks?: { id: string; title: string; content: string; category?: string; position?: 'top' | 'after_worldview' | 'after_impression' | 'bottom'; vectorized?: boolean }[];
 
     impression?: UserImpression;
 
@@ -98,7 +108,7 @@ export interface CharacterProfile {
     savedDateState?: DateState;
     specialMomentRecords?: Record<string, SpecialMomentRecord>;
 
-    // 小红�?per-character toggle
+    // 小红�?per-character toggle
     xhsEnabled?: boolean;
 
     socialProfile?: {
@@ -124,9 +134,20 @@ export interface CharacterProfile {
         records?: PhoneEvidence[];
         customApps?: PhoneCustomApp[];
     };
+
+    // Vector Memory System
+    vectorMemoryEnabled?: boolean;           // Master toggle (off = original mode)
+    vectorMemoryAutoExtract?: boolean;       // Auto-extract (default true)
+    vectorMemoryExtractInterval?: number;    // Extract interval in messages (default 30)
+    vectorMemoryLastExtractAt?: number;      // Last extracted message ID
+    vectorMemoryTakeover?: boolean;          // @deprecated — use vectorMemoryMode instead
+    vectorMemoryMode?: 'traditional' | 'hybrid' | 'vector';  // Three-tier mode (default: 'hybrid')
+
+    // Character State Bar (心智快照)
+    moodState?: MoodState;                     // Current emotional state with decay
 }
 
-export interface CharacterExportData extends Omit<CharacterProfile, 'id' | 'memories' | 'refinedMemories' | 'activeMemoryMonths' | 'impression'> {
+export interface CharacterExportData extends Omit<CharacterProfile, 'id' | 'memories' | 'refinedMemories' | 'activeMemoryMonths' | 'impression' | 'vectorMemoryEnabled' | 'vectorMemoryAutoExtract' | 'vectorMemoryExtractInterval' | 'vectorMemoryLastExtractAt' | 'vectorMemoryTakeover' | 'vectorMemoryMode' | 'moodState'> {
     version: number;
     type: 'sully_character_card';
     embeddedTheme?: ChatTheme;

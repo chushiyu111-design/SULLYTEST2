@@ -65,6 +65,20 @@ export interface BubbleStyle {
     borderRadius: number;
     opacity: number;
 
+    // Gradient (takes priority over backgroundColor when present)
+    gradient?: { from: string; to: string; direction: number };
+
+    // Border
+    borderWidth?: number;   // px, default 0
+    borderColor?: string;   // default 'transparent'
+
+    // Box Shadow
+    boxShadow?: string;     // full CSS box-shadow value
+
+    // Font
+    fontSize?: number;      // px, default 15
+    textShadow?: string;    // CSS text-shadow value
+
     decoration?: string;
     decorationX?: number;
     decorationY?: number;
@@ -92,7 +106,7 @@ export interface ChatTheme {
     timestampIntervalMs?: number;
 }
 
-export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card' | 'moments';
+export type MessageType = 'text' | 'image' | 'emoji' | 'interaction' | 'transfer' | 'system' | 'social_card' | 'chat_forward' | 'xhs_card' | 'moments' | 'voice' | 'call_log';
 
 export interface Message {
     id: number;
@@ -121,4 +135,23 @@ export interface Emoji {
     name: string;
     url: string;
     categoryId?: string;
+}
+
+export interface VectorMemory {
+    id: string;                    // "vmem-{timestamp}-{random}"
+    charId: string;
+    title: string;                 // 3-6 char topic label
+    content: string;               // Memory content text
+    emotionalJourney?: string;     // Emotional context
+    importance: number;            // 1-10 significance score
+    mentionCount: number;          // Times retrieved in conversation
+    lastMentioned: number;         // Timestamp (ms) of last retrieval
+    createdAt: number;             // Timestamp (ms) of creation
+    updatedAt?: number;            // Timestamp (ms) of last update
+    vector: number[];              // Embedding vector (dim depends on model, bge-m3=1024)
+    modelId?: string;              // Embedding model used (e.g. "BAAI/bge-m3")
+    source: 'auto' | 'manual' | 'import'; // How it was created
+    sourceMessageIds?: number[];           // IDs of messages that produced/updated this memory
+    deprecated?: boolean;              // Marked as outdated by LLM (info was corrected/superseded)
+    deprecatedReason?: string;         // Why it was invalidated (e.g. "用户已声明不再喝奶茶")
 }

@@ -27,6 +27,8 @@ export enum AppID {
     SpecialMoments = 'special_moments', // Valentine's Day & future events
     XhsFreeRoam = 'xhs_free_roam', // Character autonomous XHS activity
     Zhaixinglou = 'zhaixinglou', // 摘星楼 - Astrology & Divination
+    CsyManual = 'csy_manual', // CSY二改版使用手册
+    VoiceCall = 'voice_call', // 语音通话
 }
 
 export interface SystemLog {
@@ -88,6 +90,7 @@ export interface APIConfig {
     baseUrl: string;
     apiKey: string;
     model: string;
+    useGeminiJailbreak?: boolean;
 }
 
 export interface ApiPreset {

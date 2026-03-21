@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { CaretLeft, Lightning } from '@phosphor-icons/react';
+import { CaretLeft, Lightning, Phone } from '@phosphor-icons/react';
 import { CharacterProfile } from '../../types';
 
 interface TokenBreakdown {
@@ -23,6 +23,7 @@ interface ChatHeaderProps {
     onClose: () => void;
     onTriggerAI: () => void;
     onShowCharsPanel: () => void;
+    onCallPress?: () => void;
 }
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -36,7 +37,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     tokenBreakdown,
     onClose,
     onTriggerAI,
-    onShowCharsPanel
+    onShowCharsPanel,
+    onCallPress
 }) => {
     return (
         <div className="sully-chat-header h-24 bg-white/80 backdrop-blur-xl px-5 flex items-end pb-4 border-b border-slate-200/60 shrink-0 z-30 sticky top-0 shadow-sm relative transition-all duration-300">
@@ -66,6 +68,16 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                             </div>
                         </div>
                     </div>
+
+                    {onCallPress && (
+                        <button
+                            onClick={onCallPress}
+                            className="p-2 -mr-1 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                            title="语音通话"
+                        >
+                            <Phone className="w-5 h-5" weight="bold" />
+                        </button>
+                    )}
 
                     <button
                         onClick={onTriggerAI}

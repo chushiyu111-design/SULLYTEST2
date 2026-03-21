@@ -4,7 +4,9 @@ import { DB } from '../utils/db';
 import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory, AppID } from '../types';
 import { processImage } from '../utils/file';
 import { safeResponseJson } from '../utils/safeApi';
+import { parseBilingual } from '../utils/chatParser';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
+import { unlockAudio } from './voicecall/unlockAudio';
 import MessageItem from '../components/chat/MessageItem';
 import { PRESET_THEMES } from '../components/chat/ChatConstants';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../constants/archivePrompts';
@@ -13,10 +15,13 @@ import ChatInputArea from '../components/chat/ChatInputArea';
 import ChatModals from '../components/chat/ChatModals';
 import Modal from '../components/os/Modal';
 import { useChatAI } from '../hooks/useChatAI';
+import { useVoiceTts } from '../hooks/useVoiceTts';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { CloudStt, SttNotConfiguredError } from '../utils/cloudStt';
 import { haptic } from '../utils/haptics';
 
 const Chat: React.FC = () => {
-    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, openApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig } = useOS();
+    const { characters, activeCharacterId, setActiveCharacterId, updateCharacter, apiConfig, closeApp, openApp, customThemes, removeCustomTheme, addToast, userProfile, lastMsgTimestamp, groups, clearUnread, realtimeConfig, ttsConfig, sttConfig } = useOS();
     const [messages, setMessages] = useState<Message[]>([]);
     const [totalMsgCount, setTotalMsgCount] = useState(0);
     const [visibleCount, setVisibleCount] = useState(30);
@@ -34,6 +39,8 @@ const Chat: React.FC = () => {
     const scrollThrottleRef = useRef(0);
     const visibleCountRef = useRef(30);
     const activeCharIdRef = useRef(activeCharacterId);
+    const messagesRef = useRef<Message[]>(messages);
+    messagesRef.current = messages;
 
     // Reply Logic
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
@@ -79,6 +86,29 @@ const Chat: React.FC = () => {
         try { return JSON.parse(localStorage.getItem(`chat_show_timestamp_${activeCharacterId}`) || 'false'); } catch { return false; }
     });
 
+    // --- Voice TTS State ---
+    const { playingMsgId, loadingMsgIds, playVoice, stopVoice, synthesizeForMessage } = useVoiceTts();
+    const [autoTts, setAutoTts] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(`chat_auto_tts_${activeCharacterId}`) || 'false'); } catch { return false; }
+    });
+    const [autoCall, setAutoCall] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(`chat_auto_call_${activeCharacterId}`) || 'false'); } catch { return false; }
+    });
+
+    // --- Voice Recording (STT) ---
+    const voiceRecorder = useVoiceRecorder();
+    const [sttProcessing, setSttProcessing] = useState(false);
+    const [transcribingMsgIds, setTranscribingMsgIds] = useState<Set<number>>(new Set());
+    // --- Voice transcript expansion (inline "转文字") ---
+    const [expandedVoiceTextIds, setExpandedVoiceTextIds] = useState<Set<number>>(new Set());
+
+    // 录音错误可视化 — 移动端 title 属性不显示，需要 toast
+    useEffect(() => {
+        if (voiceRecorder.error) {
+            addToast(voiceRecorder.error, 'error');
+        }
+    }, [voiceRecorder.error]);
+
     const char = characters.find(c => c.id === activeCharacterId) || characters[0];
     const currentThemeId = char?.bubbleStyle || 'default';
     const activeTheme = useMemo(() => customThemes.find(t => t.id === currentThemeId) || PRESET_THEMES[currentThemeId] || PRESET_THEMES.default, [currentThemeId, customThemes]);
@@ -90,35 +120,76 @@ const Chat: React.FC = () => {
 
     const draftKey = `chat_draft_${activeCharacterId}`;
 
-    // Filter categories and emojis by active character's visibility (used for both AI prompt and UI)
-    const visibleCategories = useMemo(() => categories.filter(cat => {
+    // AI-visible categories: only those allowed for the active character (excludes __user__-only categories)
+    const aiVisibleCategories = useMemo(() => categories.filter(cat => {
         if (!cat.allowedCharacterIds || cat.allowedCharacterIds.length === 0) return true;
         return cat.allowedCharacterIds.includes(activeCharacterId);
     }), [categories, activeCharacterId]);
 
+    // User-visible categories: also includes categories marked with __user__
+    const userVisibleCategories = useMemo(() => categories.filter(cat => {
+        if (!cat.allowedCharacterIds || cat.allowedCharacterIds.length === 0) return true;
+        return cat.allowedCharacterIds.includes(activeCharacterId) || cat.allowedCharacterIds.includes('__user__');
+    }), [categories, activeCharacterId]);
+
     const aiVisibleEmojis = useMemo(() => {
-        const hiddenIds = new Set(categories.filter(c => !visibleCategories.some(vc => vc.id === c.id)).map(c => c.id));
+        const hiddenIds = new Set(categories.filter(c => !aiVisibleCategories.some(vc => vc.id === c.id)).map(c => c.id));
         if (hiddenIds.size === 0) return emojis;
         return emojis.filter(e => !e.categoryId || !hiddenIds.has(e.categoryId));
-    }, [emojis, categories, visibleCategories]);
+    }, [emojis, categories, aiVisibleCategories]);
 
     // --- Initialize Hook ---
-    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI } = useChatAI({
+    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI, retryMindSnapshot } = useChatAI({
         char,
         userProfile,
         apiConfig,
         groups,
         emojis: aiVisibleEmojis,
-        categories: visibleCategories,
+        categories: aiVisibleCategories,
         addToast,
         setMessages,
         realtimeConfig,
         translationConfig: translationEnabled
             ? { enabled: true, sourceLang: translateSourceLang, targetLang: translateTargetLang }
-            : undefined
+            : undefined,
+        autoVoice: autoTts,
+        onVoiceMessageSaved: autoTts && ttsConfig?.apiKey ? (msgId: number, text: string) => {
+            // Fire-and-forget synthesis; synthesizeForMessage now updates metadata internally
+            // before removing loading state, preventing the race condition.
+            synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
+                if (result) {
+                    // Metadata (duration, hasAudio) already updated by synthesizeForMessage.
+                    // Just reload messages to refresh the UI from DB.
+                    await reloadMessages(visibleCountRef.current);
+                }
+            }).catch(err => console.error('[AutoTTS] synthesis failed:', err));
+        } : undefined,
+        autoCall,
+        onIncomingCall: autoCall ? (mode: string, callReason: string) => {
+            console.log(`📞 [IncomingCall] Triggering VoiceCall app with mode: ${mode}`);
+            unlockAudio(); // 提前解锁音频（来电是程序触发，无用户手势，需要预解锁）
+            openApp(AppID.VoiceCall, { direction: 'incoming', mode, callReason });
+        } : undefined,
+        onMoodUpdate: (charId: string, moodState: any) => {
+            updateCharacter(charId, { moodState });
+        },
     });
 
+    // --- Autonomous Agent: incoming call event bridge ---
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (!detail?.charId || detail.charId !== activeCharacterId) return;
+            console.log(`🤖📞 [Agent] Autonomous call triggered (reason: ${detail.reason || 'N/A'})`);
+            unlockAudio();
+            openApp(AppID.VoiceCall, { direction: 'incoming', mode: 'normal', callReason: detail.reason || '' });
+        };
+        window.addEventListener('autonomous-call', handler);
+        return () => window.removeEventListener('autonomous-call', handler);
+    }, [activeCharacterId, openApp]);
+
     const canReroll = !isTyping && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
+
 
     // --- Translation: pure frontend toggle (no API calls, bilingual data is already in message content) ---
     const handleTranslateToggle = useCallback((msgId: number) => {
@@ -194,6 +265,10 @@ const Chat: React.FC = () => {
             try {
                 setShowTimestampSetting(JSON.parse(localStorage.getItem(`chat_show_timestamp_${activeCharacterId}`) || 'false'));
             } catch { setShowTimestampSetting(false); }
+            // Per-character auto TTS toggle
+            try {
+                setAutoTts(JSON.parse(localStorage.getItem(`chat_auto_tts_${activeCharacterId}`) || 'false'));
+            } catch { setAutoTts(false); }
         }
     }, [activeCharacterId, reloadMessages]);
 
@@ -385,6 +460,7 @@ const Chat: React.FC = () => {
                     openApp(AppID.ThemeMaker);
                 }
                 break;
+            case 'voice-call': unlockAudio(); openApp(AppID.VoiceCall, { direction: 'outgoing' }); break;
         }
     };
 
@@ -441,7 +517,10 @@ const Chat: React.FC = () => {
         await DB.saveEmojiCategory({ ...cat, allowedCharacterIds });
         await loadEmojiData();
         setSelectedCategory(null);
-        addToast(allowedCharacterIds ? `已设置 ${allowedCharacterIds.length} 个角色可见` : '已设为所有角色可见', 'success');
+        const userCount = allowedCharacterIds?.filter(id => id !== '__user__').length ?? 0;
+        const includesUser = allowedCharacterIds?.includes('__user__');
+        const label = !allowedCharacterIds ? '已设为所有人可见' : includesUser && userCount === 0 ? '已设为仅用户可见' : `已设置 ${(includesUser ? userCount + 1 : userCount)} 个可见`;
+        addToast(label, 'success');
     };
 
     const handleSavePrompt = () => {
@@ -583,7 +662,10 @@ const Chat: React.FC = () => {
 
             for (const dateStr of datesToProcess) {
                 const dayMsgs = msgsByDate[dateStr];
-                const rawLog = dayMsgs.map(m => `[${formatTime(m.timestamp)}] ${m.role === 'user' ? userProfile.name : char.name}: ${m.type === 'image' ? '[Image]' : m.content}`).join('\n');
+                const rawLog = dayMsgs.map(m => {
+                    if (m.type === 'call_log') return m.content; // 已含 [电话记录] 标记，直接透传
+                    return `[${formatTime(m.timestamp)}] ${m.role === 'user' ? userProfile.name : char.name}: ${m.type === 'image' ? '[Image]' : m.content}`;
+                }).join('\n');
 
                 let prompt = template;
                 prompt = prompt.replace(/\$\{dateStr\}/g, dateStr);
@@ -628,6 +710,10 @@ const Chat: React.FC = () => {
     // --- Message Management ---
     const handleDeleteMessage = async () => {
         if (!selectedMessage) return;
+        // P7: Clean up voice audio blob from IDB if this is a voice message
+        if (selectedMessage.type === 'voice') {
+            await DB.deleteVoiceAudio(selectedMessage.id);
+        }
         await DB.deleteMessage(selectedMessage.id);
         setMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
         setTotalMsgCount(prev => Math.max(0, prev - 1));
@@ -661,6 +747,124 @@ const Chat: React.FC = () => {
         setSelectedMessage(null);
         addToast('已复制到剪贴板', 'success');
     };
+
+    // --- Voice: Read Aloud (in-place conversion: text → voice) ---
+    const handleReadAloud = useCallback(async () => {
+        if (!selectedMessage || !ttsConfig?.apiKey) {
+            addToast('请先在设置中配置 TTS', 'error');
+            setModalType('none');
+            return;
+        }
+        const msg = selectedMessage;
+        setModalType('none');
+        setSelectedMessage(null);
+
+        console.log('[ReadAloud] Starting TTS for msg:', msg.id, 'text:', msg.content.slice(0, 50));
+
+        // For bilingual messages: TTS synthesizes only the original text (langA),
+        // but sourceText keeps the full bilingual content for "转文字" display
+        const { langA: ttsText } = parseBilingual(msg.content);
+
+        // 1. Convert the original message from text → voice in-place
+        await DB.updateMessageType(msg.id, 'voice', {
+            sourceText: msg.content, // Full content (with bilingual marker) for transcript
+            hasAudio: false,
+            duration: 0,
+            source: 'read-aloud',
+        });
+
+        // 2. Start synthesis (uses original text only, not translated)
+        const synthesisPromise = synthesizeForMessage(msg.id, ttsText, ttsConfig);
+
+        // 3. Reload messages to show voice bubble at the original position
+        await reloadMessages(visibleCountRef.current);
+
+        // 4. Wait for synthesis to complete
+        try {
+            const result = await synthesisPromise;
+            if (result) {
+                // sourceText already set above; synthesizeForMessage already set duration + hasAudio
+                await reloadMessages(visibleCountRef.current);
+                addToast('语音合成完成', 'success');
+            } else {
+                // Synthesis returned null (e.g. aborted) — revert to text
+                await DB.updateMessageType(msg.id, 'text');
+                await reloadMessages(visibleCountRef.current);
+                addToast('TTS 合成失败（结果为空），已恢复文字', 'error');
+            }
+        } catch (err: any) {
+            console.error('[ReadAloud] TTS error:', err);
+            // Revert message back to text on failure
+            await DB.updateMessageType(msg.id, 'text');
+            await DB.deleteVoiceAudio(msg.id); // Clean up any partial audio
+            await reloadMessages(visibleCountRef.current);
+            addToast(`TTS 合成失败: ${err?.message || err}，已恢复文字`, 'error');
+        }
+    }, [selectedMessage, ttsConfig, char, synthesizeForMessage, reloadMessages]);
+
+    // --- Voice: Convert to Text (toggle inline transcript) ---
+    const handleVoiceToText = useCallback(() => {
+        if (!selectedMessage || selectedMessage.type !== 'voice') return;
+        const msgId = selectedMessage.id;
+        setExpandedVoiceTextIds(prev => {
+            const next = new Set(prev);
+            if (next.has(msgId)) next.delete(msgId);
+            else next.add(msgId);
+            return next;
+        });
+        setModalType('none');
+        setSelectedMessage(null);
+    }, [selectedMessage]);
+
+    const toggleVoiceText = useCallback((msgId: number) => {
+        setExpandedVoiceTextIds(prev => {
+            const next = new Set(prev);
+            if (next.has(msgId)) next.delete(msgId);
+            else next.add(msgId);
+            return next;
+        });
+    }, []);
+
+    // --- Voice: Download Audio ---
+    const handleDownloadVoice = useCallback(async () => {
+        if (!selectedMessage || selectedMessage.type !== 'voice') return;
+        const msgId = selectedMessage.id;
+        setModalType('none');
+        setSelectedMessage(null);
+
+        const blob = await DB.getVoiceAudio(msgId);
+        if (!blob) {
+            addToast('音频文件不存在', 'error');
+            return;
+        }
+
+        const filename = `voice_${char.name}_${new Date().toISOString().slice(0, 10)}_${msgId}.mp3`;
+
+        // Try navigator.share first (works on mobile PWA)
+        if (navigator.share && navigator.canShare) {
+            try {
+                const file = new File([blob], filename, { type: blob.type || 'audio/mpeg' });
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file] });
+                    return;
+                }
+            } catch (err: any) {
+                // User cancelled share or not supported — fall through to download
+                if (err?.name === 'AbortError') return;
+            }
+        }
+
+        // Fallback: create <a> download link
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addToast('语音已保存', 'success');
+    }, [selectedMessage, char, addToast]);
 
     const handleDeleteEmoji = async () => {
         if (!selectedEmoji) return;
@@ -701,6 +905,25 @@ const Chat: React.FC = () => {
         setTransferActionMsg(msg);
     }, []);
 
+    // --- Voice Retry (stable ref to avoid busting React.memo on every render) ---
+    const handleRetryVoice = useMemo(() => {
+        if (!ttsConfig?.apiKey) return undefined;
+        return (msgId: number) => {
+            const msg = messagesRef.current.find(m => m.id === msgId);
+            if (!msg || !ttsConfig) return;
+            const text = msg.metadata?.sourceText || msg.content;
+            synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
+                if (result) {
+                    await reloadMessages(visibleCountRef.current);
+                    addToast('语音合成完成', 'success');
+                }
+            }).catch(err => {
+                console.error('[RetryVoice] synthesis failed:', err);
+                addToast(`重试合成失败: ${err?.message || err}`, 'error');
+            });
+        };
+    }, [ttsConfig?.apiKey, synthesizeForMessage, reloadMessages, addToast]);
+
     const handleTransferStatusUpdate = async (status: 'accepted' | 'returned') => {
         if (!transferActionMsg || !char) return;
         await DB.updateMessageMetadata(transferActionMsg.id, { status });
@@ -719,6 +942,11 @@ const Chat: React.FC = () => {
     const handleBatchDelete = async () => {
         if (selectedMsgIds.size === 0) return;
         const deleteCount = selectedMsgIds.size;
+        // P7: Clean up voice audio blobs for any voice messages being deleted
+        const voiceMsgIds = messages.filter(m => selectedMsgIds.has(m.id) && m.type === 'voice').map(m => m.id);
+        for (const vid of voiceMsgIds) {
+            await DB.deleteVoiceAudio(vid);
+        }
         await DB.deleteMessages(Array.from(selectedMsgIds));
         setMessages(prev => prev.filter(m => !selectedMsgIds.has(m.id)));
         setTotalMsgCount(prev => Math.max(0, prev - deleteCount));
@@ -746,7 +974,15 @@ const Chat: React.FC = () => {
         // Build preview text (first few messages)
         const previewLines = selectedMsgs.slice(0, 4).map(m => {
             const sender = m.role === 'user' ? userProfile.name : char.name;
-            const text = m.type === 'text' ? m.content.slice(0, 30) : `[${m.type === 'image' ? '图片' : m.type === 'emoji' ? '表情' : m.type}]`;
+            const text = m.type === 'text' ? m.content.slice(0, 30)
+                : m.type === 'voice' ? (() => {
+                    const dur = m.metadata?.duration ? `${m.metadata.duration}″` : '';
+                    const src = m.metadata?.sourceText?.slice(0, 20);
+                    return src ? `语音${dur}: "${src}"` : `语音${dur || ''}`;
+                })()
+                    : m.type === 'image' ? '[图片]'
+                        : m.type === 'emoji' ? '[表情]'
+                            : `[${m.type}]`;
             return `${sender}: ${text}`;
         });
         if (selectedMsgs.length > 4) previewLines.push(`... 共 ${selectedMsgs.length} 条消息`);
@@ -795,7 +1031,7 @@ const Chat: React.FC = () => {
     const displayMessages = useMemo(() => messages
         .filter(m => m.metadata?.source !== 'date')
         .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
-        .filter(m => { if (char.hideSystemLogs && m.role === 'system') return false; return true; })
+        .filter(m => { if (char.hideSystemLogs && m.role === 'system' && m.type !== 'call_log') return false; return true; })
         .slice(-visibleCount),
         [messages, char?.hideBeforeMessageId, char?.hideSystemLogs, visibleCount]);
 
@@ -803,16 +1039,16 @@ const Chat: React.FC = () => {
 
     // Reset active category if it becomes invisible for the current character
     useEffect(() => {
-        if (activeCategory !== 'default' && visibleCategories.length > 0 && !visibleCategories.some(c => c.id === activeCategory)) {
+        if (activeCategory !== 'default' && userVisibleCategories.length > 0 && !userVisibleCategories.some(c => c.id === activeCategory)) {
             setActiveCategory('default');
         }
-    }, [visibleCategories, activeCategory]);
+    }, [userVisibleCategories, activeCategory]);
 
-    // Build a set of hidden category IDs for quick lookup
+    // Build a set of hidden category IDs for quick lookup (user panel perspective)
     const hiddenCategoryIds = useMemo(() => {
-        const visible = new Set(visibleCategories.map(c => c.id));
+        const visible = new Set(userVisibleCategories.map(c => c.id));
         return new Set(categories.filter(c => !visible.has(c.id)).map(c => c.id));
-    }, [categories, visibleCategories]);
+    }, [categories, userVisibleCategories]);
 
     // Memoize filtered emojis for ChatInputArea
     const filteredEmojis = useMemo(() => emojis.filter(e => {
@@ -825,6 +1061,88 @@ const Chat: React.FC = () => {
     // Memoize ChatInputArea callbacks
     const handleSendCallback = useCallback(() => handleSendText(), [char, input, replyTarget]);
     const handleCharSelectCallback = useCallback((id: string) => { setActiveCharacterId(id); setShowPanel('none'); }, []);
+
+    // --- Voice Recording → STT → AI Handler ---
+    const handleVoiceRecordMessage = useCallback(async (blob: Blob, duration: number) => {
+        if (!char) return;
+        haptic.medium();
+
+        try {
+            // 1. Save user voice message (visual bubble) immediately
+            const voiceMsgId = await DB.saveMessage({
+                charId: char.id,
+                role: 'user',
+                type: 'voice',
+                content: '', // will be filled with transcribed text
+                metadata: {
+                    duration,
+                    source: 'user-recording',
+                    hasAudio: true,
+                    sttStatus: 'pending',
+                    transcribedText: '',
+                },
+            });
+
+            // 2. Save audio blob to IDB
+            await DB.saveVoiceAudio(voiceMsgId, blob);
+
+            // 3. Update UI immediately — user sees their voice bubble
+            await reloadMessages(visibleCountRef.current);
+
+            // Mark as transcribing
+            setTranscribingMsgIds(prev => new Set(prev).add(voiceMsgId));
+            setSttProcessing(true);
+
+            // 4. Run Whisper STT in background (with 15s timeout)
+            let transcribedText = '';
+            let sttFailed = false;
+
+            try {
+                const result = await CloudStt.transcribe(blob, sttConfig, 15000);
+                transcribedText = result.text;
+
+                // 如果 SenseVoice 返回了情绪标签，写入 metadata
+                if (result.emotion) {
+                    await DB.updateMessageMetadata(voiceMsgId, { emotion: result.emotion });
+                }
+            } catch (sttErr: any) {
+                console.error('🎤 [STT] Transcription failed:', sttErr);
+                sttFailed = true;
+
+                // 未配置 Key — 给用户明确提示
+                if (sttErr instanceof SttNotConfiguredError) {
+                    addToast('请先在设置中配置语音识别 API Key', 'error');
+                }
+            }
+
+            setTranscribingMsgIds(prev => { const s = new Set(prev); s.delete(voiceMsgId); return s; });
+            setSttProcessing(false);
+
+            if (transcribedText.trim()) {
+                // ✅ STT 成功 — 正常流程
+                await DB.updateMessage(voiceMsgId, transcribedText);
+                await DB.updateMessageMetadata(voiceMsgId, { sttStatus: 'done', transcribedText });
+            } else {
+                // ❌ STT 失败或识别为空 — fallback：告诉 AI 用户发了语音但没法识别
+                await DB.updateMessage(voiceMsgId, `[语音消息 ${duration}秒]`);
+                await DB.updateMessageMetadata(voiceMsgId, {
+                    sttStatus: sttFailed ? 'failed' : 'empty',
+                    transcribedText: '',
+                });
+
+                if (sttFailed) {
+                    addToast('语音识别暂不可用，已直接发送', 'info');
+                }
+            }
+
+            // 5. Refresh UI — 不自动触发 AI（与文字消息一致，用户点按钮手动触发）
+            await reloadMessages(visibleCountRef.current);
+        } catch (err) {
+            console.error('🎤 [VoiceRecord] Error:', err);
+            addToast('语音消息发送失败', 'error');
+            setSttProcessing(false);
+        }
+    }, [char, addToast, reloadMessages]);
 
     return (
         <div
@@ -884,6 +1202,25 @@ const Chat: React.FC = () => {
                     setShowTimestampSetting(next);
                     localStorage.setItem(`chat_show_timestamp_${activeCharacterId}`, JSON.stringify(next));
                 }}
+                onReadAloud={ttsConfig?.apiKey ? handleReadAloud : undefined}
+                onVoiceToText={handleVoiceToText}
+                onDownloadVoice={handleDownloadVoice}
+                autoTts={autoTts}
+                onToggleAutoTts={() => {
+                    if (!autoTts && !ttsConfig?.apiKey) {
+                        addToast('请先在全局设置中配置 TTS API Key', 'error');
+                        return;
+                    }
+                    const next = !autoTts;
+                    setAutoTts(next);
+                    localStorage.setItem(`chat_auto_tts_${activeCharacterId}`, JSON.stringify(next));
+                }}
+                autoCall={autoCall}
+                onToggleAutoCall={() => {
+                    const next = !autoCall;
+                    setAutoCall(next);
+                    localStorage.setItem(`chat_auto_call_${activeCharacterId}`, JSON.stringify(next));
+                }}
             />
 
             <ChatHeader
@@ -898,6 +1235,7 @@ const Chat: React.FC = () => {
                 onClose={closeApp}
                 onTriggerAI={() => triggerAI(messages)}
                 onShowCharsPanel={() => setShowPanel('chars')}
+                onCallPress={() => { unlockAudio(); openApp(AppID.VoiceCall, { direction: 'outgoing' }); }}
             />
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto pt-6 pb-6 no-scrollbar" style={{ backgroundImage: activeTheme.type === 'custom' && activeTheme.user.backgroundImage ? 'none' : undefined }}>
@@ -917,6 +1255,8 @@ const Chat: React.FC = () => {
                     const nextRole = i < displayMessages.length - 1 ? displayMessages[i + 1].role : null;
                     const prevMsg = i > 0 ? displayMessages[i - 1] : null;
                     const showTs = effectiveShowTimestamp && (!prevMsg || (m.timestamp - prevMsg.timestamp) >= timestampInterval);
+                    // Inner voice: only show on the last assistant message
+                    const isLastAssistant = m.role === 'assistant' && !displayMessages.slice(i + 1).some(nm => nm.role === 'assistant');
                     return (
                         <MessageItem
                             key={m.id || i}
@@ -937,6 +1277,15 @@ const Chat: React.FC = () => {
                             onTransferAction={handleTransferAction}
                             showTimestamp={showTs}
                             timestampValue={m.timestamp}
+                            onPlayVoice={playVoice}
+                            onStopVoice={stopVoice}
+                            onRetryVoice={handleRetryVoice}
+                            playingMsgId={playingMsgId}
+                            loadingMsgIds={loadingMsgIds}
+                            isVoiceTextExpanded={expandedVoiceTextIds.has(m.id)}
+                            onToggleVoiceText={toggleVoiceText}
+                            innerVoice={isLastAssistant ? char.moodState?.innerVoice : undefined}
+                            onRetryInnerVoice={isLastAssistant ? retryMindSnapshot : undefined}
                         />
                     );
                 })}
@@ -994,10 +1343,20 @@ const Chat: React.FC = () => {
                     onPanelAction={handlePanelAction}
                     onImageSelect={handleImageSelect}
                     isSummarizing={isSummarizing}
-                    categories={visibleCategories}
+                    categories={userVisibleCategories}
                     activeCategory={activeCategory}
                     onReroll={handleReroll}
                     canReroll={canReroll}
+                    onVoiceMessage={handleVoiceRecordMessage}
+                    voiceRecorderState={sttProcessing ? 'processing' : voiceRecorder.state}
+                    voiceRecordingDuration={voiceRecorder.duration}
+                    onStartRecording={voiceRecorder.startRecording}
+                    onStopRecording={voiceRecorder.stopRecording}
+                    onCancelRecording={voiceRecorder.cancelRecording}
+                    voiceRecorderError={voiceRecorder.error}
+                    isVoiceProcessing={sttProcessing}
+                    analyserNode={voiceRecorder.analyserNode}
+                    isSpeaking={voiceRecorder.isSpeaking}
                 />
             </div>
 

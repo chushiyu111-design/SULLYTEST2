@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/minimax-api/:path*",
+      "destination": "/api/tts-proxy?path=:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
