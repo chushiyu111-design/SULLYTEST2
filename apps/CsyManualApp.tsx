@@ -73,7 +73,9 @@ const SECTIONS: ManualSection[] = [
                 label: '⚙️ 怎么开',
                 detail: '设置 → API 配置 → 拉到底部 → 打开「深度沉浸模式」开关\n\n适配 Gemini 3.0 / 3.1。仅对主聊天生效，不影响副API等其他模块。\n\n语音通话会自动开启深度沉浸，无需手动设置。',
             },
-        ];
+        ],
+    },
+];
 
 // ─── Component ──────────────────────────────────────────────────
 const CsyManualApp: React.FC = () => {
