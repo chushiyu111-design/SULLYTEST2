@@ -85,6 +85,8 @@ interface ChatModalsProps {
     onDownloadVoice?: () => void;
     autoTts?: boolean;
     onToggleAutoTts?: () => void;
+    autoCall?: boolean;
+    onToggleAutoCall?: () => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -108,7 +110,8 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang,
     xhsEnabled, onToggleXhs,
     showTimestampSetting, isTimestampForced, onToggleTimestamp,
-    onReadAloud, onVoiceToText, onDownloadVoice, autoTts, onToggleAutoTts
+    onReadAloud, onVoiceToText, onDownloadVoice, autoTts, onToggleAutoTts,
+    autoCall, onToggleAutoCall
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
@@ -292,6 +295,19 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
                             开启后，AI 每次回复时会自动生成语音消息。需要先在全局设置中配置 TTS。
+                        </p>
+                    </div>
+
+                    {/* AI Incoming Call Toggle */}
+                    <div className="pt-2 border-t border-slate-100">
+                        <div className="flex justify-between items-center cursor-pointer" onClick={onToggleAutoCall}>
+                            <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">AI 来电</label>
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${autoCall ? 'bg-primary' : 'bg-slate-200'}`}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${autoCall ? 'translate-x-4' : ''}`}></div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                            开启后，AI 会在合适的时机主动给你拨打语音电话。
                         </p>
                     </div>
 

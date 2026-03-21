@@ -3,6 +3,9 @@
  *
  * 封装 MediaRecorder API，管理录音状态。
  * 独立于 STT 引擎，仅负责采集音频。
+ * 
+ * 增强：集成 Silero VAD（@ricky0123/vad-web）进行精准语音活动检测。
+ * VAD 作为增强层，如果加载失败不影响核心录音功能。
  */
 
 import { useState, useRef, useCallback } from 'react';
@@ -14,6 +17,8 @@ export interface UseVoiceRecorderReturn {
     state: RecordingState;
     /** Duration in seconds of current recording */
     duration: number;
+    /** Whether Silero VAD detects active speech right now */
+    isSpeaking: boolean;
     /** Start recording (requests mic permission) */
     startRecording: () => Promise<boolean>;
     /** Stop recording and return audio blob */
@@ -26,6 +31,8 @@ export interface UseVoiceRecorderReturn {
     isSupported: boolean;
     /** Error message if any */
     error: string | null;
+    /** AnalyserNode for real-time waveform visualization (only available while recording) */
+    analyserNode: AnalyserNode | null;
 }
 
 /** Maximum recording duration in seconds */
@@ -52,6 +59,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     const [state, setState] = useState<RecordingState>('idle');
     const [duration, setDuration] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [isSpeaking, setIsSpeaking] = useState(false);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -60,6 +68,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     const startTimeRef = useRef<number>(0);
     const resolveRef = useRef<((result: { blob: Blob; duration: number } | null) => void) | null>(null);
     const cancelledRef = useRef(false);
+
+    // Web Audio API refs for real-time waveform visualization
+    const audioCtxRef = useRef<AudioContext | null>(null);
+    const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+
+    // Silero VAD ref — enhancement layer, non-critical
+    const vadRef = useRef<any>(null);
 
     const isSupported = typeof navigator !== 'undefined'
         && typeof navigator.mediaDevices !== 'undefined'
@@ -77,6 +92,22 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
             streamRef.current.getTracks().forEach(t => t.stop());
             streamRef.current = null;
         }
+        // Close AudioContext (waveform)
+        if (audioCtxRef.current) {
+            audioCtxRef.current.close().catch(() => { });
+            audioCtxRef.current = null;
+        }
+        setAnalyserNode(null);
+        // Destroy VAD instance
+        if (vadRef.current) {
+            try {
+                vadRef.current.destroy();
+            } catch (e) {
+                console.warn('🎤 [VAD] destroy error (non-fatal):', e);
+            }
+            vadRef.current = null;
+        }
+        setIsSpeaking(false);
         mediaRecorderRef.current = null;
         chunksRef.current = [];
     }, []);
@@ -109,6 +140,53 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
                 },
             });
             streamRef.current = stream;
+
+            // Set up Web Audio API for real-time waveform
+            try {
+                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const analyser = ctx.createAnalyser();
+                analyser.fftSize = 128; // 64 frequency bins — more detail for responsive bars
+                analyser.smoothingTimeConstant = 0.3; // lower = more responsive to voice changes
+                analyser.minDecibels = -90; // raise noise floor threshold slightly
+                analyser.maxDecibels = -30; // lower peak threshold so normal talking hits max height
+                const source = ctx.createMediaStreamSource(stream);
+                source.connect(analyser);
+                audioCtxRef.current = ctx;
+                setAnalyserNode(analyser);
+            } catch (audioErr) {
+                console.warn('🎤 [Recorder] AudioContext for waveform failed (non-fatal):', audioErr);
+            }
+
+            // ── Silero VAD — enhancement layer (non-blocking, non-critical) ──
+            // Initializes asynchronously; if it fails, recording still works fine.
+            (async () => {
+                try {
+                    const { MicVAD } = await import('@ricky0123/vad-web');
+                    // Pass the already-acquired stream so VAD doesn't request mic again
+                    const vad = await MicVAD.new({
+                        // Pass existing stream via callbacks so VAD doesn't request mic again
+                        getStream: async () => stream,
+                        pauseStream: async () => { /* no-op: we manage the stream ourselves */ },
+                        resumeStream: async () => stream,
+                        positiveSpeechThreshold: 0.8,
+                        negativeSpeechThreshold: 0.3,
+                        redemptionMs: 500,
+                        onSpeechStart: () => {
+                            console.log('🎤 [VAD] Speech start');
+                            setIsSpeaking(true);
+                        },
+                        onSpeechEnd: () => {
+                            console.log('🎤 [VAD] Speech end');
+                            setIsSpeaking(false);
+                        },
+                    });
+                    vadRef.current = vad;
+                    vad.start();
+                    console.log('🎤 [VAD] Silero VAD initialized successfully');
+                } catch (vadErr) {
+                    console.warn('🎤 [VAD] Silero VAD init failed (non-fatal, recording continues):', vadErr);
+                }
+            })();
 
             const mimeType = getSupportedMime();
             const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
@@ -215,11 +293,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     return {
         state,
         duration,
+        isSpeaking,
         startRecording,
         stopRecording,
         cancelRecording,
         setProcessing,
         isSupported,
         error,
+        analyserNode,
     };
 }

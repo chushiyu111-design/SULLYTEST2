@@ -2,6 +2,45 @@
 import { DB } from './db';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
+// ═══════════════════════════════════════════════════════════════════════
+//  Bilingual Marker — single source of truth for the %%BILINGUAL%% system
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Canonical marker written into new messages (no spaces) */
+export const BILINGUAL_MARKER = '%%BILINGUAL%%';
+
+/**
+ * Regex that matches BOTH old format `%% BILINGUAL %%` (with spaces)
+ * and new format `%%BILINGUAL%%` (no spaces) for backward compatibility.
+ * Use with `gi` flags for global/case-insensitive matching.
+ */
+export const BILINGUAL_RE = /%%\s*BILINGUAL\s*%%/gi;
+
+/**
+ * Parse a content string that may contain a %%BILINGUAL%% marker.
+ * Returns { hasBilingual, langA, langB }
+ *   - langA = original text (before marker)
+ *   - langB = translated text (after marker), empty string if no marker
+ *
+ * @param raw  The raw message content
+ * @param clean  Optional cleanup function to apply to each half (e.g. stripJunk)
+ */
+export function parseBilingual(
+    raw: string,
+    clean?: (s: string) => string,
+): { hasBilingual: boolean; langA: string; langB: string } {
+    const match = raw.match(/%%\s*BILINGUAL\s*%%/i);
+    if (!match) {
+        const a = clean ? clean(raw) : raw;
+        return { hasBilingual: false, langA: a, langB: '' };
+    }
+    const idx = match.index!;
+    const markerLen = match[0].length;
+    const a = clean ? clean(raw.substring(0, idx)) : raw.substring(0, idx).trim();
+    const b = clean ? clean(raw.substring(idx + markerLen)) : raw.substring(idx + markerLen).trim();
+    return { hasBilingual: true, langA: a, langB: b };
+}
+
 export const ChatParser = {
     // Return cleaned content and perform side effects
     parseAndExecuteActions: async (
@@ -126,7 +165,7 @@ export const ChatParser = {
             // Strip markdown headers (# ## ### etc) → keep the text
             .replace(/^#{1,6}\s+/gm, '')
             // Strip residual action/system tags that weren't caught earlier
-            .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|FS_DIARY|FS_READ_DIARY|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END)[:\s][\s\S]*?\]\]/g, '')
+            .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|FS_DIARY|FS_READ_DIARY|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END|CALL)[:\s][\s\S]*?\]\]/g, '')
             .replace(/\[schedule_message[^\]]*\]/g, '')
             .replace(/\[\[(?:QU[OA]TE|引用)[：:][\s\S]*?\]\]/g, '')
             .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')
@@ -157,7 +196,7 @@ export const ChatParser = {
      */
     hasDisplayContent: (text: string): boolean => {
         const stripped = text
-            .replace(/%%BILINGUAL%%/gi, '')
+            .replace(/%%\s*BILINGUAL\s*%%/gi, '')
             .replace(/%%TRANS%%[\s\S]*/gi, '')
             .replace(/<\/?翻译>|<\/?原文>|<\/?译文>/g, '')
             .replace(/^\s*---\s*$/gm, '')

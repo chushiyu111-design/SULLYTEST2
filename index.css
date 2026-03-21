@@ -18,6 +18,24 @@
   font-display: swap;
 }
 
+/* --- Handwriting Font: 手写体6 (Inner Voice) --- */
+@font-face {
+  font-family: 'ShouXie6';
+  src: url('/fonts/shouxie6.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- Handwriting Font: 爱你在黄昏日落手写体 (Inner Voice fallback) --- */
+@font-face {
+  font-family: 'HuangHunShouXie';
+  src: url('/fonts/huanghun-shouxie.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ==========================================
    Custom Theme (migrated from CDN inline config)
    Tailwind v4 CSS-first configuration
@@ -47,6 +65,7 @@
   --animate-voice-bar-1: voiceBar1 0.8s ease-in-out infinite;
   --animate-voice-bar-2: voiceBar2 0.8s ease-in-out 0.15s infinite;
   --animate-voice-bar-3: voiceBar3 0.8s ease-in-out 0.3s infinite;
+  --animate-inner-voice-in: innerVoiceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* Custom Keyframes */
@@ -193,6 +212,18 @@
 
   50% {
     height: 12px;
+  }
+}
+
+/* Inner Voice Card — paper card spring entrance */
+@keyframes innerVoiceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) rotate(-2deg) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-1deg) translateY(0);
   }
 }
 

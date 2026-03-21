@@ -2,7 +2,7 @@
 import { OSTheme, APIConfig, ApiPreset } from './core';
 import { RealtimeConfig } from './realtime';
 import { CharacterProfile, GroupProfile, Worldbook, PhoneEvidence, PhoneCustomApp } from './character';
-import { ChatTheme, Message, Emoji, EmojiCategory, BubbleStyle } from './chat';
+import { ChatTheme, Message, Emoji, EmojiCategory, BubbleStyle, VectorMemory } from './chat';
 import { RoomItem, RoomTodo, RoomNote } from './room';
 import {
     SocialPost, SubAccount, SocialAppProfile, GalleryImage, DiaryEntry,
@@ -69,4 +69,7 @@ export interface FullBackupData {
 
     xhsActivities?: XhsActivityRecord[];
     xhsStockImages?: XhsStockImage[];
+
+    // Vector Memory Data
+    vectorMemories?: VectorMemory[];
 }

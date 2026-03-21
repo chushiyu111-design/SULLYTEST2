@@ -4,7 +4,9 @@ import { DB } from '../utils/db';
 import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory, AppID } from '../types';
 import { processImage } from '../utils/file';
 import { safeResponseJson } from '../utils/safeApi';
+import { parseBilingual } from '../utils/chatParser';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
+import { unlockAudio } from './voicecall/unlockAudio';
 import MessageItem from '../components/chat/MessageItem';
 import { PRESET_THEMES } from '../components/chat/ChatConstants';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../constants/archivePrompts';
@@ -37,6 +39,8 @@ const Chat: React.FC = () => {
     const scrollThrottleRef = useRef(0);
     const visibleCountRef = useRef(30);
     const activeCharIdRef = useRef(activeCharacterId);
+    const messagesRef = useRef<Message[]>(messages);
+    messagesRef.current = messages;
 
     // Reply Logic
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
@@ -87,6 +91,9 @@ const Chat: React.FC = () => {
     const [autoTts, setAutoTts] = useState(() => {
         try { return JSON.parse(localStorage.getItem(`chat_auto_tts_${activeCharacterId}`) || 'false'); } catch { return false; }
     });
+    const [autoCall, setAutoCall] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(`chat_auto_call_${activeCharacterId}`) || 'false'); } catch { return false; }
+    });
 
     // --- Voice Recording (STT) ---
     const voiceRecorder = useVoiceRecorder();
@@ -132,7 +139,7 @@ const Chat: React.FC = () => {
     }, [emojis, categories, aiVisibleCategories]);
 
     // --- Initialize Hook ---
-    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI } = useChatAI({
+    const { isTyping, recallStatus, searchStatus, diaryStatus, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI, retryMindSnapshot } = useChatAI({
         char,
         userProfile,
         apiConfig,
@@ -147,18 +154,42 @@ const Chat: React.FC = () => {
             : undefined,
         autoVoice: autoTts,
         onVoiceMessageSaved: autoTts && ttsConfig?.apiKey ? (msgId: number, text: string) => {
-            // Fire-and-forget synthesis; reload from IDB when done to avoid stale closure
+            // Fire-and-forget synthesis; synthesizeForMessage now updates metadata internally
+            // before removing loading state, preventing the race condition.
             synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
                 if (result) {
-                    // Update IDB first, then reload messages from DB (safe even if state changed)
-                    await DB.updateMessageMetadata(msgId, { duration: result.duration, hasAudio: true });
+                    // Metadata (duration, hasAudio) already updated by synthesizeForMessage.
+                    // Just reload messages to refresh the UI from DB.
                     await reloadMessages(visibleCountRef.current);
                 }
             }).catch(err => console.error('[AutoTTS] synthesis failed:', err));
         } : undefined,
+        autoCall,
+        onIncomingCall: autoCall ? (mode: string, callReason: string) => {
+            console.log(`📞 [IncomingCall] Triggering VoiceCall app with mode: ${mode}`);
+            unlockAudio(); // 提前解锁音频（来电是程序触发，无用户手势，需要预解锁）
+            openApp(AppID.VoiceCall, { direction: 'incoming', mode, callReason });
+        } : undefined,
+        onMoodUpdate: (charId: string, moodState: any) => {
+            updateCharacter(charId, { moodState });
+        },
     });
 
+    // --- Autonomous Agent: incoming call event bridge ---
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (!detail?.charId || detail.charId !== activeCharacterId) return;
+            console.log(`🤖📞 [Agent] Autonomous call triggered (reason: ${detail.reason || 'N/A'})`);
+            unlockAudio();
+            openApp(AppID.VoiceCall, { direction: 'incoming', mode: 'normal', callReason: detail.reason || '' });
+        };
+        window.addEventListener('autonomous-call', handler);
+        return () => window.removeEventListener('autonomous-call', handler);
+    }, [activeCharacterId, openApp]);
+
     const canReroll = !isTyping && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
+
 
     // --- Translation: pure frontend toggle (no API calls, bilingual data is already in message content) ---
     const handleTranslateToggle = useCallback((msgId: number) => {
@@ -429,6 +460,7 @@ const Chat: React.FC = () => {
                     openApp(AppID.ThemeMaker);
                 }
                 break;
+            case 'voice-call': unlockAudio(); openApp(AppID.VoiceCall, { direction: 'outgoing' }); break;
         }
     };
 
@@ -630,7 +662,10 @@ const Chat: React.FC = () => {
 
             for (const dateStr of datesToProcess) {
                 const dayMsgs = msgsByDate[dateStr];
-                const rawLog = dayMsgs.map(m => `[${formatTime(m.timestamp)}] ${m.role === 'user' ? userProfile.name : char.name}: ${m.type === 'image' ? '[Image]' : m.content}`).join('\n');
+                const rawLog = dayMsgs.map(m => {
+                    if (m.type === 'call_log') return m.content; // 已含 [电话记录] 标记，直接透传
+                    return `[${formatTime(m.timestamp)}] ${m.role === 'user' ? userProfile.name : char.name}: ${m.type === 'image' ? '[Image]' : m.content}`;
+                }).join('\n');
 
                 let prompt = template;
                 prompt = prompt.replace(/\$\{dateStr\}/g, dateStr);
@@ -713,7 +748,7 @@ const Chat: React.FC = () => {
         addToast('已复制到剪贴板', 'success');
     };
 
-    // --- Voice: Read Aloud ---
+    // --- Voice: Read Aloud (in-place conversion: text → voice) ---
     const handleReadAloud = useCallback(async () => {
         if (!selectedMessage || !ttsConfig?.apiKey) {
             addToast('请先在设置中配置 TTS', 'error');
@@ -725,32 +760,45 @@ const Chat: React.FC = () => {
         setSelectedMessage(null);
 
         console.log('[ReadAloud] Starting TTS for msg:', msg.id, 'text:', msg.content.slice(0, 50));
-        console.log('[ReadAloud] ttsConfig:', JSON.stringify({ baseUrl: ttsConfig.baseUrl, model: ttsConfig.model, hasApiKey: !!ttsConfig.apiKey, groupId: ttsConfig.groupId?.slice(0, 6) + '...' }));
 
-        // Create a placeholder voice message immediately
-        const voiceMsg: any = {
-            charId: char.id,
-            role: msg.role,
-            type: 'voice' as MessageType,
-            content: msg.content,
-            metadata: { duration: 0, sourceText: msg.content, hasAudio: false, source: 'read-aloud' },
-        };
-        const savedId = await DB.saveMessage(voiceMsg);
+        // For bilingual messages: TTS synthesizes only the original text (langA),
+        // but sourceText keeps the full bilingual content for "转文字" display
+        const { langA: ttsText } = parseBilingual(msg.content);
+
+        // 1. Convert the original message from text → voice in-place
+        await DB.updateMessageType(msg.id, 'voice', {
+            sourceText: msg.content, // Full content (with bilingual marker) for transcript
+            hasAudio: false,
+            duration: 0,
+            source: 'read-aloud',
+        });
+
+        // 2. Start synthesis (uses original text only, not translated)
+        const synthesisPromise = synthesizeForMessage(msg.id, ttsText, ttsConfig);
+
+        // 3. Reload messages to show voice bubble at the original position
         await reloadMessages(visibleCountRef.current);
 
-        // Synthesize in background
+        // 4. Wait for synthesis to complete
         try {
-            const result = await synthesizeForMessage(savedId, msg.content, ttsConfig);
+            const result = await synthesisPromise;
             if (result) {
-                await DB.updateMessageMetadata(savedId, { duration: result.duration, hasAudio: true, sourceText: msg.content });
-                setMessages(prev => prev.map(m => m.id === savedId ? { ...m, metadata: { ...m.metadata, duration: result.duration, hasAudio: true } } : m));
+                // sourceText already set above; synthesizeForMessage already set duration + hasAudio
+                await reloadMessages(visibleCountRef.current);
                 addToast('语音合成完成', 'success');
             } else {
-                addToast('TTS 合成失败（结果为空）', 'error');
+                // Synthesis returned null (e.g. aborted) — revert to text
+                await DB.updateMessageType(msg.id, 'text');
+                await reloadMessages(visibleCountRef.current);
+                addToast('TTS 合成失败（结果为空），已恢复文字', 'error');
             }
         } catch (err: any) {
             console.error('[ReadAloud] TTS error:', err);
-            addToast(`TTS 合成失败: ${err?.message || err}`, 'error');
+            // Revert message back to text on failure
+            await DB.updateMessageType(msg.id, 'text');
+            await DB.deleteVoiceAudio(msg.id); // Clean up any partial audio
+            await reloadMessages(visibleCountRef.current);
+            addToast(`TTS 合成失败: ${err?.message || err}，已恢复文字`, 'error');
         }
     }, [selectedMessage, ttsConfig, char, synthesizeForMessage, reloadMessages]);
 
@@ -857,6 +905,25 @@ const Chat: React.FC = () => {
         setTransferActionMsg(msg);
     }, []);
 
+    // --- Voice Retry (stable ref to avoid busting React.memo on every render) ---
+    const handleRetryVoice = useMemo(() => {
+        if (!ttsConfig?.apiKey) return undefined;
+        return (msgId: number) => {
+            const msg = messagesRef.current.find(m => m.id === msgId);
+            if (!msg || !ttsConfig) return;
+            const text = msg.metadata?.sourceText || msg.content;
+            synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
+                if (result) {
+                    await reloadMessages(visibleCountRef.current);
+                    addToast('语音合成完成', 'success');
+                }
+            }).catch(err => {
+                console.error('[RetryVoice] synthesis failed:', err);
+                addToast(`重试合成失败: ${err?.message || err}`, 'error');
+            });
+        };
+    }, [ttsConfig?.apiKey, synthesizeForMessage, reloadMessages, addToast]);
+
     const handleTransferStatusUpdate = async (status: 'accepted' | 'returned') => {
         if (!transferActionMsg || !char) return;
         await DB.updateMessageMetadata(transferActionMsg.id, { status });
@@ -907,7 +974,15 @@ const Chat: React.FC = () => {
         // Build preview text (first few messages)
         const previewLines = selectedMsgs.slice(0, 4).map(m => {
             const sender = m.role === 'user' ? userProfile.name : char.name;
-            const text = m.type === 'text' ? m.content.slice(0, 30) : `[${m.type === 'image' ? '图片' : m.type === 'emoji' ? '表情' : m.type}]`;
+            const text = m.type === 'text' ? m.content.slice(0, 30)
+                : m.type === 'voice' ? (() => {
+                    const dur = m.metadata?.duration ? `${m.metadata.duration}″` : '';
+                    const src = m.metadata?.sourceText?.slice(0, 20);
+                    return src ? `语音${dur}: "${src}"` : `语音${dur || ''}`;
+                })()
+                    : m.type === 'image' ? '[图片]'
+                        : m.type === 'emoji' ? '[表情]'
+                            : `[${m.type}]`;
             return `${sender}: ${text}`;
         });
         if (selectedMsgs.length > 4) previewLines.push(`... 共 ${selectedMsgs.length} 条消息`);
@@ -956,7 +1031,7 @@ const Chat: React.FC = () => {
     const displayMessages = useMemo(() => messages
         .filter(m => m.metadata?.source !== 'date')
         .filter(m => !char.hideBeforeMessageId || m.id >= char.hideBeforeMessageId)
-        .filter(m => { if (char.hideSystemLogs && m.role === 'system') return false; return true; })
+        .filter(m => { if (char.hideSystemLogs && m.role === 'system' && m.type !== 'call_log') return false; return true; })
         .slice(-visibleCount),
         [messages, char?.hideBeforeMessageId, char?.hideSystemLogs, visibleCount]);
 
@@ -1140,6 +1215,12 @@ const Chat: React.FC = () => {
                     setAutoTts(next);
                     localStorage.setItem(`chat_auto_tts_${activeCharacterId}`, JSON.stringify(next));
                 }}
+                autoCall={autoCall}
+                onToggleAutoCall={() => {
+                    const next = !autoCall;
+                    setAutoCall(next);
+                    localStorage.setItem(`chat_auto_call_${activeCharacterId}`, JSON.stringify(next));
+                }}
             />
 
             <ChatHeader
@@ -1154,6 +1235,7 @@ const Chat: React.FC = () => {
                 onClose={closeApp}
                 onTriggerAI={() => triggerAI(messages)}
                 onShowCharsPanel={() => setShowPanel('chars')}
+                onCallPress={() => { unlockAudio(); openApp(AppID.VoiceCall, { direction: 'outgoing' }); }}
             />
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto pt-6 pb-6 no-scrollbar" style={{ backgroundImage: activeTheme.type === 'custom' && activeTheme.user.backgroundImage ? 'none' : undefined }}>
@@ -1173,6 +1255,8 @@ const Chat: React.FC = () => {
                     const nextRole = i < displayMessages.length - 1 ? displayMessages[i + 1].role : null;
                     const prevMsg = i > 0 ? displayMessages[i - 1] : null;
                     const showTs = effectiveShowTimestamp && (!prevMsg || (m.timestamp - prevMsg.timestamp) >= timestampInterval);
+                    // Inner voice: only show on the last assistant message
+                    const isLastAssistant = m.role === 'assistant' && !displayMessages.slice(i + 1).some(nm => nm.role === 'assistant');
                     return (
                         <MessageItem
                             key={m.id || i}
@@ -1195,25 +1279,13 @@ const Chat: React.FC = () => {
                             timestampValue={m.timestamp}
                             onPlayVoice={playVoice}
                             onStopVoice={stopVoice}
-                            onRetryVoice={ttsConfig?.apiKey ? (msgId: number) => {
-                                const msg = messages.find(m => m.id === msgId);
-                                if (!msg || !ttsConfig) return;
-                                const text = msg.metadata?.sourceText || msg.content;
-                                synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
-                                    if (result) {
-                                        await DB.updateMessageMetadata(msgId, { duration: result.duration, hasAudio: true });
-                                        await reloadMessages(visibleCountRef.current);
-                                        addToast('语音合成完成', 'success');
-                                    }
-                                }).catch(err => {
-                                    console.error('[RetryVoice] synthesis failed:', err);
-                                    addToast(`重试合成失败: ${err?.message || err}`, 'error');
-                                });
-                            } : undefined}
+                            onRetryVoice={handleRetryVoice}
                             playingMsgId={playingMsgId}
                             loadingMsgIds={loadingMsgIds}
                             isVoiceTextExpanded={expandedVoiceTextIds.has(m.id)}
                             onToggleVoiceText={toggleVoiceText}
+                            innerVoice={isLastAssistant ? char.moodState?.innerVoice : undefined}
+                            onRetryInnerVoice={isLastAssistant ? retryMindSnapshot : undefined}
                         />
                     );
                 })}
@@ -1283,6 +1355,8 @@ const Chat: React.FC = () => {
                     onCancelRecording={voiceRecorder.cancelRecording}
                     voiceRecorderError={voiceRecorder.error}
                     isVoiceProcessing={sttProcessing}
+                    analyserNode={voiceRecorder.analyserNode}
+                    isSpeaking={voiceRecorder.isSpeaking}
                 />
             </div>
 

@@ -40,6 +40,20 @@ const Settings: React.FC = () => {
     const [testConnectionStatus, setTestConnectionStatus] = useState<'idle' | 'success' | 'error' | 'testing'>('idle');
     const [newPresetName, setNewPresetName] = useState('');
 
+    // == 副 API (Sub API) ==
+    const [subKey, setSubKey] = useState(() => localStorage.getItem('sub_api_key') || '');
+    const [subUrl, setSubUrl] = useState(() => localStorage.getItem('sub_api_base_url') || '');
+    const [subModel, setSubModel] = useState(() => localStorage.getItem('sub_api_model') || '');
+    const [subModels, setSubModels] = useState<string[]>([]);
+    const [isLoadingSubModels, setIsLoadingSubModels] = useState(false);
+    const [isTestingSub, setIsTestingSub] = useState(false);
+    const [subTestStatus, setSubTestStatus] = useState<'idle' | 'success' | 'error' | 'testing'>('idle');
+    const [subStatusMsg, setSubStatusMsg] = useState('');
+    const [showSubModelModal, setShowSubModelModal] = useState(false);
+    const [subPresets, setSubPresets] = useState<Array<{ id: string; name: string; config: { baseUrl: string; apiKey: string; model: string } }>>(() => {
+        try { return JSON.parse(localStorage.getItem('sub_api_presets') || '[]'); } catch { return []; }
+    });
+
     // UI States
     const [showModelModal, setShowModelModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false); // Used for completion now
@@ -109,6 +123,14 @@ const Settings: React.FC = () => {
 
     // For web download link
     const [downloadUrl, setDownloadUrl] = useState<string>('');
+
+    // Embedding Config
+    const [embeddingKey, setEmbeddingKey] = useState(() => localStorage.getItem('embedding_api_key') || '');
+    const [embeddingUrl, setEmbeddingUrl] = useState(() => localStorage.getItem('embedding_base_url') || 'https://api.siliconflow.cn/v1');
+    const [embeddingModel, setEmbeddingModel] = useState(() => localStorage.getItem('embedding_model') || 'BAAI/bge-m3');
+    const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
+    const [embeddingTestStatus, setEmbeddingTestStatus] = useState('');
+    const [isLoadingEmbedModels, setIsLoadingEmbedModels] = useState(false);
 
     const [statusMsg, setStatusMsg] = useState('');
     const importInputRef = useRef<HTMLInputElement>(null);
@@ -224,6 +246,108 @@ const Settings: React.FC = () => {
                 setTimeout(() => setStatusMsg(''), 3000);
             }
         }
+    };
+
+    // == Sub API Handlers ==
+    const handleSaveSubApi = () => {
+        localStorage.setItem('sub_api_key', subKey);
+        localStorage.setItem('sub_api_base_url', subUrl);
+        localStorage.setItem('sub_api_model', subModel);
+        setSubStatusMsg('配置已保存');
+        setTimeout(() => setSubStatusMsg(''), 2000);
+        setSubTestStatus('idle');
+    };
+
+    const fetchSubModels = async () => {
+        if (!subUrl) { setSubStatusMsg('请先填写 URL'); return; }
+        setIsLoadingSubModels(true);
+        setSubStatusMsg('正在连接...');
+        try {
+            const baseUrl = subUrl.replace(/\/+$/, '');
+            const response = await fetch(`${baseUrl}/models`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${subKey}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await safeResponseJson(response);
+            const list = data.data || data.models || [];
+            if (Array.isArray(list)) {
+                const models = list.map((m: any) => m.id || m);
+                setSubModels(models);
+                if (models.length > 0 && !subModel) setSubModel(models[0]);
+                setSubStatusMsg(`获取到 ${models.length} 个模型`);
+                setShowSubModelModal(true);
+            } else { setSubStatusMsg('格式不兼容'); }
+        } catch (error: any) {
+            console.error(error);
+            setSubStatusMsg('连接失败');
+        } finally {
+            setIsLoadingSubModels(false);
+        }
+    };
+
+    const handleTestSub = async () => {
+        if (!subUrl || !subKey || !subModel) {
+            setSubStatusMsg('请先填写完整配置');
+            return;
+        }
+        setIsTestingSub(true);
+        setSubTestStatus('testing');
+        setSubStatusMsg('正在测试连通性...');
+
+        try {
+            const baseUrl = subUrl.replace(/\/+$/, '');
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${subKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: subModel,
+                    messages: [{ role: 'user', content: 'hello' }],
+                    max_tokens: 1
+                })
+            });
+
+            if (response.ok) {
+                setSubTestStatus('success');
+                setSubStatusMsg('连接成功，模型可用！');
+            } else {
+                setSubTestStatus('error');
+                const errData = await response.json().catch(() => null);
+                if (response.status === 401) setSubStatusMsg('API Key 无效或未授权');
+                else if (response.status === 404) setSubStatusMsg('模型不存在或 URL 错误');
+                else setSubStatusMsg(`连接异样: ${errData?.error?.message || response.statusText}`);
+            }
+        } catch (error: any) {
+            setSubTestStatus('error');
+            setSubStatusMsg('网络错误，请检查 URL 是否可达');
+        } finally {
+            setIsTestingSub(false);
+            setTimeout(() => setSubStatusMsg(''), 3000);
+        }
+    };
+
+    const handleSaveSubPreset = (name: string) => {
+        const preset = { id: `sub-${Date.now()}`, name, config: { baseUrl: subUrl, apiKey: subKey, model: subModel } };
+        const updated = [...subPresets, preset];
+        setSubPresets(updated);
+        localStorage.setItem('sub_api_presets', JSON.stringify(updated));
+        addToast('副 API 预设已保存', 'success');
+    };
+
+    const removeSubPreset = (id: string) => {
+        const updated = subPresets.filter(p => p.id !== id);
+        setSubPresets(updated);
+        localStorage.setItem('sub_api_presets', JSON.stringify(updated));
+    };
+
+    const loadSubPreset = (preset: typeof subPresets[0]) => {
+        setSubUrl(preset.config.baseUrl);
+        setSubKey(preset.config.apiKey);
+        setSubModel(preset.config.model);
+        addToast(`已加载: ${preset.name}`, 'info');
     };
 
     const handleExport = async (mode: 'text_only' | 'media_only' | 'full') => {
@@ -597,8 +721,137 @@ const Settings: React.FC = () => {
                         <button onClick={handleSaveApi} className="w-full py-3 rounded-2xl font-bold text-white shadow-lg shadow-primary/20 bg-primary active:scale-95 transition-all mt-4">
                             {statusMsg || '保存配置'}
                         </button>
+
+                        {/* 深度沉浸模式 (Gemini 破限) */}
+                        <div className="mt-5 pt-4 border-t border-slate-200/60">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                    <div className="p-2 bg-gradient-to-br from-rose-100/60 to-violet-100/60 rounded-xl text-rose-500 shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-xs font-bold text-slate-600">深度沉浸模式</h3>
+                                        <p className="text-[10px] text-slate-400 leading-relaxed">适配 Gemini 3.0/3.1</p>
+                                    </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                                    <input type="checkbox" checked={apiConfig.useGeminiJailbreak || false} onChange={e => updateApiConfig({ useGeminiJailbreak: e.target.checked })} className="sr-only peer" />
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-rose-400 peer-checked:to-violet-500"></div>
+                                </label>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2 leading-relaxed pl-[42px]">
+                                开启后可有效提升 Gemini 模型的输出质量。仅对主聊天生效。
+                            </p>
+                        </div>
                     </div>
                 </section>
+
+                {/* 副 API 配置区域 */}
+                <section className="relative overflow-hidden bg-[#f8f5ee]/70 backdrop-blur-sm rounded-3xl p-5 shadow-sm border border-[#e8e0cc]/60">
+                    <div className="absolute -top-8 -right-8 w-28 h-28 rounded-full bg-gradient-to-br from-[#e8dcc8]/30 to-[#d4c8a8]/20 blur-2xl pointer-events-none" />
+
+                    <div className="relative flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-gradient-to-br from-amber-100/60 to-yellow-100/60 rounded-xl text-amber-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.646.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a6.759 6.759 0 0 1 0 .255c-.008.378.137.75.43.99l1.004.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold text-[#8b7e64] tracking-wider">副 API 配置</h2>
+                                <p className="text-[10px] text-[#b0a48a]">辅助功能专用 · 心声 / 记忆摘要 / 事件提取</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="relative space-y-4">
+                        {/* Sub Presets */}
+                        {subPresets.length > 0 && (
+                            <div>
+                                <label className="text-[10px] font-bold text-[#b0a48a] uppercase tracking-widest mb-2 block pl-1">我的预设</label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {subPresets.map(preset => (
+                                        <div key={preset.id} className="flex items-center bg-white/60 border border-[#e8e0cc]/60 rounded-lg pl-3 pr-1 py-1 shadow-sm">
+                                            <span onClick={() => loadSubPreset(preset)} className="text-xs font-medium text-[#8b7e64] cursor-pointer hover:text-amber-600 mr-2">{preset.name}</span>
+                                            <button onClick={() => removeSubPreset(preset.id)} className="p-1 rounded-full text-[#b0a48a] hover:bg-red-50 hover:text-red-400 transition-colors">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div>
+                            <label className="text-[10px] font-bold text-[#b0a48a] uppercase tracking-widest mb-1.5 block pl-1">URL</label>
+                            <input type="text" value={subUrl} onChange={e => setSubUrl(e.target.value)} placeholder="https://..." className="w-full bg-white/50 border border-[#e8e0cc]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all" />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-bold text-[#b0a48a] uppercase tracking-widest mb-1.5 block pl-1">Key</label>
+                            <input type="password" value={subKey} onChange={e => setSubKey(e.target.value)} placeholder="sk-..." className="w-full bg-white/50 border border-[#e8e0cc]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all" />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-bold text-[#b0a48a] uppercase tracking-widest mb-1.5 block pl-1">Model</label>
+                            <div className="flex gap-2">
+                                <input type="text" value={subModel} onChange={e => setSubModel(e.target.value)} placeholder="模型名称..." className="flex-1 bg-white/50 border border-[#e8e0cc]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all shadow-sm" />
+                                <button onClick={() => setShowSubModelModal(true)} className="shrink-0 bg-[#f0eadc] text-[#8b7e64] border border-[#e8e0cc]/60 rounded-xl px-4 py-2.5 text-xs font-bold active:bg-[#e8e0cc] transition-all shadow-sm flex items-center gap-1">
+                                    选择 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-[#b0a48a]"><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>
+                                </button>
+                            </div>
+
+                            <div className="flex gap-2 mt-3">
+                                <button onClick={handleTestSub} disabled={isTestingSub}
+                                    className={`flex-1 py-2.5 border rounded-xl text-xs font-bold shadow-sm transition-all flex justify-center items-center gap-1.5
+                                    ${subTestStatus === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+                                        subTestStatus === 'error' ? 'bg-red-50 border-red-200 text-red-500' :
+                                            'bg-white/50 border-[#e8e0cc]/60 text-[#8b7e64] active:bg-[#f0eadc]'}`}
+                                >
+                                    {isTestingSub ? <div className="w-3.5 h-3.5 border-2 border-amber-200 border-t-amber-600 rounded-full animate-spin" /> :
+                                        subTestStatus === 'success' ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg> :
+                                            subTestStatus === 'error' ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg> :
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>}
+                                    {isTestingSub ? '测试中...' : subTestStatus === 'success' ? '测试通过' : subTestStatus === 'error' ? '测试异常' : '测试连通性'}
+                                </button>
+
+                                <button onClick={fetchSubModels} disabled={isLoadingSubModels}
+                                    className="flex-1 py-2.5 bg-[#f0eadc] border border-[#e8e0cc]/60 rounded-xl text-xs font-bold text-[#8b7e64] shadow-sm active:bg-[#e8e0cc] transition-all flex justify-center items-center gap-1.5">
+                                    {isLoadingSubModels ? <div className="w-3.5 h-3.5 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin" /> :
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>}
+                                    {isLoadingSubModels ? '获取中...' : '获取列表'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button onClick={handleSaveSubApi} className="flex-1 py-3 rounded-2xl font-bold text-white shadow-lg shadow-amber-500/20 bg-gradient-to-r from-amber-500 to-yellow-500 active:scale-95 transition-all">
+                                {subStatusMsg || '保存配置'}
+                            </button>
+                            <button onClick={() => {
+                                const name = prompt('预设名称：');
+                                if (name?.trim()) handleSaveSubPreset(name.trim());
+                            }} className="px-4 py-3 rounded-2xl font-bold text-amber-600 bg-amber-50 border border-amber-200/60 active:scale-95 transition-all text-xs">
+                                存预设
+                            </button>
+                        </div>
+                    </div>
+
+                    <p className="relative text-[10px] text-[#b0a48a] mt-4 leading-relaxed px-1">
+                        💡 此接口用于心声、情绪状态栏等辅助功能。建议使用 <b>Flash 系列</b>模型（如 Gemini Flash、GPT-4o-mini）以降低成本、提高效率。留空则自动使用主 API。
+                    </p>
+                </section>
+
+                {/* Sub API Model Selector Modal */}
+                <Modal isOpen={showSubModelModal} title="选择副 API 模型" onClose={() => setShowSubModelModal(false)}>
+                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                        {subModels.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-8">请先点击"获取列表"拉取模型</p>
+                        ) : subModels.map(model => (
+                            <button key={model} onClick={() => { setSubModel(model); setShowSubModelModal(false); }}
+                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-mono transition-all ${model === subModel ? 'bg-amber-50 text-amber-700 font-bold ring-1 ring-amber-200' : 'hover:bg-slate-50 text-slate-600'}`}
+                            >{model}</button>
+                        ))}
+                    </div>
+                </Modal>
 
                 {/* 实时感知配置区域 */}
                 <section className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-sm border border-white/50">
@@ -775,6 +1028,178 @@ const Settings: React.FC = () => {
                         <div className="py-3 rounded-2xl text-[10px] font-bold bg-[#eef4fb]/60 backdrop-blur-sm text-[#7b8db8] border border-[#d4e4f7]/50">
                             <div className="text-[9px] mb-1 font-mono opacity-70">ACTIVE</div>
                             {STT_PROVIDER_DEFAULTS[sttConfig.provider].label.split(' ')[0]}
+                        </div>
+                    </div>
+                </section>
+
+                {/* 向量记忆引擎 (Embedding) */}
+                <section className="relative overflow-hidden bg-[#f0f7ee]/70 backdrop-blur-sm rounded-3xl p-6 shadow-sm border border-[#d4e8d0]/60">
+                    <div className="absolute -top-8 -right-8 w-28 h-28 rounded-full bg-gradient-to-br from-[#c8e8c0]/30 to-[#d4e4f7]/30 blur-2xl pointer-events-none" />
+
+                    <div className="relative flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-gradient-to-br from-[#c8e8c0]/60 to-[#d4e8d0]/60 backdrop-blur-sm rounded-2xl text-[#6b9b60]">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold text-[#5a7a52] tracking-wider">向量记忆引擎</h2>
+                                <p className="text-[10px] text-[#8bab82]">OpenAI 兼容接口 · 默认硬基流动</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="relative space-y-4">
+                        {/* Base URL */}
+                        <div>
+                            <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest mb-1.5 block pl-1">Base URL</label>
+                            <input
+                                type="text"
+                                value={embeddingUrl}
+                                onChange={e => setEmbeddingUrl(e.target.value)}
+                                placeholder="https://api.siliconflow.cn/v1"
+                                className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                            />
+                        </div>
+
+                        {/* API Key */}
+                        <div>
+                            <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest mb-1.5 block pl-1">API Key</label>
+                            <input
+                                type="password"
+                                value={embeddingKey}
+                                onChange={e => setEmbeddingKey(e.target.value)}
+                                placeholder="sk-..."
+                                className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                            />
+                            <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
+                                → 免费获取硬基流动 API Key (SiliconFlow)
+                            </a>
+                        </div>
+
+                        {/* Model Selector */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest pl-1">模型</label>
+                                <button
+                                    onClick={async () => {
+                                        if (!embeddingKey.trim()) { addToast('请先填写 API Key', 'info'); return; }
+                                        setIsLoadingEmbedModels(true);
+                                        try {
+                                            const baseUrl = embeddingUrl.replace(/\/+$/, '');
+                                            const resp = await fetch(`${baseUrl}/models`, {
+                                                headers: { 'Authorization': `Bearer ${embeddingKey.trim()}` },
+                                            });
+                                            if (resp.ok) {
+                                                const data = await resp.json();
+                                                const models = (data.data || [])
+                                                    .filter((m: any) => {
+                                                        const id = (m.id || '').toLowerCase();
+                                                        return id.includes('embed') || id.includes('bge') || id.includes('e5') || id.includes('gte') || id.includes('jina');
+                                                    })
+                                                    .map((m: any) => m.id as string);
+                                                setEmbeddingModels(models);
+                                                if (models.length === 0) addToast('未找到向量模型，可手动输入', 'info');
+                                                else addToast(`拉取到 ${models.length} 个向量模型`, 'success');
+                                            } else {
+                                                addToast(`拉取失败: HTTP ${resp.status}`, 'error');
+                                            }
+                                        } catch (e: any) { addToast(`拉取失败: ${e.message}`, 'error'); }
+                                        finally { setIsLoadingEmbedModels(false); }
+                                    }}
+                                    disabled={isLoadingEmbedModels}
+                                    className="text-[10px] bg-[#e6f0e4] text-[#6b9b60] px-2 py-0.5 rounded font-bold hover:bg-[#d4e8d0] transition-colors disabled:opacity-50"
+                                >
+                                    {isLoadingEmbedModels ? '拉取中...' : '拉取模型'}
+                                </button>
+                            </div>
+                            {embeddingModels.length > 0 ? (
+                                <select
+                                    value={embeddingModel}
+                                    onChange={e => setEmbeddingModel(e.target.value)}
+                                    className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                                >
+                                    {!embeddingModels.includes(embeddingModel) && <option value={embeddingModel}>{embeddingModel}</option>}
+                                    {embeddingModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value={embeddingModel}
+                                    onChange={e => setEmbeddingModel(e.target.value)}
+                                    placeholder="BAAI/bge-m3"
+                                    className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                                />
+                            )}
+                            <p className="text-[9px] text-[#8bab82] mt-1 pl-1">推荐: BAAI/bge-m3（中文最佳）、BAAI/bge-large-zh-v1.5（纯中文）</p>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    if (embeddingKey.trim()) {
+                                        localStorage.setItem('embedding_api_key', embeddingKey.trim());
+                                        localStorage.setItem('embedding_base_url', embeddingUrl.trim());
+                                        localStorage.setItem('embedding_model', embeddingModel.trim());
+                                        addToast('向量引擎配置已保存', 'success');
+                                    } else {
+                                        localStorage.removeItem('embedding_api_key');
+                                        addToast('API Key 已清除', 'info');
+                                    }
+                                }}
+                                className="flex-1 py-3 rounded-2xl font-bold text-white shadow-lg shadow-[#6b9b60]/20 bg-gradient-to-r from-[#6b9b60] to-[#7bab70] active:scale-95 transition-all"
+                            >
+                                保存
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!embeddingKey.trim()) { setEmbeddingTestStatus('请先填写 Key'); return; }
+                                    setEmbeddingTestStatus('测试中...');
+                                    try {
+                                        const baseUrl = embeddingUrl.replace(/\/+$/, '');
+                                        const resp = await fetch(`${baseUrl}/embeddings`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${embeddingKey.trim()}`,
+                                            },
+                                            body: JSON.stringify({ model: embeddingModel, input: '测试向量化', encoding_format: 'float' }),
+                                        });
+                                        if (resp.ok) {
+                                            const data = await resp.json();
+                                            const dim = data.data?.[0]?.embedding?.length || '?';
+                                            setEmbeddingTestStatus(`✅ 连接成功 (${embeddingModel}, 维度: ${dim})`);
+                                        } else {
+                                            const err = await resp.text();
+                                            setEmbeddingTestStatus(`❌ HTTP ${resp.status}: ${err.slice(0, 100)}`);
+                                        }
+                                    } catch (e: any) { setEmbeddingTestStatus(`❌ 网络错误: ${e.message}`); }
+                                }}
+                                className="flex-1 py-3 rounded-2xl font-bold bg-white border border-[#d4e8d0] text-[#6b9b60] active:scale-95 transition-all"
+                            >
+                                测试
+                            </button>
+                        </div>
+
+                        {embeddingTestStatus && (
+                            <p className={`text-xs px-1 ${embeddingTestStatus.includes('✅') ? 'text-emerald-600' : embeddingTestStatus.includes('❌') ? 'text-red-500' : 'text-[#8bab82]'}`}>
+                                {embeddingTestStatus}
+                            </p>
+                        )}
+
+                        <p className="text-[10px] text-[#8bab82] leading-relaxed px-1">
+                            向量记忆引擎让 AI 在每次对话时自动检索相关记忆，实现「语义理解」级别的记忆召回。支持任何 OpenAI 兼容接口。
+                        </p>
+                    </div>
+
+                    <div className="relative grid grid-cols-2 gap-2 text-center mt-4">
+                        <div className={`py-3 rounded-2xl text-[10px] font-bold backdrop-blur-sm ${embeddingKey ? 'bg-[#e6f5ee]/60 text-[#7faa95] border border-[#d0e8da]/50' : 'bg-[#f0ebe5]/60 text-[#b8aaa0] border border-[#e5ddd4]/50'}`}>
+                            <div className="text-xs mb-1 opacity-70">{embeddingKey ? '●' : '○'}</div>
+                            {embeddingKey ? '已配置' : '未配置'}
+                        </div>
+                        <div className="py-3 rounded-2xl text-[10px] font-bold bg-[#f0f7ee]/60 backdrop-blur-sm text-[#6b9b60] border border-[#d4e8d0]/50">
+                            <div className="text-[9px] mb-1 font-mono opacity-70">MODEL</div>
+                            {embeddingModel.split('/').pop()}
                         </div>
                     </div>
                 </section>
@@ -1287,7 +1712,12 @@ const Settings: React.FC = () => {
                             <span className="text-sm font-bold text-[#c4a86c]">发音词典</span>
                         </div>
                         <textarea value={ttsPronounceDict} onChange={e => setTtsPronounceDict(e.target.value)} rows={3} className="w-full bg-white/60 backdrop-blur-sm border border-[#f0e4d7]/50 rounded-xl px-3 py-2.5 text-[11px] font-mono resize-none focus:bg-white/80 transition-all" placeholder={`每行一条规则，例如：\n燕少飞/(yan4)(shao3)(fei1)\nomg/oh my god`} />
-                        <p className="text-[10px] text-[#c4a86c]/70">每行一条注音规则。中文声调: 1=一声 2=二声 3=三声 4=四声 5=轻声</p>
+                        {/[（）]/.test(ttsPronounceDict) && (
+                            <p className="text-[10px] text-amber-600 bg-amber-50/80 px-3 py-1.5 rounded-lg font-medium">
+                                ⚠️ 检测到中文括号（），请替换为英文半角括号 ()，否则注音不会生效
+                            </p>
+                        )}
+                        <p className="text-[10px] text-[#c4a86c]/70">每行一条注音规则。中文声调: 1=一声 2=二声 3=三声 4=四声 5=轻声。注意使用英文半角括号 ()</p>
                     </div>
 
                     {/* AI 预处理 */}

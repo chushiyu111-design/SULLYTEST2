@@ -6,6 +6,7 @@
  */
 
 import React, { useRef, useState, useCallback } from 'react';
+import WaveformCanvas from './WaveformCanvas';
 
 interface VoiceRecordButtonProps {
     /** Called when a voice recording is completed */
@@ -28,6 +29,10 @@ interface VoiceRecordButtonProps {
     onCancelRecording: () => void;
     /** Error message */
     error?: string | null;
+    /** AnalyserNode for real-time waveform (from useVoiceRecorder) */
+    analyserNode?: AnalyserNode | null;
+    /** Whether Silero VAD detects active speech */
+    isSpeaking?: boolean;
 }
 
 /** Vertical distance (px) to trigger cancel */
@@ -43,6 +48,8 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     onStopRecording,
     onCancelRecording,
     error,
+    analyserNode,
+    isSpeaking = false,
 }) => {
     const [isOverCancel, setIsOverCancel] = useState(false);
     const startYRef = useRef(0);
@@ -166,18 +173,18 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
                             {isOverCancel ? '松开取消' : '↑ 上滑取消'}
                         </div>
 
-                        {/* Waveform animation */}
-                        <div className="flex items-center justify-center gap-1 mb-3">
-                            {[...Array(5)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`w-1 rounded-full transition-all ${isOverCancel ? 'bg-white/60' : 'bg-emerald-400'}`}
-                                    style={{
-                                        height: `${12 + Math.sin(Date.now() / 200 + i * 1.2) * 8}px`,
-                                        animation: isOverCancel ? 'none' : `voice-wave ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
-                                    }}
-                                />
-                            ))}
+                        {/* Waveform — real-time via AnalyserNode */}
+                        <div className="flex items-center justify-center mb-3">
+                            <WaveformCanvas
+                                analyser={analyserNode ?? null}
+                                barCount={20}
+                                color={isOverCancel ? 'rgba(255,255,255,0.5)' : isSpeaking ? '#4ade80' : 'rgba(74,222,128,0.35)'}
+                                height={36}
+                                width={140}
+                                barWidth={2}
+                                barGap={2}
+                                minBarHeight={2}
+                            />
                         </div>
 
                         {/* Duration */}
@@ -188,13 +195,6 @@ const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
                 </div>
             )}
 
-            {/* Wave animation keyframes */}
-            <style>{`
-                @keyframes voice-wave {
-                    0% { height: 6px; }
-                    100% { height: 22px; }
-                }
-            `}</style>
         </>
     );
 };

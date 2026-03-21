@@ -75,14 +75,21 @@ const VoiceBubble: React.FC<VoiceBubbleProps> = ({
 
     return (
         <div
-            className={`sully-voice-bubble relative flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none active:scale-[0.97] transition-transform animate-fade-in overflow-hidden ${isUser ? 'sully-bubble-user' : 'sully-bubble-ai'}`}
+            className={`sully-voice-bubble relative flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none active:scale-[0.97] transition-transform animate-fade-in ${isUser ? 'sully-bubble-user' : 'sully-bubble-ai'}`}
             style={{
-                background: bgColor,
+                background: styleConfig?.gradient
+                    ? `linear-gradient(${styleConfig.gradient.direction}deg, ${styleConfig.gradient.from}, ${styleConfig.gradient.to})`
+                    : bgColor,
                 color: textColor,
                 borderRadius: `${radius}px`,
                 width: `${width}px`,
                 minHeight: '36px',
                 opacity: styleConfig?.opacity,
+                border: styleConfig?.borderWidth && styleConfig.borderWidth > 0
+                    ? `${styleConfig.borderWidth}px solid ${styleConfig.borderColor || 'transparent'}`
+                    : undefined,
+                boxShadow: styleConfig?.boxShadow || undefined,
+                fontSize: styleConfig?.fontSize ? `${styleConfig.fontSize}px` : undefined,
             }}
             onClick={handleClick}
         >

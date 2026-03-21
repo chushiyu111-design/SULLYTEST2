@@ -1,7 +1,11 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { useOS } from '../../../context/OSContext';
+import { CloudStt } from '../../../utils/cloudStt';
+import WaveformCanvas from '../WaveformCanvas';
 
-// ===== WeChat 1:1 Pixel-Perfect Inline SVG Icons =====
+// ===== WeChat SVG Icons =====
 
 const WxIconVoice = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
     <svg viewBox="0 0 100 100" className={className}>
@@ -11,6 +15,21 @@ const WxIconVoice = ({ className = 'w-[28px] h-[28px]' }: { className?: string }
             <path d="M 54 36 A 20 20 0 0 1 54 64" fill="none" stroke="#2A2A2A" strokeWidth="6" strokeLinecap="round" />
             <path d="M 69 24 A 36 36 0 0 1 69 76" fill="none" stroke="#2A2A2A" strokeWidth="6" strokeLinecap="round" />
         </g>
+    </svg>
+);
+
+const WxIconKeyboard = ({ className = 'w-[28px] h-[28px]' }: { className?: string }) => (
+    <svg viewBox="0 0 100 100" className={className}>
+        <circle cx="50" cy="50" r="46" fill="none" stroke="#2A2A2A" strokeWidth="4" strokeLinejoin="round" />
+        <rect x="24" y="31" width="9" height="9" fill="#2A2A2A" />
+        <rect x="39" y="31" width="9" height="9" fill="#2A2A2A" />
+        <rect x="54" y="31" width="9" height="9" fill="#2A2A2A" />
+        <rect x="69" y="31" width="9" height="9" fill="#2A2A2A" />
+        <rect x="24" y="47" width="9" height="9" fill="#2A2A2A" />
+        <rect x="39" y="47" width="9" height="9" fill="#2A2A2A" />
+        <rect x="54" y="47" width="9" height="9" fill="#2A2A2A" />
+        <rect x="69" y="47" width="9" height="9" fill="#2A2A2A" />
+        <rect x="35" y="63" width="30" height="9" fill="#2A2A2A" rx="1" ry="1" />
     </svg>
 );
 
@@ -33,22 +52,16 @@ const WxIconPlus = ({ className = 'w-[28px] h-[28px]' }: { className?: string })
     </svg>
 );
 
-const WxIconMic = ({ className = 'w-5 h-5' }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="#b2b2b2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="9" y="3" width="6" height="10" rx="3" />
-        <path d="M5 11a7 7 0 0 0 14 0" />
-        <line x1="12" y1="18" x2="12" y2="21" />
-    </svg>
-);
+// ===== Waveform config =====
+const WECHAT_WAVE_BAR_COUNT = 30;
 
-// ===== Props — mirrors a subset of ChatInputAreaProps =====
+// ===== Props =====
 interface WeChatInputBarProps {
     input: string;
     setInput: (v: string) => void;
     showPanel: 'none' | 'actions' | 'emojis' | 'chars';
     setShowPanel: (v: 'none' | 'actions' | 'emojis' | 'chars') => void;
     onSend: () => void;
-    // Voice Recording Support
     onVoiceMessage?: (blob: Blob, duration: number) => void;
     voiceRecorderState?: 'idle' | 'recording' | 'processing';
     voiceRecordingDuration?: number;
@@ -57,257 +70,444 @@ interface WeChatInputBarProps {
     onCancelRecording?: () => void;
     voiceRecorderError?: string | null;
     isVoiceProcessing?: boolean;
+    /** AnalyserNode for real-time waveform visualization */
+    analyserNode?: AnalyserNode | null;
 }
 
-/**
- * Pixel-perfect WeChat input bar — an isolated plugin component.
- * Contains its own auto-expand textarea logic and WeChat-specific SVG icons.
- */
+type GestureZone = 'send' | 'cancel' | 'convert';
+
 const WeChatInputBar: React.FC<WeChatInputBarProps> = ({
     input, setInput, showPanel, setShowPanel, onSend,
     onVoiceMessage, voiceRecorderState = 'idle', voiceRecordingDuration = 0,
     onStartRecording, onStopRecording, onCancelRecording,
-    voiceRecorderError, isVoiceProcessing = false
+    voiceRecorderError, isVoiceProcessing = false,
+    analyserNode,
 }) => {
+    const { sttConfig, addToast } = useOS();
     const wxTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-    // --- Voice Recording State ---
-    const [isOverCancel, setIsOverCancel] = React.useState(false);
-    const startYRef = React.useRef(0);
-    const isRecordingRef = React.useRef(false);
-    const CANCEL_THRESHOLD = 50;
+    const [isVoiceMode, setIsVoiceMode] = useState(false);
+    const [gestureZone, setGestureZone] = useState<GestureZone>('send');
+    const gestureZoneRef = useRef<GestureZone>('send');
+    const startYRef = useRef(0);
+    const isRecordingRef = useRef(false);
+    const [isConverting, setIsConverting] = useState(false);
 
-    const formatDuration = (s: number) => {
-        const min = Math.floor(s / 60);
-        const sec = s % 60;
-        return `${min}:${sec.toString().padStart(2, '0')}`;
-    };
+    const isRecording = voiceRecorderState === 'recording';
 
-    // --- Touch / Mouse handlers for press-hold recording ---
-    const handlePointerDown = React.useCallback((e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
+    // ===== Gesture zone detection =====
+    const resolveZone = useCallback((clientX: number, clientY: number): GestureZone => {
+        const dy = startYRef.current - clientY;
+        if (dy > 50) {
+            return clientX < window.innerWidth * 0.5 ? 'cancel' : 'convert';
+        }
+        return 'send';
+    }, []);
+
+    const updateZone = useCallback((zone: GestureZone) => {
+        setGestureZone(zone);
+        gestureZoneRef.current = zone;
+    }, []);
+
+    // ===== Pointer handlers =====
+    const handlePointerDown = useCallback((e: React.TouchEvent | React.MouseEvent) => {
         if (!onStartRecording || voiceRecorderState !== 'idle') return;
-
         e.preventDefault();
-
-        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         startYRef.current = clientY;
-        setIsOverCancel(false);
-
-        // 同步标记开始，异步启动录音（不阻塞触摸事件）
+        updateZone('send');
         isRecordingRef.current = true;
         onStartRecording().then(ok => {
             if (!ok) isRecordingRef.current = false;
-        }).catch(() => {
-            isRecordingRef.current = false;
-        });
-    }, [voiceRecorderState, onStartRecording]);
+        }).catch(() => { isRecordingRef.current = false; });
+    }, [voiceRecorderState, onStartRecording, updateZone]);
 
-    const handlePointerMove = React.useCallback((e: React.TouchEvent | React.MouseEvent | React.PointerEvent) => {
-        if (!isRecordingRef.current) return;
-
-        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-        const dy = startYRef.current - clientY; // positive = moved up
-        setIsOverCancel(dy > CANCEL_THRESHOLD);
-    }, []);
-
-    const handlePointerUp = React.useCallback(async () => {
+    const handlePointerUpAction = useCallback(async () => {
         if (!isRecordingRef.current) return;
         isRecordingRef.current = false;
+        const zone = gestureZoneRef.current;
+        updateZone('send');
 
-        if (isOverCancel) {
-            onCancelRecording?.();
-            setIsOverCancel(false);
-            return;
-        }
+        if (zone === 'cancel') { onCancelRecording?.(); return; }
 
         const result = await onStopRecording?.();
-        if (result && result.blob.size > 0) {
+        if (!result || result.blob.size === 0) return;
+
+        if (zone === 'convert') {
+            setIsConverting(true);
+            try {
+                const sttResult = await CloudStt.transcribe(result.blob, sttConfig, 15000);
+                if (sttResult.text.trim()) {
+                    setInput(sttResult.text.trim());
+                    setIsVoiceMode(false);
+                    addToast('语音已转为文字', 'success');
+                } else {
+                    addToast('未识别到有效语音', 'info');
+                }
+            } catch (err: any) {
+                console.error('[WeChatInputBar] STT failed:', err);
+                addToast('语音转文字失败，已发送为语音消息', 'info');
+                onVoiceMessage?.(result.blob, Math.max(1, result.duration));
+            } finally { setIsConverting(false); }
+        } else {
             onVoiceMessage?.(result.blob, Math.max(1, result.duration));
         }
-        setIsOverCancel(false);
-    }, [isOverCancel, onCancelRecording, onStopRecording, onVoiceMessage]);
+    }, [onCancelRecording, onStopRecording, onVoiceMessage, sttConfig, setInput, addToast, updateZone]);
 
-    const isRecording = voiceRecorderState === 'recording';
-    const showOverlay = isRecording;
+    // ===== Document-level listeners for gesture tracking =====
+    useEffect(() => {
+        if (!isRecording) return;
+        const onTouchMove = (e: TouchEvent) => {
+            const t = e.touches[0];
+            if (t) updateZone(resolveZone(t.clientX, t.clientY));
+        };
+        const onMouseMove = (e: MouseEvent) => {
+            updateZone(resolveZone(e.clientX, e.clientY));
+        };
+        const onEnd = () => handlePointerUpAction();
 
-    // Auto-expand textarea height (up to ~5 lines = 120px)
+        document.addEventListener('touchmove', onTouchMove, { passive: true });
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('mousemove', onMouseMove);
+        return () => {
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onEnd);
+            document.removeEventListener('mouseup', onEnd);
+            document.removeEventListener('mousemove', onMouseMove);
+        };
+    }, [isRecording, resolveZone, updateZone, handlePointerUpAction]);
+
+    // ===== 3D perspective effect on message list (not header) =====
+    useEffect(() => {
+        const chatScroll = document.querySelector('.sully-chat-container .overflow-y-auto') as HTMLElement | null;
+        const chatInput = document.querySelector('.sully-chat-container .sully-chat-input, .sully-chat-container > .relative.z-40') as HTMLElement | null;
+        if (!chatScroll) return;
+        if (isRecording) {
+            chatScroll.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)';
+            chatScroll.style.transformOrigin = 'top center';
+            chatScroll.style.transform = 'perspective(1000px) rotateX(6deg) scale(0.88)';
+            chatScroll.style.filter = 'blur(3px) brightness(0.5)';
+            // Hide the input bar area during recording
+            if (chatInput) {
+                chatInput.style.transition = 'opacity 0.2s ease';
+                chatInput.style.opacity = '0';
+                chatInput.style.pointerEvents = 'none';
+            }
+        } else {
+            chatScroll.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)';
+            chatScroll.style.transformOrigin = 'top center';
+            chatScroll.style.transform = 'none';
+            chatScroll.style.filter = 'none';
+            if (chatInput) {
+                chatInput.style.transition = 'opacity 0.2s ease';
+                chatInput.style.opacity = '1';
+                chatInput.style.pointerEvents = '';
+            }
+        }
+        return () => {
+            chatScroll.style.transition = '';
+            chatScroll.style.transformOrigin = '';
+            chatScroll.style.transform = '';
+            chatScroll.style.filter = '';
+            if (chatInput) {
+                chatInput.style.transition = '';
+                chatInput.style.opacity = '';
+                chatInput.style.pointerEvents = '';
+            }
+        };
+    }, [isRecording]);
+
+    // ===== Auto-expand textarea =====
     useEffect(() => {
         const el = wxTextareaRef.current;
         if (!el) return;
-        el.style.height = '0px'; // Reset to measure natural scrollHeight
-        const scrollH = el.scrollHeight;
-        el.style.height = Math.min(scrollH, 120) + 'px';
+        el.style.height = '0px';
+        el.style.height = Math.min(el.scrollHeight, 120) + 'px';
     }, [input]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            onSend();
-        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
     };
+    const handleToggleVoiceMode = useCallback(() => setIsVoiceMode(prev => !prev), []);
+    const handleOpenPanel = useCallback((panel: 'emojis' | 'actions') => {
+        setIsVoiceMode(false);
+        setShowPanel(showPanel === panel ? 'none' : panel);
+    }, [showPanel, setShowPanel]);
 
+    // ===== Recording Overlay (Portal to body) =====
+    const cancelActive = gestureZone === 'cancel';
+    const convertActive = gestureZone === 'convert';
+
+    const recordingOverlay = isRecording && typeof document !== 'undefined' ? createPortal(
+        <div style={{
+            position: 'fixed', inset: 0, top: '44px', zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.65)',
+            touchAction: 'none',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+        }}>
+            {/* ===== Green Voice Bubble — centered in screen ===== */}
+            <div style={{
+                position: 'absolute',
+                top: '40%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '56%', maxWidth: '260px',
+            }}>
+                <div style={{
+                    background: '#95ec69',
+                    borderRadius: '20px',
+                    padding: '20px 28px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    minHeight: '64px',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '28px' }}>
+                        <WaveformCanvas
+                            analyser={analyserNode ?? null}
+                            barCount={WECHAT_WAVE_BAR_COUNT}
+                            color="#1a1a1a"
+                            height={28}
+                            width={200}
+                            barWidth={2}
+                            barGap={2}
+                            minBarHeight={2}
+                        />
+                    </div>
+                </div>
+                {/* Triangle pointer — bottom center */}
+                <svg style={{ display: 'block', margin: '0 auto' }} width="18" height="10" viewBox="0 0 18 10">
+                    <polygon points="0,0 18,0 9,10" fill="#95ec69" />
+                </svg>
+            </div>
+
+            {/* ===== Combined 3-zone SVG: arc-capsules (left #575757 | right #575757) + dome (#b9b9b9) =====
+              ViewBox 1080×800. Bezier family: same control-point relative positions.
+              Dome              : M 0,500  C 180,350 360,350 540,350   C 720,350 900,350 1080,500   L 1080,800 L 0,800 Z
+              Left capsule:
+                top  edge       :  M 0,310  C 180,145 360,145 540,145
+                bottom edge(gap): L 540,305  C 360,305 180,305 0,460   (gap ≈40u above dome left, dome peak gap≈45u)
+              Right capsule (mirror):
+                top  edge       :  M 1080,310 C 900,145 720,145 540,145
+                bottom edge     : L 540,305  C 720,305 900,305 1080,460
+            ===== */}
+            <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                height: '55vw', maxHeight: '270px', minHeight: '200px',
+                pointerEvents: 'none',
+            }}>
+                <svg
+                    viewBox="0 0 1080 800"
+                    preserveAspectRatio="none"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
+                >
+                    {/* Left arc capsule — G1-smooth inner arc, endpoint x=450, inner bows to x≈510 */}
+                    {/* G1 at (450,108): top tangent=(110,23), CP1=(510,121)=450+0.545*110,108+0.545*23 */}
+                    {/* G1 at (450,312): bot tangent=(-110,-4), CP2=(510,314)=450+0.545*110,312+0.545*4 */}
+                    <path
+                        d="M 0 250 C 180 85 340 85 450 108 C 510 121 510 314 450 312 C 340 308 180 305 0 460 Z"
+                        fill={cancelActive ? '#dddddd' : '#575757'}
+                        style={{ transition: 'fill 0.25s' }}
+                    />
+                    {/* Right arc capsule — G1-smooth inner arc, endpoint x=630, inner bows to x≈570 (mirror) */}
+                    {/* G1 at (630,108): top tangent=(-110,23), CP1=(570,121) */}
+                    {/* G1 at (630,312): bot tangent=(110,-4), CP2=(570,314) */}
+                    <path
+                        d="M 1080 250 C 900 85 740 85 630 108 C 570 121 570 314 630 312 C 740 308 900 305 1080 460 Z"
+                        fill={convertActive ? '#dddddd' : '#575757'}
+                        style={{ transition: 'fill 0.25s' }}
+                    />
+                    {/* Dome (#b9b9b9) */}
+                    <path
+                        d="M 0 500 C 180 350 360 350 540 350 C 720 350 900 350 1080 500 L 1080 800 L 0 800 Z"
+                        fill={gestureZone === 'send' ? '#dddddd' : '#b9b9b9'}
+                        style={{ transition: 'fill 0.25s' }}
+                    />
+                </svg>
+
+                {/* "取消" — centered at arc zone centroid (~20% left, ~27% top), tilted -13deg */}
+                <div style={{
+                    position: 'absolute',
+                    left: '21%', top: '30%',
+                    transform: 'translate(-50%, -50%) rotate(-13deg)',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                }}>
+                    <span style={{
+                        fontSize: '16px', fontWeight: 500,
+                        color: cancelActive ? '#ffffff' : 'rgba(255,255,255,0.85)',
+                        transition: 'color 0.2s',
+                    }}>
+                        取消
+                    </span>
+                </div>
+
+                {/* "滑到这里 转文字" — mirror at (~80% left, ~27% top), tilted +13deg */}
+                <div style={{
+                    position: 'absolute',
+                    left: '79%', top: '30%',
+                    transform: 'translate(-50%, -50%) rotate(13deg)',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                }}>
+                    <span style={{
+                        fontSize: '16px', fontWeight: 500,
+                        color: convertActive ? '#ffffff' : 'rgba(255,255,255,0.85)',
+                        transition: 'color 0.2s',
+                    }}>
+                        滑到这里 转文字
+                    </span>
+                </div>
+
+                {/* "松开 发送" — centered in dome zone */}
+                <div style={{
+                    position: 'absolute',
+                    top: '60%',
+                    left: '50%', transform: 'translateX(-50%)',
+                    fontSize: '16px', fontWeight: 500,
+                    color: gestureZone === 'send' ? '#111111' : 'rgba(0,0,0,0.30)',
+                    letterSpacing: '2px',
+                    pointerEvents: 'none',
+                    transition: 'color 0.2s',
+                    whiteSpace: 'nowrap',
+                }}>
+                    松开 发送
+                </div>
+            </div>
+
+        </div>,
+        document.body
+    ) : null;
+
+    // ===== Converting overlay =====
+    const convertingOverlay = isConverting && typeof document !== 'undefined' ? createPortal(
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 10000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+            <div style={{
+                background: 'rgba(0,0,0,0.78)', borderRadius: '16px',
+                padding: '24px 32px', display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: '12px',
+            }}>
+                <div style={{
+                    width: '32px', height: '32px',
+                    border: '3px solid rgba(255,255,255,0.3)',
+                    borderTopColor: '#fff', borderRadius: '50%',
+                    animation: 'wx-spin 0.8s linear infinite',
+                }} />
+                <span style={{ color: '#fff', fontSize: '14px', fontWeight: 500 }}>
+                    语音转文字中...
+                </span>
+            </div>
+            <style>{`@keyframes wx-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>,
+        document.body
+    ) : null;
+
+    // ===== Render =====
     return (
-        <div
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                minHeight: '56px',
-                padding: '8px 6px',
-                gap: '4px',
-                background: '#f7f7f7',
-                borderTop: '0.5px solid rgba(0,0,0,0.12)',
-                transition: 'min-height 0.15s ease',
-            }}
-        >
-            {/* Voice Button */}
+        <div style={{
+            display: 'flex', alignItems: 'center',
+            minHeight: '56px', padding: '8px 6px', gap: '4px',
+            background: '#f7f7f7', borderTop: '0.5px solid rgba(0,0,0,0.12)',
+        }}>
             <button
-                onTouchStart={handlePointerDown}
-                onTouchMove={handlePointerMove}
-                onTouchEnd={handlePointerUp}
-                onMouseDown={handlePointerDown}
-                onMouseMove={handlePointerMove}
-                onMouseUp={handlePointerUp}
-                onMouseLeave={() => { if (isRecordingRef.current) handlePointerUp(); }}
-                onContextMenu={(e) => e.preventDefault()}
-                disabled={isVoiceProcessing}
+                onClick={handleToggleVoiceMode}
+                disabled={isVoiceProcessing || isConverting}
                 style={{
                     width: '36px', height: '36px', display: 'flex',
                     alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0, background: isRecording ? '#e5e5e5' : 'transparent', border: 'none',
-                    borderRadius: '50%',
+                    flexShrink: 0, background: 'transparent', border: 'none',
                     padding: 0, cursor: 'pointer',
-                    opacity: isVoiceProcessing ? 0.5 : 1,
-                    transition: 'background 0.2s'
+                    opacity: (isVoiceProcessing || isConverting) ? 0.5 : 1,
                 }}
-                title={voiceRecorderError || '按住说话'}
             >
-                {isVoiceProcessing ? (
-                    <div className="w-5 h-5 border-2 border-[#2A2A2A]/30 border-t-[#2A2A2A] rounded-full animate-spin" />
+                {(isVoiceProcessing || isConverting) ? (
+                    <div style={{
+                        width: '20px', height: '20px',
+                        border: '2px solid rgba(42,42,42,0.3)',
+                        borderTopColor: '#2A2A2A', borderRadius: '50%',
+                        animation: 'wx-spin 0.8s linear infinite',
+                    }} />
+                ) : isVoiceMode ? (
+                    <WxIconKeyboard className="w-[27px] h-[27px]" />
                 ) : (
                     <WxIconVoice className="w-[27px] h-[27px]" />
                 )}
             </button>
 
-            {/* Input Field */}
-            <div
-                style={{
+            {isVoiceMode ? (
+                <div
+                    style={{
+                        flex: 1, minWidth: 0, height: '38px',
+                        background: '#ffffff', borderRadius: '6px',
+                        border: '0.5px solid rgba(0,0,0,0.08)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        userSelect: 'none', cursor: 'pointer',
+                        WebkitUserSelect: 'none',
+                    }}
+                    onTouchStart={handlePointerDown}
+                    onMouseDown={handlePointerDown}
+                    onContextMenu={(e) => e.preventDefault()}
+                >
+                    <span style={{ fontSize: '16px', fontWeight: 500, color: '#333', letterSpacing: '2px' }}>
+                        按住 说话
+                    </span>
+                </div>
+            ) : (
+                <div style={{
                     flex: 1, minWidth: 0, minHeight: '38px',
                     background: '#ffffff', borderRadius: '6px',
                     border: '0.5px solid rgba(0,0,0,0.08)',
-                    display: 'flex', alignItems: 'flex-end',
-                    padding: '7px 10px',
-                }}
-            >
-                <textarea
-                    ref={wxTextareaRef}
-                    rows={1}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    style={{
-                        flex: 1, minWidth: 0, background: 'transparent',
-                        fontSize: '16px', color: '#333333',
-                        border: 'none', outline: 'none', resize: 'none',
-                        minHeight: '24px', maxHeight: '120px',
-                        lineHeight: '24px',
-                        padding: 0, margin: 0,
-                        overflowY: 'auto',
-                    }}
-                    className="no-scrollbar"
-                    placeholder=""
-                />
-                {/* Microphone icon inside input field (right side) */}
-                <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '6px', flexShrink: 0 }}>
-                    <WxIconMic className="w-[18px] h-[18px]" />
+                    display: 'flex', alignItems: 'flex-end', padding: '7px 10px',
+                }}>
+                    <textarea
+                        ref={wxTextareaRef} rows={1}
+                        value={input} onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        style={{
+                            flex: 1, minWidth: 0, background: 'transparent',
+                            fontSize: '16px', color: '#333',
+                            border: 'none', outline: 'none', resize: 'none',
+                            minHeight: '24px', maxHeight: '120px', lineHeight: '24px',
+                            padding: 0, margin: 0, overflowY: 'auto',
+                        }}
+                        className="no-scrollbar" placeholder=""
+                    />
                 </div>
-            </div>
+            )}
 
-            {/* Emoji Button */}
-            <button
-                onClick={() => setShowPanel(showPanel === 'emojis' ? 'none' : 'emojis')}
-                style={{
+            <button onClick={() => handleOpenPanel('emojis')} style={{
+                width: '36px', height: '36px', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                background: 'transparent', border: 'none',
+                padding: 0, cursor: 'pointer', flexShrink: 0,
+            }}>
+                <WxIconEmoji className="w-[27px] h-[27px]" />
+            </button>
+
+            {input.trim() && !isVoiceMode ? (
+                <button onClick={onSend} style={{
+                    height: '36px', flexShrink: 0, padding: '0 14px',
+                    background: '#07c160', borderRadius: '5px',
+                    color: '#fff', fontSize: '15px', fontWeight: 500,
+                    border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>发送</button>
+            ) : (
+                <button onClick={() => handleOpenPanel('actions')} style={{
                     width: '36px', height: '36px', display: 'flex',
                     alignItems: 'center', justifyContent: 'center',
                     background: 'transparent', border: 'none',
                     padding: 0, cursor: 'pointer', flexShrink: 0,
-                }}
-            >
-                <WxIconEmoji className="w-[27px] h-[27px]" />
-            </button>
-
-            {/* Plus / Send Toggle */}
-            {input.trim() ? (
-                <button
-                    onClick={onSend}
-                    style={{
-                        height: '36px', flexShrink: 0,
-                        padding: '0 14px',
-                        background: '#07c160', borderRadius: '5px',
-                        color: '#ffffff', fontSize: '15px', fontWeight: 500,
-                        border: 'none', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'opacity 0.15s',
-                    }}
-                >
-                    发送
-                </button>
-            ) : (
-                <button
-                    onClick={() => setShowPanel(showPanel === 'actions' ? 'none' : 'actions')}
-                    style={{
-                        width: '36px', height: '36px', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
-                        background: 'transparent', border: 'none',
-                        padding: 0, cursor: 'pointer', flexShrink: 0,
-                    }}
-                >
+                }}>
                     <WxIconPlus className="w-[27px] h-[27px]" />
                 </button>
             )}
 
-            {/* Recording Overlay */}
-            {showOverlay && (
-                <div
-                    className="fixed inset-0 z-[9999] flex flex-col items-center justify-center pb-32 pointer-events-none"
-                    style={{ background: 'transparent' }}
-                >
-                    {/* Transparent touch catcher for gestures — pointer events on */}
-                    <div
-                        className="absolute inset-0 pointer-events-auto"
-                        onTouchMove={handlePointerMove}
-                        onTouchEnd={handlePointerUp}
-                        onMouseMove={handlePointerMove}
-                        onMouseUp={handlePointerUp}
-                        style={{ touchAction: 'none' }}
-                    />
-
-                    {/* Recording indicator card (WeChat style) */}
-                    <div className={`relative pointer-events-none w-[150px] h-[150px] flex flex-col items-center justify-center rounded-2xl transition-all duration-200 ${isOverCancel
-                        ? 'bg-red-500/90'
-                        : 'bg-black/60 backdrop-blur-md'
-                        }`}>
-                        {/* Waveform animation */}
-                        <div className="flex items-center justify-center gap-1.5 h-12 mb-2">
-                            {[...Array(5)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className="w-[4px] rounded-full bg-white transition-all"
-                                    style={{
-                                        height: `${12 + Math.sin(Date.now() / 200 + i * 1.2) * 16}px`,
-                                        animation: isOverCancel ? 'none' : `voice-wave ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
-                                    }}
-                                />
-                            ))}
-                        </div>
-
-                        {/* Cancel hint */}
-                        <div className={`text-center text-sm font-medium mt-2 px-3 py-1 rounded-md transition-colors ${isOverCancel ? 'bg-red-600/50 text-white' : 'text-white/80'
-                            }`}>
-                            {isOverCancel ? '松开手指，取消发送' : '手指上滑，取消发送'}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {recordingOverlay}
+            {convertingOverlay}
         </div>
     );
 };

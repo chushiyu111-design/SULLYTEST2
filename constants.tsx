@@ -26,6 +26,8 @@ import {
   Sparkle,
   GlobeSimple,
   Star,
+  Notebook,
+  Phone,
 
 } from '@phosphor-icons/react';
 
@@ -56,6 +58,8 @@ export const Icons: Record<string, React.FC<{ className?: string }>> = {
   SpecialMoments: ({ className }) => <Sparkle className={className} weight="bold" />,
   Browser: ({ className }) => <GlobeSimple className={className} weight="bold" />,
   Zhaixinglou: ({ className }) => <Star className={className} weight="fill" />,
+  CsyManual: ({ className }) => <Notebook className={className} weight="bold" />,
+  VoiceCall: ({ className }) => <Phone className={className} weight="bold" />,
 
 };
 
@@ -77,6 +81,7 @@ export const INSTALLED_APPS: AppConfig[] = [
   { id: AppID.Novel, name: '笔友会', icon: 'Novel', color: 'amber' },
   { id: AppID.Worldbook, name: '世界书', icon: 'Worldbook', color: 'indigo' },
   { id: AppID.FAQ, name: '使用帮助', icon: 'FAQ', color: 'indigo' },
+  { id: AppID.CsyManual, name: '二改手册', icon: 'CsyManual', color: 'rose' },
   { id: AppID.Gallery, name: '相册', icon: 'Gallery', color: 'orange' },
   { id: AppID.XhsFreeRoam, name: '自由活动', icon: 'XhsFreeRoam', color: 'rose' },
   { id: AppID.XhsStock, name: '小红书图库', icon: 'XhsStock', color: 'red' },
@@ -85,6 +90,7 @@ export const INSTALLED_APPS: AppConfig[] = [
   { id: AppID.Settings, name: '设置', icon: 'Settings', color: 'slate' },
   { id: AppID.SpecialMoments, name: '特别时光', icon: 'SpecialMoments', color: 'pink' },
   { id: AppID.Zhaixinglou, name: '摘星楼', icon: 'Zhaixinglou', color: 'red' },
+  { id: AppID.VoiceCall, name: '语音通话', icon: 'VoiceCall', color: 'slate' },
 
 ];
 

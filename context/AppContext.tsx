@@ -5,7 +5,8 @@ import { haptic } from '../utils/haptics';
 
 export interface AppContextType {
     activeApp: AppID;
-    openApp: (appId: AppID) => void;
+    appParams: Record<string, any>;
+    openApp: (appId: AppID, params?: Record<string, any>) => void;
     closeApp: () => void;
     isLocked: boolean;
     unlock: () => void;
@@ -23,11 +24,12 @@ export const AppProvider: React.FC<{
     setHapticsEnabled: (v: boolean) => void;
 }> = ({ children, hapticsEnabled, setHapticsEnabled }) => {
     const [activeApp, setActiveApp] = useState<AppID>(AppID.Launcher);
+    const [appParams, setAppParams] = useState<Record<string, any>>({});
     const [isLocked, setIsLocked] = useState(true);
     const backHandlerRef = useRef<(() => boolean) | null>(null);
 
-    const openApp = useCallback((appId: AppID) => { haptic.light(); setActiveApp(appId); }, []);
-    const closeApp = useCallback(() => setActiveApp(AppID.Launcher), []);
+    const openApp = useCallback((appId: AppID, params?: Record<string, any>) => { haptic.light(); setAppParams(params || {}); setActiveApp(appId); }, []);
+    const closeApp = useCallback(() => { setAppParams({}); setActiveApp(AppID.Launcher); }, []);
     const unlock = useCallback(() => setIsLocked(false), []);
 
     const registerBackHandler = useCallback((handler: () => boolean) => {
@@ -52,7 +54,7 @@ export const AppProvider: React.FC<{
     }, [activeApp, closeApp]);
 
     const value: AppContextType = {
-        activeApp, openApp, closeApp,
+        activeApp, appParams, openApp, closeApp,
         isLocked, unlock,
         registerBackHandler, handleBack,
         hapticsEnabled, setHapticsEnabled

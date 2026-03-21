@@ -227,6 +227,97 @@ export const MinimaxTts = {
     },
 
     /**
+     * 同步语音合成：直接调用 /v1/t2a_v2，一次请求返回完整音频。
+     * 相比异步接口（createTask → queryTask → downloadAudio），延迟从几十秒降低到几秒。
+     * 
+     * @param text    - 待合成文本（最长 10,000 字符）
+     * @param config  - TTS 配置
+     * @param onStatus - 可选的状态回调
+     * @param signal  - 可选的取消信号
+     * @returns { blob, url, usageCharacters }
+     */
+    async synthesizeSync(
+        text: string,
+        config: TtsConfig,
+        onStatus?: (status: TtsSynthesisStatus, message: string) => void,
+        signal?: AbortSignal
+    ): Promise<TtsSynthesisResult> {
+        const notify = (s: TtsSynthesisStatus, m: string) => {
+            onStatus?.(s, m);
+            if (s === 'error') console.error(`[TTS Sync] ${m}`);
+            else console.log(`[TTS Sync] ${m}`);
+        };
+
+        if (signal?.aborted) throw new DOMException('TTS synthesis aborted', 'AbortError');
+
+        // 0. AI 预处理（可选）
+        let textToSynthesize = text;
+        const pre = config.preprocessConfig;
+        if (pre?.enabled && pre.apiBase && pre.apiKey && pre.model) {
+            notify('preprocessing', '正在用 AI 添加语气词...');
+            try {
+                textToSynthesize = await this.preprocessText(text, pre);
+                console.log('[TTS Sync] 预处理完成，原文长度:', text.length, '→ 处理后:', textToSynthesize.length);
+            } catch (e) {
+                console.warn('[TTS Sync] 预处理失败，回退到原文:', e);
+                textToSynthesize = text;
+            }
+        }
+
+        if (signal?.aborted) throw new DOMException('TTS synthesis aborted', 'AbortError');
+
+        // 1. 构建请求体（同步接口 + 非流式）
+        const body = buildRequestBody(textToSynthesize, config);
+        body.stream = false;
+        // 使用 hex 格式返回音频数据（默认值，确保明确）
+        body.output_format = 'hex';
+
+        const baseUrl = resolveBaseUrl(config.baseUrl);
+        notify('creating', '正在合成语音...');
+
+        // 2. 发送同步请求
+        const response = await fetch(`${baseUrl}/v1/t2a_v2`, {
+            method: 'POST',
+            headers: makeHeaders(config.apiKey, config.groupId || ''),
+            body: JSON.stringify(body),
+            signal,
+        });
+
+        if (!response.ok) {
+            const errData = await parseResponse<any>(response).catch(() => null);
+            const errMsg = errData?.base_resp?.status_msg || `HTTP ${response.status}`;
+            notify('error', `语音合成失败: ${errMsg}`);
+            throw new Error(`[TTS Sync] 合成失败: ${errMsg}`);
+        }
+
+        const data = await parseResponse<any>(response);
+        checkBaseResp(data, '同步合成');
+
+        // 3. 解码 hex 音频数据 → Blob
+        if (!data.data?.audio) {
+            notify('error', '合成结果为空');
+            throw new Error('[TTS Sync] 合成结果无音频数据');
+        }
+
+        const hexStr: string = data.data.audio;
+        const bytes = new Uint8Array(hexStr.length / 2);
+        for (let i = 0; i < hexStr.length; i += 2) {
+            bytes[i / 2] = parseInt(hexStr.substr(i, 2), 16);
+        }
+
+        const format = config.audioSetting?.format || 'mp3';
+        const mimeMap: Record<string, string> = { mp3: 'audio/mpeg', pcm: 'audio/pcm', flac: 'audio/flac', wav: 'audio/wav' };
+        const blob = new Blob([bytes], { type: mimeMap[format] || 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+
+        const usageCharacters = data.extra_info?.usage_characters;
+        notify('done', `语音合成完成 (${(blob.size / 1024).toFixed(1)} KB)`);
+
+        return { blob, url, usageCharacters };
+    },
+
+    /**
+     * @deprecated 使用 synthesizeSync() 代替。此方法使用异步轮询接口，延迟较高。
      * 高级封装：创建任务 → 轮询状态 → 下载音频
      * 
      * @param text    - 待合成文本

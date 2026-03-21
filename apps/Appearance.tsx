@@ -131,7 +131,8 @@ const Appearance: React.FC = () => {
   const removeWidget = (slot: string) => {
       const current = { ...(theme.launcherWidgets || {}) };
       delete current[slot];
-      updateTheme({ launcherWidgets: Object.keys(current).length > 0 ? current : undefined });
+      // Always pass object (even empty {}) so updateTheme's DB cleanup runs
+      updateTheme({ launcherWidgets: current });
   };
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -167,7 +167,8 @@ const ALL_STORES = [
     'user_profile', 'diaries', 'tasks', 'anniversaries', 'room_todos',
     'room_notes', 'groups', 'journal_stickers', 'social_posts', 'courses', 'games', 'worldbooks', 'novels',
     'bank_transactions', 'bank_data',
-    'xhs_activities', 'xhs_stock'
+    'xhs_activities', 'xhs_stock',
+    'vector_memories'
 ];
 
 function getStoresToProcess(mode: 'text_only' | 'media_only' | 'full'): string[] {
@@ -336,6 +337,7 @@ export async function exportSystemData(
             }
             case 'xhs_activities': backupData.xhsActivities = processedData; break;
             case 'xhs_stock': backupData.xhsStockImages = processedData; break;
+            case 'vector_memories': backupData.vectorMemories = processedData; break;
         }
 
         await new Promise(resolve => setTimeout(resolve, 10));

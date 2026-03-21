@@ -46,6 +46,10 @@ interface ChatInputAreaProps {
     onCancelRecording?: () => void;
     voiceRecorderError?: string | null;
     isVoiceProcessing?: boolean;
+    /** AnalyserNode for real-time waveform visualization */
+    analyserNode?: AnalyserNode | null;
+    /** Whether Silero VAD detects active speech (from useVoiceRecorder) */
+    isSpeaking?: boolean;
 }
 
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
@@ -58,7 +62,9 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     onReroll, canReroll,
     onVoiceMessage, voiceRecorderState = 'idle', voiceRecordingDuration = 0,
     onStartRecording, onStopRecording, onCancelRecording,
-    voiceRecorderError, isVoiceProcessing = false
+    voiceRecorderError, isVoiceProcessing = false,
+    analyserNode,
+    isSpeaking = false,
 }) => {
     const chatImageInputRef = useRef<HTMLInputElement>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,10 +72,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     const isLongPressTriggered = useRef(false); // Track if long press action fired
     // WeChat auto-expand ref & useEffect moved to plugins/WeChatInputBar.tsx
 
-    // Resolve plugin theme ID: custom themes inherit from baseThemeId
+    // Resolve plugin theme ID: custom themes should use default (non-plugin) UI
+    // so their styles aren't overridden by WeChat-specific components
     const pluginThemeId = (() => {
         const customTheme = customThemes.find(t => t.id === activeThemeId);
-        return customTheme?.baseThemeId || activeThemeId;
+        // Custom (DIY) themes skip plugins entirely — return their unique ID (no match in THEME_PLUGINS)
+        if (customTheme) return customTheme.id;
+        return activeThemeId;
     })();
 
     // Context menu state for custom theme long-press
@@ -202,7 +211,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                         input, setInput, showPanel, setShowPanel, onSend,
                         onVoiceMessage, voiceRecorderState, voiceRecordingDuration,
                         onStartRecording, onStopRecording, onCancelRecording,
-                        voiceRecorderError, isVoiceProcessing
+                        voiceRecorderError, isVoiceProcessing, analyserNode,
                     })
                 ) : (
                     /* ===== Default Pill Layout (all other themes) ===== */
@@ -242,6 +251,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                 onStopRecording={onStopRecording}
                                 onCancelRecording={onCancelRecording}
                                 error={voiceRecorderError}
+                                analyserNode={analyserNode}
+                                isSpeaking={isSpeaking}
                             />
                         ) : (
                             <button

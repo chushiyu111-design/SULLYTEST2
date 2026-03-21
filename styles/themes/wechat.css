@@ -63,6 +63,11 @@
     display: none !important;
 }
 
+/* 隐藏通话按钮 — WeChat 风格标题栏空间不足，额外按钮会与居中标题重叠 */
+.theme-default .sully-chat-header>.gap-3>button:nth-of-type(2) {
+    display: none !important;
+}
+
 /* Center Title Wrapper: Absolute Centering */
 .theme-default .sully-chat-header>.gap-3>.flex-1 {
     position: absolute !important;

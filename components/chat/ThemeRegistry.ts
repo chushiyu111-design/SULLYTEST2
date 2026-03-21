@@ -11,6 +11,8 @@ import { Message } from '../../types';
 import WeChatInputBar from './plugins/WeChatInputBar';
 import WeChatTransferCard from './plugins/WeChatTransferCard';
 import WeChatActionsPanel, { ActionsPanelProps } from './plugins/WeChatActionsPanel';
+import WeChatVoiceBubble from './plugins/WeChatVoiceBubble';
+import type { VoiceBubbleProps } from './VoiceBubble';
 
 /** Shared props for all transfer card plugins */
 export interface TransferCardProps {
@@ -42,11 +44,14 @@ export interface ThemePlugin {
         onCancelRecording?: () => void;
         voiceRecorderError?: string | null;
         isVoiceProcessing?: boolean;
+        analyserNode?: AnalyserNode | null;
     }>;
     /** Custom transfer card component (undefined = use neutral fallback card) */
     TransferCard?: React.FC<TransferCardProps>;
     /** Custom actions panel (undefined = use default colored grid) */
     ActionsPanel?: React.FC<ActionsPanelProps>;
+    /** Custom voice bubble for message rendering (undefined = use generic VoiceBubble) */
+    VoiceBubble?: React.FC<VoiceBubbleProps>;
 }
 
 /**
@@ -60,7 +65,8 @@ export const THEME_PLUGINS: Record<string, ThemePlugin> = {
         notificationSound: 'https://image2url.com/r2/default/audio/1771769870930-c9be8c96-c34e-4509-bc81-48619ad5406d.wav',
         InputBar: WeChatInputBar,
         TransferCard: WeChatTransferCard,
-        ActionsPanel: WeChatActionsPanel
+        ActionsPanel: WeChatActionsPanel,
+        VoiceBubble: WeChatVoiceBubble
     },
     'waterdrop': {
         id: 'waterdrop',

@@ -53,13 +53,14 @@ ${formattedMsgs}
 
 规则：
 1. 只记录值得长期记住的事情（用户的重要信息、关键事件、情感转折、承诺约定等）
-2. 如果对话内容与已有记忆高度相关，优先选择 "update" 来补充已有记忆，避免重复
+2. **不同的事件、话题、时间段 → 必须 create 新记忆**。"update" 仅用于：对话中出现了与某条已有记忆描述的**完全相同的事件**的新进展或补充细节。不要把不相干的内容塞进同一条记忆！
 3. 日常寒暄、无实质内容的对话选择 "skip"
 4. 通话记录（标注 [通话记录] 的消息）同样重要，不要忽略
-5. 每次输出 0 到 2 条记忆操作。用 JSON 数组格式，单条也用数组。只输出 JSON，不要加任何文字说明。
+5. 每次输出 0 到 3 条记忆操作。用 JSON 数组格式，单条也用数组。只输出 JSON，不要加任何文字说明。
 6. importance 评分：1-3 日常琐事，4-6 有意义的事件，7-8 重要里程碑，9-10 改变关系的关键时刻
 7. content 必须精简，不超过 150 字！emotionalJourney 不超过 50 字！
 8. 如果用户在对话中**纠正了之前的信息**（如"我其实不喜欢XX"、"我已经不再XX了"、"之前说错了"），且已有记忆中存在与之矛盾的条目，请使用 "invalidate" 标记该旧记忆为过时
+9. 优先 create，谨慎 update。宁可多创建几条独立记忆，也不要把不同事件合并到一条里
 
 请以 JSON 数组格式回答（不要用 markdown 代码块包裹，不要加任何额外说明文字）：
 [
@@ -277,7 +278,7 @@ async function callLLM(prompt: string, apiConfig: APIConfig): Promise<ExtractRes
         return { content, truncated };
     };
 
-    const parseContent = (content: string): ExtractResult[] => {
+    const parseContent = (content: string, label: string): ExtractResult[] => {
         let cleaned = content;
 
         // Strip any leading/trailing non-JSON text (e.g. "以下是..." or "好的，...")
@@ -296,21 +297,25 @@ async function callLLM(prompt: string, apiConfig: APIConfig): Promise<ExtractRes
             return Array.isArray(parsed) ? parsed : [parsed];
         } catch {
             // If truncated, try to fix incomplete array: find last complete object and close array
-            try {
-                const lastBrace = cleaned.lastIndexOf('}');
-                if (lastBrace > 0) {
-                    const fixedContent = cleaned.slice(0, lastBrace + 1).replace(/,\s*$/, '') + ']';
-                    // Ensure it starts with [
-                    const fixedStart = fixedContent.indexOf('[');
-                    if (fixedStart !== -1) {
-                        const parsed = JSON.parse(fixedContent.slice(fixedStart));
+            // Walk backwards to find a properly closed object (} followed by optional whitespace/comma)
+            const bracketStart = cleaned.indexOf('[');
+            if (bracketStart !== -1) {
+                // Try removing trailing incomplete objects progressively
+                let tryContent = cleaned;
+                for (let i = 0; i < 3; i++) {
+                    const lastBrace = tryContent.lastIndexOf('}');
+                    if (lastBrace <= bracketStart) break;
+                    const candidate = tryContent.slice(bracketStart, lastBrace + 1).replace(/,\s*$/, '') + ']';
+                    try {
+                        const parsed = JSON.parse(candidate);
                         if (Array.isArray(parsed) && parsed.length > 0) {
-                            console.log(`🧠 [VectorExtract] Fixed truncated JSON, recovered ${parsed.length} objects`);
+                            console.log(`🧠 [VectorExtract] [${label}] Fixed truncated JSON, recovered ${parsed.length} objects`);
                             return parsed;
                         }
-                    }
+                    } catch { /* try with one fewer object */ }
+                    tryContent = tryContent.slice(0, lastBrace);
                 }
-            } catch { /* continue to regex fallback */ }
+            }
 
             // Fallback: regex extract complete objects
             const results: ExtractResult[] = [];
@@ -323,34 +328,39 @@ async function callLLM(prompt: string, apiConfig: APIConfig): Promise<ExtractRes
                 } catch { /* skip malformed */ }
             }
             if (results.length > 0) {
-                console.log(`🧠 [VectorExtract] Fallback recovered ${results.length} objects`);
+                console.log(`🧠 [VectorExtract] [${label}] Regex fallback recovered ${results.length} objects`);
             }
             return results;
         }
     };
 
-    // First attempt
-    const first = await doCall(prompt, 2000);
-    let results = parseContent(first.content);
+    // First attempt — 4000 tokens (Chinese content is ~2x token-dense)
+    const first = await doCall(prompt, 4000);
+    console.log(`🧠 [VectorExtract] First attempt: ${first.content.length} chars, truncated=${first.truncated}`);
+    let results = parseContent(first.content, 'first');
 
     if (results.length > 0) return results;
 
     // If first attempt failed completely (truncated or unparseable), retry with more tokens
     if (first.truncated || first.content.length > 50) {
         console.log('🧠 [VectorExtract] First attempt failed/truncated, retrying with more tokens and simpler prompt...');
-        // Simplify: ask for just 1 memory with more output room
+        // Simplify: ask for just 1 memory with ultra-short format
         const retryPrompt = prompt.replace(
             /每次输出 0 到 \d+ 条.+?。/,
             '只输出 1 条最重要的记忆操作。'
+        ).replace(
+            /content 必须精简，不超过 \d+ 字！emotionalJourney 不超过 \d+ 字！/,
+            'content 不超过 80 字！emotionalJourney 不超过 20 字！'
         );
-        const retry = await doCall(retryPrompt, 3000);
-        results = parseContent(retry.content);
+        const retry = await doCall(retryPrompt, 6000);
+        console.log(`🧠 [VectorExtract] Retry: ${retry.content.length} chars, truncated=${retry.truncated}`);
+        results = parseContent(retry.content, 'retry');
 
         if (results.length > 0) {
             console.log(`🧠 [VectorExtract] Retry succeeded: ${results.length} objects`);
             return results;
         }
-        console.warn('🧠 [VectorExtract] Retry also failed:', retry.content.slice(0, 300));
+        console.warn('🧠 [VectorExtract] Retry also failed:', retry.content.slice(0, 500));
     } else {
         console.warn('🧠 [VectorExtract] Failed to parse (empty/skip):', first.content.slice(0, 200));
     }
@@ -513,6 +523,7 @@ export const VectorMemoryExtractor = {
         console.log(`🧠 [VectorExtract] Batch: loaded vector cache: ${vectorCache.size} memories`);
 
         let totalCreated = 0;
+        let totalUpdated = 0;
 
         for (let w = 0; w < windows.length; w++) {
             if (signal?.aborted) {
@@ -520,7 +531,7 @@ export const VectorMemoryExtractor = {
                 break;
             }
 
-            onProgress?.(w + 1, windows.length, totalCreated);
+            onProgress?.(w + 1, windows.length, totalCreated + totalUpdated);
 
             // Refresh headers each window so LLM sees previously created memories
             const allHeaders = await DB.getVectorMemoryHeaders(charId);
@@ -532,8 +543,11 @@ export const VectorMemoryExtractor = {
                 const results = await callLLM(prompt, apiConfig);
                 const batchSourceIds = windows[w].map(m => m.id).filter((id): id is number => typeof id === 'number');
                 for (const result of results) {
-                    const created = await processResult(result, charId, embeddingApiKey, vectorCache, batchSourceIds);
-                    if (created) totalCreated++;
+                    const success = await processResult(result, charId, embeddingApiKey, vectorCache, batchSourceIds);
+                    if (success) {
+                        if (result.action === 'create') totalCreated++;
+                        else totalUpdated++;
+                    }
                 }
             } catch (err) {
                 console.error(`🧠 [VectorExtract] Batch window ${w + 1} error:`, err);
@@ -545,8 +559,95 @@ export const VectorMemoryExtractor = {
             }
         }
 
-        onProgress?.(windows.length, windows.length, totalCreated);
-        console.log(`🧠 [VectorExtract] Batch complete: ${totalCreated} memories from ${windows.length} windows`);
-        return totalCreated;
+        onProgress?.(windows.length, windows.length, totalCreated + totalUpdated);
+        console.log(`🧠 [VectorExtract] Batch complete: ${totalCreated} created, ${totalUpdated} updated from ${windows.length} windows`);
+        return totalCreated + totalUpdated;
+    },
+
+    /**
+     * 通话结束后专项提取 — 从结构化通话历史直接提取记忆。
+     * 不走 maybeExtract() 的消息计数机制，也不受 300 字截断限制。
+     * @param charId 角色 ID
+     * @param charName 角色名
+     * @param callHistory 通话对话历史 [{role, content}, ...]
+     * @param callTimestamp 通话时间戳
+     * @param apiConfig LLM 配置
+     * @param embeddingApiKey embedding API key
+     * @returns 提取的记忆数量
+     */
+    async extractFromCallHistory(
+        charId: string,
+        charName: string,
+        callHistory: { role: string; content: string }[],
+        callTimestamp: number,
+        apiConfig: APIConfig,
+        embeddingApiKey: string,
+    ): Promise<number> {
+        // 短通话跳过（≤4 轮 ≈ 打个招呼）
+        if (callHistory.length <= 4) {
+            console.log(`🧠 [VectorExtract/Call] Only ${callHistory.length} turns, skipping.`);
+            return 0;
+        }
+
+        // 并发锁
+        if (extractingChars.has(charId)) {
+            console.log(`🧠 [VectorExtract/Call] Already extracting for ${charId}, skipping call extraction.`);
+            return 0;
+        }
+        extractingChars.add(charId);
+
+        console.log(`🧠 [VectorExtract/Call] Starting extraction from ${callHistory.length}-turn call for ${charName}`);
+
+        let totalExtracted = 0;
+        try {
+            // 转换为 formatMessages 兼容格式（每轮 +1s 偏移）
+            const virtualMsgs = callHistory.map((h, i) => ({
+                timestamp: callTimestamp + i * 1000,
+                type: 'call_log' as const,
+                role: h.role,
+                content: h.content,
+            }));
+
+            // 加载向量缓存
+            const allMems = await DB.getAllVectorMemories(charId);
+            const vectorCache = new Map<string, number[]>(allMems.map(m => [m.id, m.vector]));
+
+            // 滑动窗口（30 轮/窗，8 轮重叠）
+            const WINDOW = 30;
+            const OVERLAP = 8;
+
+            for (let i = 0; i < virtualMsgs.length; i += WINDOW - OVERLAP) {
+                const windowMsgs = virtualMsgs.slice(i, i + WINDOW);
+                const allHeaders = await DB.getVectorMemoryHeaders(charId);
+                const existingHeaders = allHeaders
+                    .filter(h => !h.deprecated)
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .slice(0, 50);
+
+                const formattedMsgs = formatMessages(
+                    windowMsgs.map(m => ({ ...m, content: m.content })), // 通话内容不截断
+                    charName,
+                );
+                const prompt = buildExtractionPrompt(charName, existingHeaders, formattedMsgs);
+                const results = await callLLM(prompt, apiConfig);
+
+                for (const result of results) {
+                    const success = await processResult(result, charId, embeddingApiKey, vectorCache);
+                    if (success) totalExtracted++;
+                }
+
+                // 窗口间延迟
+                if (i + WINDOW < virtualMsgs.length) {
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+
+            console.log(`🧠 [VectorExtract/Call] Done: ${totalExtracted} memories from ${callHistory.length}-turn call`);
+        } catch (err) {
+            console.error('🧠 [VectorExtract/Call] Error:', err);
+        } finally {
+            extractingChars.delete(charId);
+        }
+        return totalExtracted;
     },
 };

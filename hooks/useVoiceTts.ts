@@ -55,8 +55,14 @@ export function useVoiceTts() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const currentUrlRef = useRef<string | null>(null);
 
-    // AbortController for in-flight synthesis — cancel previous on new call or unmount
-    const abortRef = useRef<AbortController | null>(null);
+    // Per-msgId AbortController map — prevents concurrent auto-TTS calls from cancelling each other
+    const abortMapRef = useRef<Map<number, AbortController>>(new Map());
+
+    // Serial synthesis queue — ensures only one MiniMax request is in-flight at a time.
+    // This prevents API concurrency errors when multiple voice messages are synthesized
+    // back-to-back (e.g. AI replies with multiple voice bubbles in one response).
+    // Loading state is still set immediately (outside the queue) so the UI responds at once.
+    const synthQueueRef = useRef<Promise<void>>(Promise.resolve());
 
     // ── Stop any currently playing audio ──────────────────────────────
     const stopVoice = useCallback(() => {
@@ -114,47 +120,61 @@ export function useVoiceTts() {
     }, [stopVoice]);
 
     // ── Synthesize and save audio for a message ──────────────────────
-    const synthesizeForMessage = useCallback(async (
+    const synthesizeForMessage = useCallback((
         msgId: number,
         text: string,
         ttsConfig: TtsConfig,
         onStatus?: (status: TtsSynthesisStatus, message: string) => void
     ): Promise<{ duration: number } | null> => {
-        // Mark as loading
+        // Mark as loading immediately (before queuing) so the UI spinner appears at once
         setLoadingMsgIds(prev => {
             const next = new Set(prev);
             next.add(msgId);
             return next;
         });
 
-        // Cancel any previous in-flight synthesis
-        abortRef.current?.abort();
+        // Cancel any previous in-progress synthesis for THIS msgId (e.g. retry scenario)
+        abortMapRef.current.get(msgId)?.abort();
         const controller = new AbortController();
-        abortRef.current = controller;
+        abortMapRef.current.set(msgId, controller);
 
-        try {
-            const result = await MinimaxTts.synthesize(text, ttsConfig, onStatus, controller.signal);
-            if (!result || !result.blob) return null;
+        // Chain onto the serial queue — ensures only ONE MiniMax request is active at a time.
+        // Each job waits for the previous one to settle (resolve or reject) before starting.
+        const job = synthQueueRef.current.then(async () => {
+            // If aborted while waiting in queue (e.g. user navigated away), skip gracefully
+            if (controller.signal.aborted) return null;
 
-            // Persist audio blob to IDB
-            await DB.saveVoiceAudio(msgId, result.blob);
+            try {
+                const result = await MinimaxTts.synthesizeSync(text, ttsConfig, onStatus, controller.signal);
+                if (!result || !result.blob) return null;
 
-            const duration = await getAudioDuration(result.blob, ttsConfig.audioSetting?.bitrate);
+                await DB.saveVoiceAudio(msgId, result.blob);
+                const duration = await getAudioDuration(result.blob, ttsConfig.audioSetting?.bitrate);
+                if (result.url) MinimaxTts.revokeUrl(result.url);
 
-            // Clean up MiniMax's own ObjectURL (we manage our own)
-            if (result.url) MinimaxTts.revokeUrl(result.url);
+                // Update message metadata BEFORE finally removes loading state.
+                // This prevents a race where VoiceBubble sees !loading && !hasAudio
+                // and briefly shows the retry button despite synthesis success.
+                await DB.updateMessageMetadata(msgId, { duration, hasAudio: true });
 
-            return { duration };
-        } catch (err) {
-            console.error('[VoiceTts] Synthesis failed for msgId:', msgId, err);
-            throw err;  // Let caller handle the error with actual message
-        } finally {
-            setLoadingMsgIds(prev => {
-                const next = new Set(prev);
-                next.delete(msgId);
-                return next;
-            });
-        }
+                return { duration };
+            } catch (err) {
+                console.error('[VoiceTts] Synthesis failed for msgId:', msgId, err);
+                throw err;
+            } finally {
+                abortMapRef.current.delete(msgId);
+                setLoadingMsgIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(msgId);
+                    return next;
+                });
+            }
+        });
+
+        // Update the queue tail. Use .catch() so a failed job doesn't block all later ones.
+        synthQueueRef.current = job.then(() => { }, () => { });
+
+        return job as Promise<{ duration: number } | null>;
     }, []);
 
     return {

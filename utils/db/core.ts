@@ -7,7 +7,7 @@ import {
 } from '../../types';
 
 const DB_NAME = 'AetherOS_Data';
-const DB_VERSION = 37; // Bumped for Voice Audio store
+const DB_VERSION = 38; // Bumped for Vector Memory store
 
 export const STORE_CHARACTERS = 'characters';
 export const STORE_MESSAGES = 'messages';
@@ -36,6 +36,7 @@ export const STORE_XHS_STOCK = 'xhs_stock';
 export const STORE_XHS_ACTIVITIES = 'xhs_activities';
 export const STORE_LETTERS = 'letters';
 export const STORE_VOICE_AUDIO = 'voice_audio';
+export const STORE_VECTOR_MEMORIES = 'vector_memories';
 
 export interface ScheduledMessage {
     id: string;
@@ -150,6 +151,12 @@ export const openDB = (): Promise<IDBDatabase> => {
             }
 
             createStore(STORE_VOICE_AUDIO, { keyPath: 'msgId' });
+
+            // Vector Memory store with charId index for per-character queries
+            if (!db.objectStoreNames.contains(STORE_VECTOR_MEMORIES)) {
+                const vmStore = db.createObjectStore(STORE_VECTOR_MEMORIES, { keyPath: 'id' });
+                vmStore.createIndex('charId', 'charId', { unique: false });
+            }
         };
     });
 };

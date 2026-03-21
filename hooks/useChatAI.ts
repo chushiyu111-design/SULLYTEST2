@@ -1,9 +1,9 @@
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { CharacterProfile, UserProfile, Message, Emoji, EmojiCategory, GroupProfile, RealtimeConfig } from '../types';
 import { DB } from '../utils/db';
 import { ChatPrompts } from '../utils/chatPrompts';
-import { ChatParser } from '../utils/chatParser';
+import { ChatParser, BILINGUAL_MARKER } from '../utils/chatParser';
 import { RealtimeContextManager, NotionManager, FeishuManager, XhsNote } from '../utils/realtimeContext';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
 import { safeFetchJson, safeResponseJson } from '../utils/safeApi';
@@ -11,6 +11,9 @@ import { haptic, playThemeNotification } from '../utils/haptics';
 import { THEME_PLUGINS } from '../components/chat/ThemeRegistry';
 import { resolveXhsConfig, xhsSearch, xhsBrowse, xhsPublish, xhsComment, xhsLike, xhsFavorite, xhsReplyComment } from './xhsHelpers';
 import { processXhsActions } from './xhsProcessor';
+import { VectorMemoryExtractor } from '../utils/vectorMemoryExtractor';
+import { MindSnapshotExtractor } from '../utils/mindSnapshotExtractor';
+import { EventExtractor } from '../utils/eventExtractor';
 
 interface UseChatAIProps {
     char: CharacterProfile | undefined;
@@ -25,6 +28,9 @@ interface UseChatAIProps {
     translationConfig?: { enabled: boolean; sourceLang: string; targetLang: string };
     autoVoice?: boolean; // 开启后向 AI 注入语音消息格式指引
     onVoiceMessageSaved?: (msgId: number, text: string) => void; // 语音消息保存后的回调（用于触发 TTS）
+    autoCall?: boolean; // 开启后向 AI 注入主动来电指引
+    onIncomingCall?: (mode: string, callReason: string) => void; // AI 触发来电时的回调
+    onMoodUpdate?: (charId: string, moodState: any) => void; // MindSnapshot 完成后回调
 }
 
 export const useChatAI = ({
@@ -39,7 +45,10 @@ export const useChatAI = ({
     realtimeConfig,  // 新增
     translationConfig,
     autoVoice,
-    onVoiceMessageSaved
+    onVoiceMessageSaved,
+    autoCall,
+    onIncomingCall,
+    onMoodUpdate
 }: UseChatAIProps) => {
 
     const [isTyping, setIsTyping] = useState(false);
@@ -49,6 +58,9 @@ export const useChatAI = ({
     const [xhsStatus, setXhsStatus] = useState<string>('');
     const [lastTokenUsage, setLastTokenUsage] = useState<number | null>(null);
     const [tokenBreakdown, setTokenBreakdown] = useState<{ prompt: number; completion: number; total: number; msgCount: number; pass: string } | null>(null);
+
+    // MindSnapshot retry context
+    const lastMindSnapshotCtx = useRef<{ char: any; aiContent: string; msgs: Message[]; config: any } | null>(null);
 
     // 跨消息持久化的 noteId→xsecToken 缓存，避免 lastXhsNotes 局部变量每次 triggerAI 都重置
     const xsecTokenCacheRef = useRef<Map<string, string>>(new Map());
@@ -106,8 +118,9 @@ export const useChatAI = ({
             const baseUrl = apiConfig.baseUrl.replace(/\/+$/, '');
             const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey || 'sk-none'}` };
 
-            // 1. Build System Prompt (包含实时世界信息)
-            let systemPrompt = await ChatPrompts.buildSystemPrompt(char, userProfile, groups, emojis, categories, currentMsgs, realtimeConfig);
+            // 1. Build System Prompt (包含实时世界信息 + 向量记忆检索)
+            const embeddingApiKey = localStorage.getItem('embedding_api_key') || undefined;
+            let systemPrompt = await ChatPrompts.buildSystemPrompt(char, userProfile, groups, emojis, categories, currentMsgs, realtimeConfig, apiConfig, embeddingApiKey);
 
             // 1.1 Inject voice message format instruction (only when autoVoice is enabled)
             if (autoVoice) {
@@ -127,6 +140,22 @@ export const useChatAI = ({
 示例：
 【语音消息：喂，你在吗？】
 【语音消息：我刚下班，等一下啊。】`;
+            }
+
+            // 1.2 Inject incoming call instruction (only when autoCall is enabled)
+            if (autoCall) {
+                systemPrompt += `\n\n[系统功能: 主动来电]
+你可以主动给用户打电话。当你觉得有必要用电话沟通时（比如想听声音、深夜关心、重要的话想当面说），
+请单独起一行输出：[[CALL: mode]]
+mode 可选值：
+- daily（日常聊聊）
+- confide（有心事想说）
+- truth（想坦白什么）
+- sleep（想陪用户入睡）
+规则：
+- 不要频繁打电话，在合适的情绪节点自然触发
+- 输出 [[CALL: mode]] 后不要再写其他文字
+- 严禁在同一条回复里既打电话又发消息`;
             }
 
             // 1.5 Inject bilingual output instruction when translation is enabled
@@ -178,9 +207,10 @@ export const useChatAI = ({
             const cleanedApiMessages = apiMessages.map((msg: any) => {
                 if (typeof msg.content !== 'string') return msg;
                 let c = msg.content;
-                // Strip old %%BILINGUAL%% format
-                if (c.toLowerCase().includes('%%bilingual%%')) {
-                    const idx = c.toLowerCase().indexOf('%%bilingual%%');
+                // Strip old %%BILINGUAL%% format (both spaced and non-spaced variants)
+                const biRe = /%%\s*BILINGUAL\s*%%/i;
+                if (biRe.test(c)) {
+                    const idx = c.search(biRe);
                     c = c.substring(0, idx).trim();
                 }
                 // Strip new XML tag format: keep only <原文> content
@@ -226,6 +256,13 @@ export const useChatAI = ({
             // 4. Initial Cleanup
             let aiContent = data.choices?.[0]?.message?.content || '';
             aiContent = ChatParser.cleanAiSecondPass(aiContent);
+
+            // 4.1 Strip <thinking> CoT content (from cot_protocol)
+            // Guards against 3 failure modes: complete tags, unclosed tag, all-in-thinking
+            const preThinkingContent = aiContent;
+            aiContent = aiContent.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+            aiContent = aiContent.replace(/<thinking>[\s\S]*/gi, '').trim();
+            if (!aiContent) aiContent = preThinkingContent.replace(/<\/?thinking>/gi, '').trim();
 
             // 5. Handle Recall (Loop if needed)
             const recallMatch = aiContent.match(/\[\[RECALL:\s*(\d{4})[-/年](\d{1,2})\]\]/);
@@ -811,6 +848,26 @@ export const useChatAI = ({
             }, char);
             aiContent = await ChatParser.parseAndExecuteActions(aiContent, char.id, char.name, addToast);
 
+            // 6.5 Detect AI-initiated incoming call [[CALL: mode]]
+            const callMatch = aiContent.match(/\[\[CALL:\s*(\w+)\]\]/);
+            if (callMatch) {
+                const callMode = callMatch[1].trim();
+                console.log(`📞 [IncomingCall] AI triggered call with mode: ${callMode}`);
+                aiContent = aiContent.replace(/\[\[CALL:\s*\w+\]\]/g, '').trim();
+
+                // 提取最近 3 轮对话作为来电理由（供语音通话 AI 开场白使用）
+                const recentMsgs = currentMsgs
+                    .filter(m => m.role === 'user' || m.role === 'assistant')
+                    .slice(-6); // 最多 6 条（约 3 轮对话）
+                const callReason = recentMsgs.map(m => {
+                    const sender = m.role === 'user' ? userProfile.name : char.name;
+                    return `${sender}: ${m.content.substring(0, 200)}`;
+                }).join('\n');
+                console.log(`📞 [IncomingCall] callReason (${recentMsgs.length} msgs):\n${callReason.substring(0, 300)}`);
+
+                onIncomingCall?.(callMode, callReason);
+            }
+
             // 7. Handle Quote/Reply Logic (Robust: handles [[QUOTE:...]], [QUOTE:...], typos like QUATE/QOUTE, Chinese 引用, and [回复 "..."] format)
             const QUOTE_RE_DOUBLE = /\[\[(?:QU[OA]TE|引用)[：:]\s*([\s\S]*?)\]\]/;
             const QUOTE_RE_SINGLE = /\[(?:QU[OA]TE|引用)[：:]\s*([^\]]*)\]/;
@@ -988,14 +1045,31 @@ export const useChatAI = ({
                         const translatedText = ChatParser.sanitize(tagMatch[2].trim());
                         if (originalText || translatedText) {
                             const biContent = originalText && translatedText
-                                ? `${originalText}\n %% BILINGUAL %%\n${translatedText}`
+                                ? `${originalText}\n${BILINGUAL_MARKER}\n${translatedText}`
                                 : (originalText || translatedText);
                             const replyData = globalMsgIndex === 0 ? aiReplyTarget : undefined;
                             await new Promise(r => setTimeout(r, Math.min(Math.max(biContent.length * 30, 400), 2000)));
-                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: biContent, replyTo: replyData });
-                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
-                            playFirstNotification();
-                            globalMsgIndex++;
+
+                            if (onVoiceMessageSaved && originalText) {
+                                // Auto-voice ON: save as voice, TTS uses original language only
+                                const estimatedDuration = Math.max(2, Math.ceil(originalText.length / 4));
+                                const savedVoiceId = await DB.saveMessage({
+                                    charId: char.id, role: 'assistant', type: 'voice',
+                                    content: originalText,
+                                    metadata: { duration: estimatedDuration, sourceText: biContent, hasAudio: false },
+                                    replyTo: replyData,
+                                });
+                                setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                playFirstNotification();
+                                globalMsgIndex++;
+                                onVoiceMessageSaved(savedVoiceId, originalText);
+                            } else {
+                                // Auto-voice OFF: save as text with bilingual toggle
+                                await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: biContent, replyTo: replyData });
+                                setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                                playFirstNotification();
+                                globalMsgIndex++;
+                            }
                         }
 
                         lastIndex = tagMatch.index + tagMatch[0].length;
@@ -1092,6 +1166,54 @@ export const useChatAI = ({
                 setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
             }
 
+            // ====== Build shared secondary API config for background extractors ======
+            const subKey = localStorage.getItem('sub_api_key');
+            const subUrl = localStorage.getItem('sub_api_base_url');
+            const subModel = localStorage.getItem('sub_api_model');
+            const secondaryConfig = (subKey && subUrl && subModel)
+                ? { baseUrl: subUrl, apiKey: subKey, model: subModel }
+                : apiConfig;
+
+            // ====== Vector Memory Extraction — fire-and-forget (success path only) ======
+            if (char.vectorMemoryEnabled && char.vectorMemoryAutoExtract !== false) {
+                const emKey = localStorage.getItem('embedding_api_key');
+                if (emKey) {
+                    const charSnapshot = { ...char }; // snapshot before any re-render
+                    VectorMemoryExtractor.maybeExtract(charSnapshot, secondaryConfig, emKey)
+                        .catch(e => console.error('🧠 [VectorExtract] Background:', e));
+                }
+            }
+
+            // ====== Mind Snapshot (情绪状态栏 + 心声) — fire-and-forget ======
+            if (secondaryConfig?.apiKey && aiContent) {
+                const charSnapshot = { ...char };
+                // Store context for potential retry
+                lastMindSnapshotCtx.current = { char: charSnapshot, aiContent, msgs: currentMsgs, config: secondaryConfig };
+                // Delay 2s to reduce resource contention with VectorMemory/EventExtractor on mobile
+                setTimeout(() => {
+                    MindSnapshotExtractor.extract(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                        (reason) => addToast(reason, 'error')
+                    )
+                        .then(newMood => {
+                            if (newMood && char && onMoodUpdate) {
+                                onMoodUpdate(char.id, newMood);
+                            } else {
+                                console.warn('💭 [MindSnapshot] Extraction returned null — retry available via avatar button');
+                            }
+                        })
+                        .catch(e => console.error('💭 [MindSnapshot] Background:', e));
+                }, 2000);
+            }
+
+            // ====== Event Extractor (时间事件提取) — fire-and-forget ======
+            if (secondaryConfig?.apiKey) {
+                const lastUserMsg = currentMsgs.filter(m => m.role === 'user').pop();
+                if (lastUserMsg && lastUserMsg.content) {
+                    EventExtractor.extract(char.id, lastUserMsg.content, secondaryConfig)
+                        .catch(e => console.error('⏰ [EventExtractor] Background:', e));
+                }
+            }
+
         } catch (e: any) {
             await DB.saveMessage({ charId: char.id, role: 'system', type: 'text', content: `[连接中断: ${e.message}]` });
             setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
@@ -1104,6 +1226,21 @@ export const useChatAI = ({
         }
     };
 
+    const retryMindSnapshot = useCallback(() => {
+        const ctx = lastMindSnapshotCtx.current;
+        if (!ctx) { console.warn('💭 [MindSnapshot] No context to retry'); return; }
+        console.log('💭 [MindSnapshot] Manual retry triggered');
+        MindSnapshotExtractor.extract(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
+            (reason) => addToast(reason, 'error')
+        )
+            .then(newMood => {
+                if (newMood && ctx.char && onMoodUpdate) {
+                    onMoodUpdate(ctx.char.id, newMood);
+                }
+            })
+            .catch(e => console.error('💭 [MindSnapshot] Retry failed:', e));
+    }, [addToast, onMoodUpdate]);
+
     return {
         isTyping,
         recallStatus,
@@ -1112,7 +1249,8 @@ export const useChatAI = ({
         xhsStatus,
         lastTokenUsage,
         tokenBreakdown,
-        setLastTokenUsage, // Allow manual reset if needed
-        triggerAI
+        setLastTokenUsage,
+        triggerAI,
+        retryMindSnapshot
     };
 };

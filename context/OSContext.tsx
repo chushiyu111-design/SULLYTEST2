@@ -4,6 +4,7 @@ import { APIConfig, AppID, OSTheme, CharacterProfile, ChatTheme, Toast, FullBack
 import { DB } from '../utils/db';
 import { onSystemLog } from '../utils/systemInterceptor';
 import { exportSystemData, importSystemData, ExportStateSnapshot, ImportCallbacks } from '../utils/systemBackup';
+import { AutonomousAgent } from '../utils/autonomousAgent';
 import { haptic, setHapticsEnabled as setHapticsEnabledGlobal, getHapticsEnabled } from '../utils/haptics';
 
 // Sub-contexts
@@ -680,6 +681,24 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
         checkAllSchedules();
         return () => { if (schedulerRef.current) clearInterval(schedulerRef.current); };
     }, [isDataLoaded, characters]);
+
+    // --- Autonomous Agent (自主决策引擎) ---
+    useEffect(() => {
+        if (!isDataLoaded || !activeCharacterId) return;
+        const char = characters.find(c => c.id === activeCharacterId);
+        if (!char) return;
+
+        // 从 localStorage 读取副 API 配置（与 useChatAI 中的 secondaryConfig 保持一致）
+        const subKey = localStorage.getItem('sub_api_key');
+        const subUrl = localStorage.getItem('sub_api_base_url');
+        const subModel = localStorage.getItem('sub_api_model');
+        if (!subKey || !subUrl || !subModel) return; // 没配副 API 则不启动
+
+        const secondaryApi = { baseUrl: subUrl, apiKey: subKey, model: subModel };
+        const agent = new AutonomousAgent();
+        const cleanup = agent.start(activeCharacterId, char, secondaryApi);
+        return cleanup;
+    }, [isDataLoaded, activeCharacterId, characters]);
 
     const updateTheme = async (updates: Partial<OSTheme>) => {
         const { wallpaper, launcherWidgetImage, launcherWidgets, desktopDecorations, customFont, ...styleUpdates } = updates;
