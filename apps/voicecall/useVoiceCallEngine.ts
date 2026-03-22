@@ -501,18 +501,18 @@ export function useVoiceCallEngine(options: UseVoiceCallEngineOptions): UseVoice
 
                     // TTS 已失败 → 降级为逐句文字展示
                     if (ttsConnectFailed) {
-                        enqueueDegradedSentence(sentence);
+                        enqueueDegradedSentence(ttsText);
                         return;
                     }
 
                     // TTS 预连接已完成 → 直接发送
                     if (ttsReady) {
-                        try { ttsWs.sendText(sentence); sentSentCount++; } catch (err) {
+                        try { ttsWs.sendText(ttsText); sentSentCount++; } catch (err) {
                             console.error('[Engine] TTS sendText error:', err);
                         }
                     } else {
                         // 预连接尚未完成 → 缓冲，连接成功后自动 flush
-                        pendingSentences.push(sentence);
+                        pendingSentences.push(ttsText);
                     }
                 },
                 onComplete: (full) => {

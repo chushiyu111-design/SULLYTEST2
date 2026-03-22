@@ -34,7 +34,7 @@
 
 @font-face {
     font-family: 'TarotFont';
-    src: url('/fonts/tarot.ttf') format('truetype');
+    src: url('/fonts/tarot.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;

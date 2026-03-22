@@ -21,7 +21,7 @@
 /* --- Handwriting Font: 手写体6 (Inner Voice) --- */
 @font-face {
   font-family: 'ShouXie6';
-  src: url('/fonts/shouxie6.ttf') format('truetype');
+  src: url('/fonts/shouxie6.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -30,7 +30,7 @@
 /* --- Handwriting Font: 爱你在黄昏日落手写体 (Inner Voice fallback) --- */
 @font-face {
   font-family: 'HuangHunShouXie';
-  src: url('/fonts/huanghun-shouxie.ttf') format('truetype');
+  src: url('/fonts/huanghun-shouxie.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
