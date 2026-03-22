@@ -1,26 +1,42 @@
 /**
- * Embedding API Service (OpenAI-compatible)
+ * Embedding API Service (Multi-provider)
  * 
- * Works with any OpenAI-compatible embedding endpoint:
- *   - SiliconFlow (默认, 推荐 BAAI/bge-m3)
- *   - OpenAI
- *   - 智谱, Jina, 阿里百炼 等
+ * Supports two provider modes:
+ *   1. OpenAI-compatible (default) — SiliconFlow, OpenAI, 智谱, Jina, etc.
+ *   2. Cohere — embed-v4.0 with search_document/search_query input types
  * 
  * Config stored in localStorage:
+ *   - embedding_provider   ('openai' | 'cohere', default: 'openai')
  *   - embedding_api_key
- *   - embedding_base_url  (default: https://api.siliconflow.cn/v1)
- *   - embedding_model     (default: BAAI/bge-m3)
+ *   - embedding_base_url   (default depends on provider)
+ *   - embedding_model      (default depends on provider)
  */
 
-const DEFAULT_BASE_URL = 'https://api.siliconflow.cn/v1';
-const DEFAULT_MODEL = 'BAAI/bge-m3';
+export type EmbeddingProvider = 'openai' | 'cohere';
 
-/** Read config from localStorage with defaults */
+const DEFAULTS: Record<EmbeddingProvider, { baseUrl: string; model: string; rerankModel: string }> = {
+    openai: {
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        model: 'BAAI/bge-m3',
+        rerankModel: 'BAAI/bge-reranker-v2-m3',
+    },
+    cohere: {
+        baseUrl: 'https://api.cohere.com/v2',
+        model: 'embed-v4.0',
+        rerankModel: 'rerank-v3.5',
+    },
+};
+
+/** Read config from localStorage with provider-aware defaults */
 export function getEmbeddingConfig() {
+    const provider = (localStorage.getItem('embedding_provider') || 'openai') as EmbeddingProvider;
+    const defaults = DEFAULTS[provider] || DEFAULTS.openai;
     return {
+        provider,
         apiKey: localStorage.getItem('embedding_api_key') || '',
-        baseUrl: localStorage.getItem('embedding_base_url') || DEFAULT_BASE_URL,
-        model: localStorage.getItem('embedding_model') || DEFAULT_MODEL,
+        baseUrl: localStorage.getItem('embedding_base_url') || defaults.baseUrl,
+        model: localStorage.getItem('embedding_model') || defaults.model,
+        rerankModel: defaults.rerankModel,
     };
 }
 
@@ -115,12 +131,30 @@ export const EmbeddingService = {
     /**
      * Embed a single text string → float vector
      * Retries up to 2 times on rate limit errors (403/429) with exponential backoff.
+     * 
+     * @param taskType - Hint for Cohere's input_type:
+     *   'RETRIEVAL_QUERY' → search_query (for retrieval queries)
+     *   anything else / undefined → search_document (for stored documents)
      */
-    async embed(text: string, _taskType?: string, apiKeyOverride?: string): Promise<number[]> {
+    async embed(text: string, taskType?: string, apiKeyOverride?: string): Promise<number[]> {
         const config = getEmbeddingConfig();
         const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
+        // ====== Cohere path ======
+        if (config.provider === 'cohere') {
+            const inputType = taskType === 'RETRIEVAL_QUERY' ? 'search_query' : 'search_document';
+            const body = JSON.stringify({
+                model: config.model,
+                texts: [text],
+                input_type: inputType,
+                embedding_types: ['float'],
+            });
+            const data = await fetchWithRetry(`${baseUrl}/embed`, apiKey, body);
+            return data.embeddings?.float?.[0] as number[];
+        }
+
+        // ====== OpenAI-compatible path (unchanged) ======
         const body = JSON.stringify({
             model: config.model,
             input: text,
@@ -135,11 +169,26 @@ export const EmbeddingService = {
      * Batch embed multiple texts. Uses the API's native batch support.
      * Retries on rate limit errors.
      */
-    async embedBatch(texts: string[], _taskType?: string, apiKeyOverride?: string): Promise<number[][]> {
+    async embedBatch(texts: string[], taskType?: string, apiKeyOverride?: string): Promise<number[][]> {
         const config = getEmbeddingConfig();
         const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
+        // ====== Cohere path ======
+        if (config.provider === 'cohere') {
+            const inputType = taskType === 'RETRIEVAL_QUERY' ? 'search_query' : 'search_document';
+            const body = JSON.stringify({
+                model: config.model,
+                texts,
+                input_type: inputType,
+                embedding_types: ['float'],
+            });
+            const data = await fetchWithRetry(`${baseUrl}/embed`, apiKey, body);
+            // Cohere returns embeddings.float as a 2D array, already in order
+            return (data.embeddings?.float || []) as number[][];
+        }
+
+        // ====== OpenAI-compatible path (unchanged) ======
         const body = JSON.stringify({
             model: config.model,
             input: texts,
@@ -266,8 +315,14 @@ export const EmbeddingService = {
         const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
+        // Use provider-aware rerank model
+        const rerankModel = config.rerankModel;
+
+        // Cohere rerank: endpoint is /rerank, same response format { results: [...] }
+        // OpenAI-compatible (SiliconFlow): endpoint is also /rerank
+        // Both return { results: [{ index, relevance_score }] }
         const body = JSON.stringify({
-            model: 'BAAI/bge-reranker-v2-m3',
+            model: rerankModel,
             query,
             documents,
             top_n: topN || documents.length,

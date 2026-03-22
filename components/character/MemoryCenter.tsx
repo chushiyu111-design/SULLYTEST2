@@ -701,7 +701,7 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
                             <span className="text-3xl font-light text-emerald-500">{vmCount}</span>
                             <span className="text-[10px] text-slate-500">条</span>
                         </div>
-                        <span className="text-[9px] text-slate-400 mt-1 font-mono">Embedding 1024D</span>
+                        <span className="text-[9px] text-slate-400 mt-1 font-mono">Embedding {vmList.length > 0 && vmList[0].vector?.length ? `${vmList[0].vector.length}D` : 'N/A'}</span>
                     </div>
                 </div>
 
