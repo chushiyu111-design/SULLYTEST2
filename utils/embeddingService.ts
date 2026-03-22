@@ -37,6 +37,10 @@ export function getEmbeddingConfig() {
         baseUrl: localStorage.getItem('embedding_base_url') || defaults.baseUrl,
         model: localStorage.getItem('embedding_model') || defaults.model,
         rerankModel: defaults.rerankModel,
+        // Cohere dual-key: Trial Key for rerank (free, limited)
+        rerankApiKey: localStorage.getItem('cohere_rerank_api_key') || '',
+        // Whether the user has confirmed switching to paid rerank
+        rerankUsePaid: localStorage.getItem('cohere_rerank_use_paid') === 'true',
     };
 }
 
@@ -298,7 +302,11 @@ export const EmbeddingService = {
     /**
      * Rerank candidates using a cross-encoder model.
      * Sends query + documents to the Rerank API for fine-grained relevance scoring.
-     * Uses BAAI/bge-reranker-v2-m3 (free on SiliconFlow).
+     * 
+     * Cohere dual-key logic:
+     *   1. If Trial Key is set → use it (free, limited to 1000/month)
+     *   2. If Trial returns 429 → fire 'rerank-trial-exhausted' event, return null
+     *   3. If user confirmed paid mode → use Production Key (apiKey) for rerank
      * 
      * Returns array of { index, relevance_score } sorted by relevance (highest first).
      * Returns null on failure (caller should fallback to original ranking).
@@ -312,15 +320,27 @@ export const EmbeddingService = {
         if (documents.length === 0) return null;
 
         const config = getEmbeddingConfig();
-        const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
-
-        // Use provider-aware rerank model
         const rerankModel = config.rerankModel;
 
-        // Cohere rerank: endpoint is /rerank, same response format { results: [...] }
-        // OpenAI-compatible (SiliconFlow): endpoint is also /rerank
-        // Both return { results: [{ index, relevance_score }] }
+        // Determine which API key to use for rerank
+        let rerankKey: string;
+        if (apiKeyOverride) {
+            rerankKey = apiKeyOverride;
+        } else if (config.provider === 'cohere') {
+            // Cohere dual-key: check paid mode first, then Trial, then main key
+            if (config.rerankUsePaid) {
+                rerankKey = config.apiKey; // Production Key (paid)
+                console.log('🧠 [Rerank] Using paid Production Key');
+            } else if (config.rerankApiKey) {
+                rerankKey = config.rerankApiKey; // Trial Key (free)
+            } else {
+                rerankKey = config.apiKey; // Fallback to main key
+            }
+        } else {
+            rerankKey = config.apiKey;
+        }
+
         const body = JSON.stringify({
             model: rerankModel,
             query,
@@ -338,13 +358,26 @@ export const EmbeddingService = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
+                    'Authorization': `Bearer ${rerankKey}`,
                 },
                 body,
                 signal: controller.signal,
             });
 
             if (!resp.ok) {
+                // Cohere Trial Key exhausted: 429 Too Many Requests
+                if (config.provider === 'cohere' && !config.rerankUsePaid && (resp.status === 429 || resp.status === 402)) {
+                    console.warn('🧠 [Rerank] Trial Key quota exhausted (429), notifying UI...');
+                    // Check if user already dismissed this month
+                    const dismissedUntil = parseInt(localStorage.getItem('rerank_dismissed_until') || '0', 10);
+                    if (Date.now() < dismissedUntil) {
+                        console.log('🧠 [Rerank] User dismissed upgrade prompt this month, silently degrading');
+                    } else {
+                        // Fire event for UI to pick up and show confirmation dialog
+                        window.dispatchEvent(new CustomEvent('rerank-trial-exhausted'));
+                    }
+                    return null;
+                }
                 console.warn(`🧠 [Rerank] API error ${resp.status}, falling back`);
                 return null;
             }

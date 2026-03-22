@@ -132,6 +132,9 @@ const Settings: React.FC = () => {
     const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
     const [embeddingTestStatus, setEmbeddingTestStatus] = useState('');
     const [isLoadingEmbedModels, setIsLoadingEmbedModels] = useState(false);
+    // Cohere dual-key: separate Trial Key for rerank
+    const [cohereRerankKey, setCohereRerankKey] = useState(() => localStorage.getItem('cohere_rerank_api_key') || '');
+    const [rerankUsePaid, setRerankUsePaid] = useState(() => localStorage.getItem('cohere_rerank_use_paid') === 'true');
 
     // Helper: switch embedding provider with default values
     const switchEmbeddingProvider = (provider: 'openai' | 'cohere') => {
@@ -1116,7 +1119,7 @@ const Settings: React.FC = () => {
                             />
                             {embeddingProvider === 'cohere' ? (
                                 <a href="https://dashboard.cohere.com/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
-                                    → 免费注册 Cohere (Trial 免费用)
+                                    → 免费注册 Cohere (Production Key，embed 用)
                                 </a>
                             ) : (
                                 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
@@ -1124,6 +1127,39 @@ const Settings: React.FC = () => {
                                 </a>
                             )}
                         </div>
+
+                        {/* Cohere Rerank Trial Key (only shown for Cohere provider) */}
+                        {embeddingProvider === 'cohere' && (
+                            <div className="bg-[#e6f0e4]/50 rounded-2xl p-3 space-y-2">
+                                <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest block pl-1">Rerank Trial Key（免费，每月 1000 次）</label>
+                                <input
+                                    type="password"
+                                    value={cohereRerankKey}
+                                    onChange={e => setCohereRerankKey(e.target.value)}
+                                    placeholder="Trial Key..."
+                                    className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                                />
+                                <p className="text-[9px] text-[#8bab82] pl-1 leading-relaxed">
+                                    Rerank 用来精排检索结果，提升记忆召回质量。Trial Key 每月 1,000 次免费。
+                                    <br />用完后会提示是否切换到付费模式（每次约 ¥0.014，每月约 ¥86）。
+                                </p>
+                                {rerankUsePaid && (
+                                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200/60 rounded-xl px-3 py-2">
+                                        <span className="text-[10px] text-amber-700 font-bold">⚡ Rerank 付费模式已开启</span>
+                                        <button
+                                            onClick={() => {
+                                                setRerankUsePaid(false);
+                                                localStorage.setItem('cohere_rerank_use_paid', 'false');
+                                                addToast('已关闭 Rerank 付费模式，将使用 Trial Key', 'info');
+                                            }}
+                                            className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-bold active:scale-95 transition-transform"
+                                        >
+                                            关闭付费
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Model Selector */}
                         <div>
@@ -1196,6 +1232,13 @@ const Settings: React.FC = () => {
                                         localStorage.setItem('embedding_api_key', embeddingKey.trim());
                                         localStorage.setItem('embedding_base_url', embeddingUrl.trim());
                                         localStorage.setItem('embedding_model', embeddingModel.trim());
+                                        // Save Cohere rerank Trial Key
+                                        if (embeddingProvider === 'cohere' && cohereRerankKey.trim()) {
+                                            localStorage.setItem('cohere_rerank_api_key', cohereRerankKey.trim());
+                                        } else if (embeddingProvider !== 'cohere') {
+                                            localStorage.removeItem('cohere_rerank_api_key');
+                                            localStorage.removeItem('cohere_rerank_use_paid');
+                                        }
                                         // Warn about re-vectorization if provider changed
                                         if (oldProvider !== embeddingProvider) {
                                             addToast(`已切换到 ${embeddingProvider === 'cohere' ? 'Cohere' : 'OpenAI 兼容'}。建议在「记忆中心」重新向量化已有记忆以获得最佳检索效果。`, 'info');
