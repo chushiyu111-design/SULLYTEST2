@@ -1167,6 +1167,9 @@ export class VoiceCallLlm {
             let sentence = '';    // 当前正在拼接的句子
             let fullText = '';    // 完整回复（不含 thinking 内容）
             const thinkFilter = new ThinkingTagFilter();
+            // ─── 外语模式：跟踪 [[翻译:...]] 标签内部，禁止在标签内截断 ───
+            let insideBrackets = 0;   // 嵌套 [[ 深度（0 = 正常文本）
+            let bracketBuf = '';      // 用于匹配 [[ 的 lookahead 缓冲
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -1197,8 +1200,15 @@ export class VoiceCallLlm {
                                 fullText += c;
                                 sentence += c;
 
+                                // ─── [[ / ]] 括号追踪（防止在翻译标记内截断）───
+                                bracketBuf += c;
+                                if (bracketBuf.length > 2) bracketBuf = bracketBuf.slice(-2);
+                                if (bracketBuf === '[[') { insideBrackets++; bracketBuf = ''; }
+                                if (bracketBuf === ']]' && insideBrackets > 0) { insideBrackets--; bracketBuf = ''; }
+
+                                // 只在翻译标记外部才按标点截断
                                 const shouldBreak =
-                                    SENTENCE_BREAK_RE.test(c);
+                                    insideBrackets === 0 && SENTENCE_BREAK_RE.test(c);
 
                                 if (shouldBreak && sentence.trim()) {
                                     callbacks.onSentence(sentence.trim());
