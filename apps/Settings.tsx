@@ -1204,7 +1204,21 @@ const Settings: React.FC = () => {
                                     className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                                 >
                                     {!embeddingModels.includes(embeddingModel) && <option value={embeddingModel}>{embeddingModel}</option>}
-                                    {embeddingModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                    {embeddingModels.map(m => {
+                                        const desc: Record<string, string> = {
+                                            'BAAI/bge-m3': '免费 · 多语言 · 推荐',
+                                            'BAAI/bge-large-zh-v1.5': '免费 · 纯中文',
+                                            'BAAI/bge-large-en-v1.5': '免费 · 纯英文',
+                                            'netease-youdao/bce-embedding-base_v1': '免费 · 中英双语',
+                                            'BAAI/bge-reranker-v2-m3': '免费 · 重排序模型',
+                                            'Pro/BAAI/bge-m3': '付费Pro · 更快',
+                                            'Pro/BAAI/bge-reranker-v2-m3': '付费Pro · 重排序',
+                                            'Qwen/Qwen3-Embedding-8B': '付费 · 通义8B',
+                                            'Qwen/Qwen3-Embedding-4B': '付费 · 通义4B',
+                                            'Qwen/Qwen3-Embedding-0.6B': '付费 · 通义0.6B · 轻量',
+                                        };
+                                        return <option key={m} value={m}>{m}{desc[m] ? ` — ${desc[m]}` : ''}</option>;
+                                    })}
                                 </select>
                             ) : (
                                 <input

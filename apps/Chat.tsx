@@ -102,6 +102,10 @@ const Chat: React.FC = () => {
     // --- Voice transcript expansion (inline "转文字") ---
     const [expandedVoiceTextIds, setExpandedVoiceTextIds] = useState<Set<number>>(new Set());
 
+    // --- Rerank Trial Key Exhaustion ---
+    const [showRerankUpgradeModal, setShowRerankUpgradeModal] = useState(false);
+    const [rerankUpgradeStep, setRerankUpgradeStep] = useState<1 | 2>(1); // 1 = first confirm, 2 = second confirm
+
     // 录音错误可视化 — 移动端 title 属性不显示，需要 toast
     useEffect(() => {
         if (voiceRecorder.error) {
@@ -187,6 +191,17 @@ const Chat: React.FC = () => {
         window.addEventListener('autonomous-call', handler);
         return () => window.removeEventListener('autonomous-call', handler);
     }, [activeCharacterId, openApp]);
+
+    // --- Rerank Trial Key Exhaustion Event Listener ---
+    useEffect(() => {
+        const handler = () => {
+            console.log('🧠 [Chat] Rerank trial exhausted event received');
+            setRerankUpgradeStep(1);
+            setShowRerankUpgradeModal(true);
+        };
+        window.addEventListener('rerank-trial-exhausted', handler);
+        return () => window.removeEventListener('rerank-trial-exhausted', handler);
+    }, []);
 
     const canReroll = !isTyping && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
 
@@ -1423,6 +1438,97 @@ const Chat: React.FC = () => {
                                     </button>
                                 </>
                             )}
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Rerank Trial Key Exhaustion — Upgrade Confirmation Modal */}
+            <Modal
+                isOpen={showRerankUpgradeModal}
+                title={rerankUpgradeStep === 1 ? 'Rerank 免费额度已用完' : '⚠️ 再次确认'}
+                onClose={() => setShowRerankUpgradeModal(false)}
+            >
+                {rerankUpgradeStep === 1 ? (
+                    <div className="space-y-4 py-2">
+                        <div className="flex items-center justify-center">
+                            <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-amber-600">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-600 text-center leading-relaxed">
+                            本月的 <b>Rerank 免费额度</b>（1,000 次）已用完。
+                        </p>
+                        <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+                            <p className="text-xs text-slate-500 font-bold">💰 付费 Rerank 费用参考：</p>
+                            <ul className="text-xs text-slate-500 space-y-1 pl-2">
+                                <li>• 每次 Rerank 约 <b className="text-amber-600">¥0.014</b>（$0.002）</li>
+                                <li>• 按每天 200 条消息估算 → 约 <b className="text-amber-600">¥86/月</b></li>
+                            </ul>
+                        </div>
+                        <p className="text-xs text-slate-400 text-center">
+                            不付费也能正常使用，只是检索精度略有降低。
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    // Dismiss until end of month
+                                    const now = new Date();
+                                    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+                                    localStorage.setItem('rerank_dismissed_until', String(endOfMonth));
+                                    setShowRerankUpgradeModal(false);
+                                    addToast('已降级为纯向量检索，本月不再提示', 'info');
+                                }}
+                                className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl active:scale-95 transition-all text-sm"
+                            >
+                                暂不，免费就好
+                            </button>
+                            <button
+                                onClick={() => setRerankUpgradeStep(2)}
+                                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-bold rounded-2xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all text-sm"
+                            >
+                                我要付费
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-4 py-2">
+                        <div className="flex items-center justify-center">
+                            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-red-500">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-700 text-center font-bold">
+                            确认开启付费 Rerank？
+                        </p>
+                        <div className="bg-red-50 border border-red-200/60 rounded-2xl p-4">
+                            <p className="text-xs text-red-600 leading-relaxed text-center">
+                                开启后，Rerank 将使用你的 <b>Production Key</b> 按量计费。<br />
+                                每次调用约 <b>¥0.014</b>，每月约 <b>¥86</b>（按 200 条/天估算）。<br />
+                                你可以随时在「设置 → 向量记忆引擎」关闭付费模式。
+                            </p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setRerankUpgradeStep(1)}
+                                className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl active:scale-95 transition-all text-sm"
+                            >
+                                返回
+                            </button>
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem('cohere_rerank_use_paid', 'true');
+                                    setShowRerankUpgradeModal(false);
+                                    addToast('已开启 Rerank 付费模式，使用 Production Key', 'success');
+                                }}
+                                className="flex-1 py-3 bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold rounded-2xl shadow-lg shadow-red-500/20 active:scale-95 transition-all text-sm"
+                            >
+                                确认付费
+                            </button>
                         </div>
                     </div>
                 )}
