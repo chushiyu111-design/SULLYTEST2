@@ -594,6 +594,24 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
                 setCustomThemes(dbThemes);
                 if (dbUser) setUserProfile(dbUser);
 
+                // 预加载当前角色的所有图片资源（头像、立绘、房间素材、皮肤套装）
+                try {
+                    const { preloadImages } = await import('../utils/preloadResources');
+                    const activeChar = finalChars.find((c: CharacterProfile) => c.id === (localStorage.getItem('os_last_active_char_id') || sullyV2.id)) || finalChars[0];
+                    if (activeChar) {
+                        const urls: string[] = [
+                            activeChar.avatar,
+                            ...Object.values(activeChar.sprites || {}),
+                            activeChar.roomConfig?.wallImage,
+                            ...(activeChar.roomConfig?.items || []).map((i: any) => i.image),
+                            ...(activeChar.dateSkinSets || []).flatMap((s: any) => Object.values(s.sprites || {})),
+                        ].filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
+                        preloadImages(urls);
+                    }
+                } catch (e) {
+                    // 预加载失败不影响正常功能
+                }
+
             } catch (err) {
                 console.error('Data init failed:', err);
             } finally {

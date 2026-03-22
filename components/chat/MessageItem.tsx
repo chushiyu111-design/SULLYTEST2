@@ -386,7 +386,6 @@ const MessageItem = React.memo(({
                                                 display: 'block',
                                                 filter: 'contrast(0.95) sepia(15%) opacity(0.95)',
                                             }}
-                                            loading="lazy"
                                             decoding="async"
                                         />
                                         
