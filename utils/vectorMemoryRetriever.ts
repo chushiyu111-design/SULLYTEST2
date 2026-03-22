@@ -72,7 +72,15 @@ const REWRITE_PROMPT_TEMPLATE = `你是一个记忆检索助手。根据以下�
 
 /**
  * Rewrite conversational context into a focused retrieval query.
- * Uses Qwen3-8B via SiliconFlow (same key as embedding).
+ * Uses a lightweight free LLM call with 3s timeout.
+ * 
+ * Provider routing:
+ *   - OpenAI-compatible: uses embedding key + SiliconFlow endpoint (Qwen3-8B)
+ *   - Cohere: embedding key can't call LLM, so fallback to:
+ *       1. SiliconFlow STT key → Qwen3-8B (free, unlimited)
+ *       2. Groq STT key → llama-3.3-70b-versatile (free, generous limits)
+ *       3. null (rule-based fallback)
+ * 
  * Returns null on failure (caller should fallback).
  */
 async function rewriteQueryWithLLM(
@@ -80,7 +88,48 @@ async function rewriteQueryWithLLM(
     embeddingApiKey: string
 ): Promise<string | null> {
     const config = getEmbeddingConfig();
-    const baseUrl = config.baseUrl.replace(/\/+$/, '');
+
+    // Determine which LLM endpoint + key to use for query rewrite
+    let rewriteBaseUrl: string;
+    let rewriteApiKey: string;
+    let rewriteModel: string;
+
+    if (config.provider === 'cohere') {
+        // Cohere key can't call chat/completions — try STT keys instead
+        let sttSiliconKey = '';
+        let sttGroqKey = '';
+        try {
+            const sttRaw = localStorage.getItem('os_stt_config');
+            if (sttRaw) {
+                const sttCfg = JSON.parse(sttRaw);
+                sttSiliconKey = sttCfg.siliconflowApiKey || '';
+                sttGroqKey = sttCfg.groqApiKey || '';
+            }
+        } catch { /* silent */ }
+
+        if (sttSiliconKey) {
+            // Best: SiliconFlow Qwen3-8B — completely free, no monthly limit
+            rewriteBaseUrl = 'https://api.siliconflow.cn/v1';
+            rewriteApiKey = sttSiliconKey;
+            rewriteModel = QUERY_REWRITE_MODEL; // Qwen/Qwen3-8B
+            console.log('🧠 [VectorRetriever] Cohere mode: using SiliconFlow STT key for query rewrite');
+        } else if (sttGroqKey) {
+            // Fallback: Groq Llama — free with generous limits
+            rewriteBaseUrl = 'https://api.groq.com/openai/v1';
+            rewriteApiKey = sttGroqKey;
+            rewriteModel = 'llama-3.3-70b-versatile';
+            console.log('🧠 [VectorRetriever] Cohere mode: using Groq STT key for query rewrite');
+        } else {
+            // No free LLM key available — fall back to rule-based
+            console.log('🧠 [VectorRetriever] Cohere mode: no STT key found, using rule-based fallback');
+            return null;
+        }
+    } else {
+        // OpenAI-compatible: use embedding key + same base URL (SiliconFlow)
+        rewriteBaseUrl = config.baseUrl.replace(/\/+$/, '');
+        rewriteApiKey = embeddingApiKey;
+        rewriteModel = QUERY_REWRITE_MODEL;
+    }
 
     // Build context: last 1 assistant + last 2 user messages
     const contextLines: string[] = [];
@@ -107,14 +156,14 @@ async function rewriteQueryWithLLM(
     const timer = setTimeout(() => controller.abort(), QUERY_REWRITE_TIMEOUT_MS);
 
     try {
-        const resp = await fetch(`${baseUrl}/chat/completions`, {
+        const resp = await fetch(`${rewriteBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${embeddingApiKey}`,
+                'Authorization': `Bearer ${rewriteApiKey}`,
             },
             body: JSON.stringify({
-                model: QUERY_REWRITE_MODEL,
+                model: rewriteModel,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.3,
                 max_tokens: 100,

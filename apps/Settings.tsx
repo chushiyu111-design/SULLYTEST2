@@ -125,12 +125,30 @@ const Settings: React.FC = () => {
     const [downloadUrl, setDownloadUrl] = useState<string>('');
 
     // Embedding Config
+    const [embeddingProvider, setEmbeddingProvider] = useState<'openai' | 'cohere'>(() => (localStorage.getItem('embedding_provider') || 'openai') as 'openai' | 'cohere');
     const [embeddingKey, setEmbeddingKey] = useState(() => localStorage.getItem('embedding_api_key') || '');
     const [embeddingUrl, setEmbeddingUrl] = useState(() => localStorage.getItem('embedding_base_url') || 'https://api.siliconflow.cn/v1');
     const [embeddingModel, setEmbeddingModel] = useState(() => localStorage.getItem('embedding_model') || 'BAAI/bge-m3');
     const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
     const [embeddingTestStatus, setEmbeddingTestStatus] = useState('');
     const [isLoadingEmbedModels, setIsLoadingEmbedModels] = useState(false);
+    // Cohere dual-key: separate Trial Key for rerank
+    const [cohereRerankKey, setCohereRerankKey] = useState(() => localStorage.getItem('cohere_rerank_api_key') || '');
+    const [rerankUsePaid, setRerankUsePaid] = useState(() => localStorage.getItem('cohere_rerank_use_paid') === 'true');
+
+    // Helper: switch embedding provider with default values
+    const switchEmbeddingProvider = (provider: 'openai' | 'cohere') => {
+        setEmbeddingProvider(provider);
+        setEmbeddingModels([]);
+        setEmbeddingTestStatus('');
+        if (provider === 'cohere') {
+            setEmbeddingUrl('https://api.cohere.com/v2');
+            setEmbeddingModel('embed-v4.0');
+        } else {
+            setEmbeddingUrl('https://api.siliconflow.cn/v1');
+            setEmbeddingModel('BAAI/bge-m3');
+        }
+    };
 
     const [statusMsg, setStatusMsg] = useState('');
     const importInputRef = useRef<HTMLInputElement>(null);
@@ -1043,12 +1061,40 @@ const Settings: React.FC = () => {
                             </div>
                             <div>
                                 <h2 className="text-sm font-semibold text-[#5a7a52] tracking-wider">向量记忆引擎</h2>
-                                <p className="text-[10px] text-[#8bab82]">OpenAI 兼容接口 · 默认硬基流动</p>
+                                <p className="text-[10px] text-[#8bab82]">{embeddingProvider === 'cohere' ? 'Cohere Embed-v4 · 高质量检索' : 'OpenAI 兼容接口 · 默认硅基流动'}</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="relative space-y-4">
+                        {/* Provider Selector */}
+                        <div>
+                            <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest mb-1.5 block pl-1">供应商</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => switchEmbeddingProvider('openai')}
+                                    className={`py-2.5 rounded-xl text-xs font-bold transition-all ${embeddingProvider === 'openai'
+                                        ? 'bg-[#6b9b60]/15 text-[#5a7a52] ring-1 ring-[#6b9b60]/30'
+                                        : 'bg-white/50 text-[#8bab82] border border-[#d4e8d0]/60'}`}
+                                >
+                                    OpenAI 兼容
+                                </button>
+                                <button
+                                    onClick={() => switchEmbeddingProvider('cohere')}
+                                    className={`py-2.5 rounded-xl text-xs font-bold transition-all ${embeddingProvider === 'cohere'
+                                        ? 'bg-[#6b9b60]/15 text-[#5a7a52] ring-1 ring-[#6b9b60]/30'
+                                        : 'bg-white/50 text-[#8bab82] border border-[#d4e8d0]/60'}`}
+                                >
+                                    Cohere
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-[#8bab82] mt-1 pl-1">
+                                {embeddingProvider === 'cohere'
+                                    ? 'Cohere embed-v4 + rerank-v3.5，检索质量最佳，Trial 可免费使用'
+                                    : '支持硅基流动、OpenAI、智谱 等 OpenAI 兼容接口'}
+                            </p>
+                        </div>
+
                         {/* Base URL */}
                         <div>
                             <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest mb-1.5 block pl-1">Base URL</label>
@@ -1056,7 +1102,7 @@ const Settings: React.FC = () => {
                                 type="text"
                                 value={embeddingUrl}
                                 onChange={e => setEmbeddingUrl(e.target.value)}
-                                placeholder="https://api.siliconflow.cn/v1"
+                                placeholder={embeddingProvider === 'cohere' ? 'https://api.cohere.com/v2' : 'https://api.siliconflow.cn/v1'}
                                 className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                             />
                         </div>
@@ -1071,10 +1117,49 @@ const Settings: React.FC = () => {
                                 placeholder="sk-..."
                                 className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                             />
-                            <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
-                                → 免费获取硬基流动 API Key (SiliconFlow)
-                            </a>
+                            {embeddingProvider === 'cohere' ? (
+                                <a href="https://dashboard.cohere.com/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
+                                    → 免费注册 Cohere (Production Key，embed 用)
+                                </a>
+                            ) : (
+                                <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6b9b60] hover:underline mt-1.5 inline-block pl-1">
+                                    → 免费获取硅基流动 API Key (SiliconFlow)
+                                </a>
+                            )}
                         </div>
+
+                        {/* Cohere Rerank Trial Key (only shown for Cohere provider) */}
+                        {embeddingProvider === 'cohere' && (
+                            <div className="bg-[#e6f0e4]/50 rounded-2xl p-3 space-y-2">
+                                <label className="text-[10px] font-bold text-[#8bab82] uppercase tracking-widest block pl-1">Rerank Trial Key（免费，每月 1000 次）</label>
+                                <input
+                                    type="password"
+                                    value={cohereRerankKey}
+                                    onChange={e => setCohereRerankKey(e.target.value)}
+                                    placeholder="Trial Key..."
+                                    className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
+                                />
+                                <p className="text-[9px] text-[#8bab82] pl-1 leading-relaxed">
+                                    Rerank 用来精排检索结果，提升记忆召回质量。Trial Key 每月 1,000 次免费。
+                                    <br />用完后会提示是否切换到付费模式（每次约 ¥0.014，每月约 ¥86）。
+                                </p>
+                                {rerankUsePaid && (
+                                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200/60 rounded-xl px-3 py-2">
+                                        <span className="text-[10px] text-amber-700 font-bold">⚡ Rerank 付费模式已开启</span>
+                                        <button
+                                            onClick={() => {
+                                                setRerankUsePaid(false);
+                                                localStorage.setItem('cohere_rerank_use_paid', 'false');
+                                                addToast('已关闭 Rerank 付费模式，将使用 Trial Key', 'info');
+                                            }}
+                                            className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-bold active:scale-95 transition-transform"
+                                        >
+                                            关闭付费
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Model Selector */}
                         <div>
@@ -1119,7 +1204,21 @@ const Settings: React.FC = () => {
                                     className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                                 >
                                     {!embeddingModels.includes(embeddingModel) && <option value={embeddingModel}>{embeddingModel}</option>}
-                                    {embeddingModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                    {embeddingModels.map(m => {
+                                        const desc: Record<string, string> = {
+                                            'BAAI/bge-m3': '免费 · 多语言 · 推荐',
+                                            'BAAI/bge-large-zh-v1.5': '免费 · 纯中文',
+                                            'BAAI/bge-large-en-v1.5': '免费 · 纯英文',
+                                            'netease-youdao/bce-embedding-base_v1': '免费 · 中英双语',
+                                            'BAAI/bge-reranker-v2-m3': '免费 · 重排序模型',
+                                            'Pro/BAAI/bge-m3': '付费Pro · 更快',
+                                            'Pro/BAAI/bge-reranker-v2-m3': '付费Pro · 重排序',
+                                            'Qwen/Qwen3-Embedding-8B': '付费 · 通义8B',
+                                            'Qwen/Qwen3-Embedding-4B': '付费 · 通义4B',
+                                            'Qwen/Qwen3-Embedding-0.6B': '付费 · 通义0.6B · 轻量',
+                                        };
+                                        return <option key={m} value={m}>{m}{desc[m] ? ` — ${desc[m]}` : ''}</option>;
+                                    })}
                                 </select>
                             ) : (
                                 <input
@@ -1130,18 +1229,36 @@ const Settings: React.FC = () => {
                                     className="w-full bg-white/60 border border-[#d4e8d0]/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                                 />
                             )}
-                            <p className="text-[9px] text-[#8bab82] mt-1 pl-1">推荐: BAAI/bge-m3（中文最佳）、BAAI/bge-large-zh-v1.5（纯中文）</p>
+                            <p className="text-[9px] text-[#8bab82] mt-1 pl-1">
+                                {embeddingProvider === 'cohere'
+                                    ? '推荐: embed-v4.0（最新，检索最强）'
+                                    : '推荐: BAAI/bge-m3（中文最佳）、BAAI/bge-large-zh-v1.5（纯中文）'}
+                            </p>
                         </div>
 
                         {/* Action buttons */}
                         <div className="flex gap-2">
                             <button
                                 onClick={() => {
+                                    const oldProvider = localStorage.getItem('embedding_provider') || 'openai';
                                     if (embeddingKey.trim()) {
+                                        localStorage.setItem('embedding_provider', embeddingProvider);
                                         localStorage.setItem('embedding_api_key', embeddingKey.trim());
                                         localStorage.setItem('embedding_base_url', embeddingUrl.trim());
                                         localStorage.setItem('embedding_model', embeddingModel.trim());
-                                        addToast('向量引擎配置已保存', 'success');
+                                        // Save Cohere rerank Trial Key
+                                        if (embeddingProvider === 'cohere' && cohereRerankKey.trim()) {
+                                            localStorage.setItem('cohere_rerank_api_key', cohereRerankKey.trim());
+                                        } else if (embeddingProvider !== 'cohere') {
+                                            localStorage.removeItem('cohere_rerank_api_key');
+                                            localStorage.removeItem('cohere_rerank_use_paid');
+                                        }
+                                        // Warn about re-vectorization if provider changed
+                                        if (oldProvider !== embeddingProvider) {
+                                            addToast(`已切换到 ${embeddingProvider === 'cohere' ? 'Cohere' : 'OpenAI 兼容'}。建议在「记忆中心」重新向量化已有记忆以获得最佳检索效果。`, 'info');
+                                        } else {
+                                            addToast('向量引擎配置已保存', 'success');
+                                        }
                                     } else {
                                         localStorage.removeItem('embedding_api_key');
                                         addToast('API Key 已清除', 'info');
@@ -1157,21 +1274,48 @@ const Settings: React.FC = () => {
                                     setEmbeddingTestStatus('测试中...');
                                     try {
                                         const baseUrl = embeddingUrl.replace(/\/+$/, '');
-                                        const resp = await fetch(`${baseUrl}/embeddings`, {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'Authorization': `Bearer ${embeddingKey.trim()}`,
-                                            },
-                                            body: JSON.stringify({ model: embeddingModel, input: '测试向量化', encoding_format: 'float' }),
-                                        });
-                                        if (resp.ok) {
-                                            const data = await resp.json();
-                                            const dim = data.data?.[0]?.embedding?.length || '?';
-                                            setEmbeddingTestStatus(`✅ 连接成功 (${embeddingModel}, 维度: ${dim})`);
+                                        let resp;
+                                        if (embeddingProvider === 'cohere') {
+                                            // Cohere test: use /embed endpoint
+                                            resp = await fetch(`${baseUrl}/embed`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'Authorization': `Bearer ${embeddingKey.trim()}`,
+                                                },
+                                                body: JSON.stringify({
+                                                    model: embeddingModel,
+                                                    texts: ['测试向量化'],
+                                                    input_type: 'search_document',
+                                                    embedding_types: ['float'],
+                                                }),
+                                            });
+                                            if (resp.ok) {
+                                                const data = await resp.json();
+                                                const dim = data.embeddings?.float?.[0]?.length || '?';
+                                                setEmbeddingTestStatus(`✅ Cohere 连接成功 (${embeddingModel}, 维度: ${dim})`);
+                                            } else {
+                                                const err = await resp.text();
+                                                setEmbeddingTestStatus(`❌ HTTP ${resp.status}: ${err.slice(0, 100)}`);
+                                            }
                                         } else {
-                                            const err = await resp.text();
-                                            setEmbeddingTestStatus(`❌ HTTP ${resp.status}: ${err.slice(0, 100)}`);
+                                            // OpenAI-compatible test
+                                            resp = await fetch(`${baseUrl}/embeddings`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'Authorization': `Bearer ${embeddingKey.trim()}`,
+                                                },
+                                                body: JSON.stringify({ model: embeddingModel, input: '测试向量化', encoding_format: 'float' }),
+                                            });
+                                            if (resp.ok) {
+                                                const data = await resp.json();
+                                                const dim = data.data?.[0]?.embedding?.length || '?';
+                                                setEmbeddingTestStatus(`✅ 连接成功 (${embeddingModel}, 维度: ${dim})`);
+                                            } else {
+                                                const err = await resp.text();
+                                                setEmbeddingTestStatus(`❌ HTTP ${resp.status}: ${err.slice(0, 100)}`);
+                                            }
                                         }
                                     } catch (e: any) { setEmbeddingTestStatus(`❌ 网络错误: ${e.message}`); }
                                 }}

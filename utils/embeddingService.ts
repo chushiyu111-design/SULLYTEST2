@@ -1,26 +1,46 @@
 /**
- * Embedding API Service (OpenAI-compatible)
+ * Embedding API Service (Multi-provider)
  * 
- * Works with any OpenAI-compatible embedding endpoint:
- *   - SiliconFlow (默认, 推荐 BAAI/bge-m3)
- *   - OpenAI
- *   - 智谱, Jina, 阿里百炼 等
+ * Supports two provider modes:
+ *   1. OpenAI-compatible (default) — SiliconFlow, OpenAI, 智谱, Jina, etc.
+ *   2. Cohere — embed-v4.0 with search_document/search_query input types
  * 
  * Config stored in localStorage:
+ *   - embedding_provider   ('openai' | 'cohere', default: 'openai')
  *   - embedding_api_key
- *   - embedding_base_url  (default: https://api.siliconflow.cn/v1)
- *   - embedding_model     (default: BAAI/bge-m3)
+ *   - embedding_base_url   (default depends on provider)
+ *   - embedding_model      (default depends on provider)
  */
 
-const DEFAULT_BASE_URL = 'https://api.siliconflow.cn/v1';
-const DEFAULT_MODEL = 'BAAI/bge-m3';
+export type EmbeddingProvider = 'openai' | 'cohere';
 
-/** Read config from localStorage with defaults */
+const DEFAULTS: Record<EmbeddingProvider, { baseUrl: string; model: string; rerankModel: string }> = {
+    openai: {
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        model: 'BAAI/bge-m3',
+        rerankModel: 'BAAI/bge-reranker-v2-m3',
+    },
+    cohere: {
+        baseUrl: 'https://api.cohere.com/v2',
+        model: 'embed-v4.0',
+        rerankModel: 'rerank-v3.5',
+    },
+};
+
+/** Read config from localStorage with provider-aware defaults */
 export function getEmbeddingConfig() {
+    const provider = (localStorage.getItem('embedding_provider') || 'openai') as EmbeddingProvider;
+    const defaults = DEFAULTS[provider] || DEFAULTS.openai;
     return {
+        provider,
         apiKey: localStorage.getItem('embedding_api_key') || '',
-        baseUrl: localStorage.getItem('embedding_base_url') || DEFAULT_BASE_URL,
-        model: localStorage.getItem('embedding_model') || DEFAULT_MODEL,
+        baseUrl: localStorage.getItem('embedding_base_url') || defaults.baseUrl,
+        model: localStorage.getItem('embedding_model') || defaults.model,
+        rerankModel: defaults.rerankModel,
+        // Cohere dual-key: Trial Key for rerank (free, limited)
+        rerankApiKey: localStorage.getItem('cohere_rerank_api_key') || '',
+        // Whether the user has confirmed switching to paid rerank
+        rerankUsePaid: localStorage.getItem('cohere_rerank_use_paid') === 'true',
     };
 }
 
@@ -115,12 +135,30 @@ export const EmbeddingService = {
     /**
      * Embed a single text string → float vector
      * Retries up to 2 times on rate limit errors (403/429) with exponential backoff.
+     * 
+     * @param taskType - Hint for Cohere's input_type:
+     *   'RETRIEVAL_QUERY' → search_query (for retrieval queries)
+     *   anything else / undefined → search_document (for stored documents)
      */
-    async embed(text: string, _taskType?: string, apiKeyOverride?: string): Promise<number[]> {
+    async embed(text: string, taskType?: string, apiKeyOverride?: string): Promise<number[]> {
         const config = getEmbeddingConfig();
         const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
+        // ====== Cohere path ======
+        if (config.provider === 'cohere') {
+            const inputType = taskType === 'RETRIEVAL_QUERY' ? 'search_query' : 'search_document';
+            const body = JSON.stringify({
+                model: config.model,
+                texts: [text],
+                input_type: inputType,
+                embedding_types: ['float'],
+            });
+            const data = await fetchWithRetry(`${baseUrl}/embed`, apiKey, body);
+            return data.embeddings?.float?.[0] as number[];
+        }
+
+        // ====== OpenAI-compatible path (unchanged) ======
         const body = JSON.stringify({
             model: config.model,
             input: text,
@@ -135,11 +173,26 @@ export const EmbeddingService = {
      * Batch embed multiple texts. Uses the API's native batch support.
      * Retries on rate limit errors.
      */
-    async embedBatch(texts: string[], _taskType?: string, apiKeyOverride?: string): Promise<number[][]> {
+    async embedBatch(texts: string[], taskType?: string, apiKeyOverride?: string): Promise<number[][]> {
         const config = getEmbeddingConfig();
         const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
+        // ====== Cohere path ======
+        if (config.provider === 'cohere') {
+            const inputType = taskType === 'RETRIEVAL_QUERY' ? 'search_query' : 'search_document';
+            const body = JSON.stringify({
+                model: config.model,
+                texts,
+                input_type: inputType,
+                embedding_types: ['float'],
+            });
+            const data = await fetchWithRetry(`${baseUrl}/embed`, apiKey, body);
+            // Cohere returns embeddings.float as a 2D array, already in order
+            return (data.embeddings?.float || []) as number[][];
+        }
+
+        // ====== OpenAI-compatible path (unchanged) ======
         const body = JSON.stringify({
             model: config.model,
             input: texts,
@@ -249,7 +302,11 @@ export const EmbeddingService = {
     /**
      * Rerank candidates using a cross-encoder model.
      * Sends query + documents to the Rerank API for fine-grained relevance scoring.
-     * Uses BAAI/bge-reranker-v2-m3 (free on SiliconFlow).
+     * 
+     * Cohere dual-key logic:
+     *   1. If Trial Key is set → use it (free, limited to 1000/month)
+     *   2. If Trial returns 429 → fire 'rerank-trial-exhausted' event, return null
+     *   3. If user confirmed paid mode → use Production Key (apiKey) for rerank
      * 
      * Returns array of { index, relevance_score } sorted by relevance (highest first).
      * Returns null on failure (caller should fallback to original ranking).
@@ -263,11 +320,29 @@ export const EmbeddingService = {
         if (documents.length === 0) return null;
 
         const config = getEmbeddingConfig();
-        const apiKey = apiKeyOverride || config.apiKey;
         const baseUrl = config.baseUrl.replace(/\/+$/, '');
+        const rerankModel = config.rerankModel;
+
+        // Determine which API key to use for rerank
+        let rerankKey: string;
+        if (apiKeyOverride) {
+            rerankKey = apiKeyOverride;
+        } else if (config.provider === 'cohere') {
+            // Cohere dual-key: check paid mode first, then Trial, then main key
+            if (config.rerankUsePaid) {
+                rerankKey = config.apiKey; // Production Key (paid)
+                console.log('🧠 [Rerank] Using paid Production Key');
+            } else if (config.rerankApiKey) {
+                rerankKey = config.rerankApiKey; // Trial Key (free)
+            } else {
+                rerankKey = config.apiKey; // Fallback to main key
+            }
+        } else {
+            rerankKey = config.apiKey;
+        }
 
         const body = JSON.stringify({
-            model: 'BAAI/bge-reranker-v2-m3',
+            model: rerankModel,
             query,
             documents,
             top_n: topN || documents.length,
@@ -283,13 +358,26 @@ export const EmbeddingService = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
+                    'Authorization': `Bearer ${rerankKey}`,
                 },
                 body,
                 signal: controller.signal,
             });
 
             if (!resp.ok) {
+                // Cohere Trial Key exhausted: 429 Too Many Requests
+                if (config.provider === 'cohere' && !config.rerankUsePaid && (resp.status === 429 || resp.status === 402)) {
+                    console.warn('🧠 [Rerank] Trial Key quota exhausted (429), notifying UI...');
+                    // Check if user already dismissed this month
+                    const dismissedUntil = parseInt(localStorage.getItem('rerank_dismissed_until') || '0', 10);
+                    if (Date.now() < dismissedUntil) {
+                        console.log('🧠 [Rerank] User dismissed upgrade prompt this month, silently degrading');
+                    } else {
+                        // Fire event for UI to pick up and show confirmation dialog
+                        window.dispatchEvent(new CustomEvent('rerank-trial-exhausted'));
+                    }
+                    return null;
+                }
                 console.warn(`🧠 [Rerank] API error ${resp.status}, falling back`);
                 return null;
             }
