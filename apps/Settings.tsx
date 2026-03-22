@@ -138,15 +138,23 @@ const Settings: React.FC = () => {
 
     // Helper: switch embedding provider with default values
     const switchEmbeddingProvider = (provider: 'openai' | 'cohere') => {
+        // Save current key to per-provider slot before switching
+        const oldProvider = embeddingProvider;
+        if (embeddingKey.trim()) {
+            localStorage.setItem(`embedding_api_key_${oldProvider}`, embeddingKey.trim());
+        }
+        // Load key for the new provider
+        const newKey = localStorage.getItem(`embedding_api_key_${provider}`) || '';
+        setEmbeddingKey(newKey);
         setEmbeddingProvider(provider);
         setEmbeddingModels([]);
         setEmbeddingTestStatus('');
         if (provider === 'cohere') {
-            setEmbeddingUrl('https://api.cohere.com/v2');
-            setEmbeddingModel('embed-v4.0');
+            setEmbeddingUrl(localStorage.getItem('embedding_base_url_cohere') || 'https://api.cohere.com/v2');
+            setEmbeddingModel(localStorage.getItem('embedding_model_cohere') || 'embed-v4.0');
         } else {
-            setEmbeddingUrl('https://api.siliconflow.cn/v1');
-            setEmbeddingModel('BAAI/bge-m3');
+            setEmbeddingUrl(localStorage.getItem('embedding_base_url_openai') || 'https://api.siliconflow.cn/v1');
+            setEmbeddingModel(localStorage.getItem('embedding_model_openai') || 'BAAI/bge-m3');
         }
     };
 
@@ -1246,6 +1254,10 @@ const Settings: React.FC = () => {
                                         localStorage.setItem('embedding_api_key', embeddingKey.trim());
                                         localStorage.setItem('embedding_base_url', embeddingUrl.trim());
                                         localStorage.setItem('embedding_model', embeddingModel.trim());
+                                        // Also save to per-provider slots so switching preserves each key
+                                        localStorage.setItem(`embedding_api_key_${embeddingProvider}`, embeddingKey.trim());
+                                        localStorage.setItem(`embedding_base_url_${embeddingProvider}`, embeddingUrl.trim());
+                                        localStorage.setItem(`embedding_model_${embeddingProvider}`, embeddingModel.trim());
                                         // Save Cohere rerank Trial Key
                                         if (embeddingProvider === 'cohere' && cohereRerankKey.trim()) {
                                             localStorage.setItem('cohere_rerank_api_key', cohereRerankKey.trim());
