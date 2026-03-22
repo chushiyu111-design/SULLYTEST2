@@ -3,6 +3,7 @@ import React from 'react';
 import { useOS } from '../../context/OSContext';
 import { STT_PROVIDER_DEFAULTS } from '../../types/stt';
 import type { SttProvider } from '../../types/stt';
+import { haptic } from '../../utils/haptics';
 
 export type SettingsPanel = 'menu' | 'data' | 'api' | 'subapi' | 'realtime' | 'tts' | 'stt' | 'embedding';
 
@@ -12,7 +13,6 @@ interface Props {
 
 const SettingsMenu: React.FC<Props> = ({ onNavigate }) => {
     const { apiConfig, ttsConfig, sttConfig, realtimeConfig, hapticsEnabled, setHapticsEnabled } = useOS();
-    const { haptic } = require('../../utils/haptics');
 
     const embeddingProvider = (() => { try { return localStorage.getItem('embedding_provider') || 'openai'; } catch { return 'openai'; } })();
     const embeddingKey = (() => { try { return localStorage.getItem('embedding_api_key') || ''; } catch { return ''; } })();
