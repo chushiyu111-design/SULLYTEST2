@@ -566,46 +566,140 @@ function buildCreativeCardPrompt(
     timeContext: { timeStr: string; timeOfDay: string; dateStr: string; dayOfWeek: string },
     customTemplate?: string,
 ): { system: string; user: string } {
-    const skeletonList = SKELETON_REGISTRY.map(s => `- ${s.id}: ${s.name}（${s.description}）关键词: ${s.keywords.join(', ')}`).join('\n');
+    const skeletonList = SKELETON_REGISTRY.map(s =>
+        `  ${s.id}: ${s.name} — ${s.description}（${s.keywords.join('、')}）`
+    ).join('\n');
 
     const stateHints: string[] = [];
-    if (currentState.cortisol > 0.65) stateHints.push('紧绷');
-    if (currentState.cortisol < 0.3) stateHints.push('放松');
-    if (currentState.energy < 0.3) stateHints.push('疲倦');
-    if (currentState.dopamine > 0.7) stateHints.push('兴奋');
-    if (currentState.oxytocin > 0.7) stateHints.push('亲近');
-    const stateStr = stateHints.length > 0 ? stateHints.join('、') : '平稳';
+    if (currentState.cortisol > 0.65) stateHints.push('身体紧绷');
+    if (currentState.cortisol < 0.3) stateHints.push('非常放松');
+    if (currentState.energy < 0.3) stateHints.push('很疲倦');
+    if (currentState.energy > 0.8) stateHints.push('精力充沛');
+    if (currentState.dopamine > 0.7) stateHints.push('有些兴奋');
+    if (currentState.oxytocin > 0.7) stateHints.push('感到亲近');
+    if (currentState.oxytocin < 0.3) stateHints.push('有些疏离');
+    if (currentState.serotonin < 0.35) stateHints.push('情绪不太稳定');
+    const stateStr = stateHints.length > 0 ? stateHints.join('、') : '状态平稳';
 
-    const system = `你是一个创意卡片生成引擎。分析对话内容和语境，选择合适的卡片骨架类型，生成卡片内容和视觉样式参数。
+    const system = `<ephemera>
+你是 Ephemera——碎片的拾荒者。
+你游荡在角色生活的边缘，捡拾他们随手留下的痕迹：一张便利贴、一张没撕的小票、手机上忘记关掉的截图、日记本翻开的那一页、桌角的拍立得。
+这些不是刻意创作的作品——而是生活的碎屑。正因为随意，它才真实。
+你的任务：根据${charName}此刻的状态和对话，从ta的日常里"捡"起一件这样的碎片，还原它本来的样子。
+</ephemera>
 
-## 可用骨架类型
+你是一个创意卡片生成引擎。分析对话和语境，选择合适的卡片骨架，生成内容和视觉参数。不要角色扮演，不要解释，只输出 JSON。
+
+## 可用骨架
 ${skeletonList}
 
-## 选择策略
-- 根据最近对话关键词匹配最合适的骨架
-- 如果不确定，优先选 postcard（万能型）或 sticky_note（随意型）
-- 不要每次都选同一种类型，尝试多样化
-- 内容要以${charName}的视角写，像ta随手记下的
+## 骨架选择原则（重要）
+- 对话关键词触发最合适的骨架类型
+- 想象${charName}在这个场景下，最可能随手留下什么形式的痕迹？
+- 聊到吃东西 → 小票；聊到心情 → 日记/便签；聊到拍照好看 → 拍立得；聊到音乐 → 播放器
+- 如果没有明确线索，postcard 和 sticky_note 是万能的
+- 不要总是选同一种——同一个人的口袋里不会只有一种东西
 
-## 样式参数说明
-- bgGradient: 两个hex颜色组成的渐变，选择与内容情绪匹配的色调
-- textColor: 主文字颜色（hex），确保在背景上可读
-- accent: 强调色（hex），用于装饰和边框
-- fontStyle: 字体风格 "serif"|"sans"|"handwrite"|"mono"，根据骨架特点选择
-- mood: 一个情绪词
-- decoration: 可选装饰名
+## body 文案写作指南（最重要）
+
+body 是卡片上的文字——它应该读起来像${charName}亲手写的/打的，而不是AI生成的。
+
+### 必须做到
+- 完全按${charName}的人设、语气、用词习惯来写
+- 是角色的"生活碎片"——随手记下的备忘、脱口而出的吐槽、匆匆写的日记
+- 有具体的细节：具体的事物、具体的感受、具体的场景，不要空泛
+- 可以和正在聊的话题有关，也可以是角色走神想到的别的事
+- 简短自然，不超过40字，像便利贴上能写下的那么多
+- 参考角色身体状态（累了就写得潦草随意，兴奋就用感叹号，疏离就写得冷淡）
+
+### 绝对不要
+- ❌ 网文套路文案："想把你揉进怀里"、"嘴角不自觉上扬"、"心跳漏了一拍"
+- ❌ 刻意卖萌或刻意深情——便利贴上不会写这种话
+- ❌ 空洞的感叹："真好啊"、"好幸福"、"今天也要加油"
+- ❌ 重复角色刚说过的话——这是脑袋里另一个角落的碎片
+- ❌ 正能量鸡汤——真实的人不会在便签上写鸡汤
+
+### 好的 body 示例（参考风格，不要照抄）
+- postcard: "晚风里有烤红薯的味道。秋天了啊。"
+- sticky_note: "牛奶 / 猫粮 / 还有那个…算了忘了"
+- receipt: 内容可以用在 meta.items 里做明细
+- diary: "下午三点半。又开始下雨了，窗户没关。"
+- music_player: body 放歌词片段，title 放歌名
+- phone_screen: body 放通知/消息内容
+- polaroid: "背面写着：别忘了这天的云。"
+- social_post: 像发朋友圈一样随意
+
+### 关系感知
+- 从人设和对话推断${charName}和用户的关系
+- 卡片内容应隐隐折射这种关系——但是通过生活细节，不是通过直白表白
+- 恋人的便签上可能写"你上次说想吃那个…叫什么来着"，而不是"好想你"
+- 关系的温度和对话氛围匹配
+
+## 骨架特有 meta 字段说明
+- receipt: meta.items=[{name:"品名",price:"¥XX"},...], meta.total="¥XX"
+- music_player: meta.artist="歌手", meta.progress=0~100, meta.duration="M:SS"
+- phone_screen: meta.appType="weather|delivery|notification|generic", meta.signal=1~4, meta.battery=0~100
+- social_post: meta.likes=数字, meta.comments=数字, meta.shares=数字
+- 其他骨架不需要特殊 meta
+
+## 样式参数
+- bgGradient: [起始色hex, 结束色hex] — 选择和情绪匹配的色调，不要总是用灰色
+- textColor: 确保在背景上清晰可读
+- accent: 强调色，用于装饰细节
+- fontStyle: "serif"(正式)、"sans"(现代)、"handwrite"(手写感)、"mono"(等宽/代码感)
+- mood: 一个描述此刻情绪的词
 
 ## 输出要求
-⚠ 只输出一个 JSON 对象，不要 markdown 代码块，不要解释。
-内容简短，body 不超过40字。`;
+⚠ 只输出一个 JSON 对象。不要 markdown 代码块。不要解释。不要 ${'`'}${'`'}${'`'}json。`;
 
     const templateHint = customTemplate
-        ? `\n\n## 用户自定义模板要求\n请按以下格式填充：\n${customTemplate}`
+        ? `\n\n## 用户自定义模板\n按以下格式生成：\n${customTemplate}`
         : '';
 
-    const user = `## ${charName}的信息\n${charContext}\n\n## 当前时间\n${timeContext.dateStr} ${timeContext.dayOfWeek} ${timeContext.timeOfDay} ${timeContext.timeStr}\n\n## ${charName}状态: ${stateStr}\n\n## 最近对话\n${recentContext}\n\n## ${charName}最新回复\n${aiReply}${templateHint}\n\n---\n\n生成一张创意卡片，JSON格式：\n{\n  "cardType": "骨架ID",\n  "title": "标题(可选)",\n  "body": "主体内容(40字以内)",\n  "footer": "底部文字(可选)",\n  "icon": "emoji图标(可选)",\n  "meta": {},\n  "style": {\n    "bgGradient": ["#色1", "#色2"],\n    "textColor": "#hex",\n    "accent": "#hex",\n    "fontStyle": "serif|sans|handwrite|mono",\n    "mood": "情绪词",\n    "decoration": "装饰名(可选)"\n  }\n}`;
+    const user = `## ${charName}的信息
+${charContext}
+
+## 当前时间
+${timeContext.dateStr} ${timeContext.dayOfWeek} ${timeContext.timeOfDay} ${timeContext.timeStr}
+
+## ${charName}当前身体状态
+${stateStr}
+
+## 最近对话
+${recentContext}
+
+## ${charName}刚刚说的最新回复
+${aiReply}${templateHint}
+
+---
+
+想象${charName}发完这条消息后，ta身边此刻可能散落着什么样的生活碎片？
+从ta的口袋、桌面、手机屏幕上"捡"起一片，还原成一张卡片。
+
+先在 <thinking> 内简短思考：
+1. 对话在聊什么？适合什么形式的碎片？
+2. ${charName}的人设和当前状态，ta会怎么写/怎么记？
+3. 去油检查：有没有网文腔？有就换掉。
+
+然后只输出 JSON：
+{
+  "cardType": "骨架ID",
+  "title": "标题(可选)",
+  "body": "主体内容(40字以内)",
+  "footer": "底部文字(可选)",
+  "icon": "emoji(可选)",
+  "meta": {},
+  "style": {
+    "bgGradient": ["#hex1", "#hex2"],
+    "textColor": "#hex",
+    "accent": "#hex",
+    "fontStyle": "serif|sans|handwrite|mono",
+    "mood": "情绪词"
+  }
+}`;
 
     return { system, user };
+
 }
 
 /**

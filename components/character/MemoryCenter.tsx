@@ -84,6 +84,7 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
     const [loadingSource, setLoadingSource] = useState(false);
 
     const abortRef = useRef<AbortController | null>(null);
+    const [isAborting, setIsAborting] = useState(false);
 
     // --- Stats State ---
     const { tree, stats } = useMemo(() => {
@@ -256,6 +257,7 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
             if (e.name !== 'AbortError') addToast(`批量提取失败: ${e.message}`, 'error');
         } finally {
             setIsBatching(false);
+            setIsAborting(false);
             setBatchProgress('');
             abortRef.current = null;
             refreshVmList();
@@ -580,7 +582,7 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
                             {batchProgress && (
                                 <div className="flex items-center justify-between bg-emerald-50 text-emerald-600 text-[10px] font-bold px-3 py-2 rounded-xl mt-2 animate-pulse border border-emerald-100">
                                     <span>{batchProgress}</span>
-                                    {isBatching && <button onClick={() => abortRef.current?.abort()} className="text-red-500 hover:opacity-80">中止</button>}
+                                    {isBatching && <button onClick={() => { setIsAborting(true); abortRef.current?.abort(); }} disabled={isAborting} className={`font-bold ${isAborting ? 'text-slate-400' : 'text-red-500 hover:opacity-80'}`}>{isAborting ? '正在中止...' : '中止'}</button>}
                                 </div>
                             )}
                         </div>

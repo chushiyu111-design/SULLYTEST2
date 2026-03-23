@@ -250,7 +250,7 @@ async function processResult(
 }
 
 // Call LLM and parse response, with retry on truncation
-async function callLLM(prompt: string, apiConfig: APIConfig): Promise<ExtractResult[]> {
+async function callLLM(prompt: string, apiConfig: APIConfig, signal?: AbortSignal): Promise<ExtractResult[]> {
     const doCall = async (promptText: string, maxTokens: number): Promise<{ content: string; truncated: boolean }> => {
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
@@ -264,6 +264,7 @@ async function callLLM(prompt: string, apiConfig: APIConfig): Promise<ExtractRes
                 temperature: 0.3,
                 max_tokens: maxTokens,
             }),
+            signal,
         });
 
         if (!response.ok) {
@@ -501,6 +502,14 @@ export const VectorMemoryExtractor = {
         onProgress?: (windowIdx: number, totalWindows: number, memoriesCreated: number) => void,
         signal?: AbortSignal
     ): Promise<number> {
+        // Concurrency lock: prevent batch + auto extraction from running simultaneously
+        if (extractingChars.has(charId)) {
+            console.log('🧠 [VectorExtract] Batch: already extracting for', charId, '— skipping');
+            return 0;
+        }
+        extractingChars.add(charId);
+
+        try {
         const allMsgs = await DB.getMessagesByCharId(charId);
         const targetMsgs = allMsgs
             .filter(m => (m.role === 'user' || m.role === 'assistant') && (m.type === 'text' || m.type === 'call_log'))
@@ -524,6 +533,7 @@ export const VectorMemoryExtractor = {
 
         let totalCreated = 0;
         let totalUpdated = 0;
+        let lastProcessedTimestamp = 0;
 
         for (let w = 0; w < windows.length; w++) {
             if (signal?.aborted) {
@@ -540,28 +550,60 @@ export const VectorMemoryExtractor = {
             const prompt = buildExtractionPrompt(charName, existingHeaders, formattedMsgs);
 
             try {
-                const results = await callLLM(prompt, apiConfig);
+                const results = await callLLM(prompt, apiConfig, signal);
+                if (signal?.aborted) break; // Check after LLM call returns
+
                 const batchSourceIds = windows[w].map(m => m.id).filter((id): id is number => typeof id === 'number');
                 for (const result of results) {
+                    if (signal?.aborted) break; // Check before each DB write
                     const success = await processResult(result, charId, embeddingApiKey, vectorCache, batchSourceIds);
                     if (success) {
                         if (result.action === 'create') totalCreated++;
                         else totalUpdated++;
                     }
                 }
-            } catch (err) {
+            } catch (err: any) {
+                // AbortError is expected when user cancels — don't log as error
+                if (err?.name === 'AbortError') {
+                    console.log('🧠 [VectorExtract] Batch aborted during network request');
+                    break;
+                }
                 console.error(`🧠 [VectorExtract] Batch window ${w + 1} error:`, err);
             }
 
+            // Track the last successfully processed window's end timestamp
+            lastProcessedTimestamp = Math.max(lastProcessedTimestamp,
+                windows[w][windows[w].length - 1]?.timestamp || 0);
+
             // Delay between windows to avoid rate limiting (3s)
-            if (w < windows.length - 1) {
+            if (w < windows.length - 1 && !signal?.aborted) {
                 await new Promise(r => setTimeout(r, 3000));
+            }
+        }
+
+        // Update lastExtractAt so maybeExtract() won't re-process these messages
+        if (lastProcessedTimestamp > 0) {
+            try {
+                const freshChar = (await DB.getAllCharacters()).find(c => c.id === charId);
+                if (freshChar) {
+                    const currentLastExtract = freshChar.vectorMemoryLastExtractAt || 0;
+                    if (lastProcessedTimestamp > currentLastExtract) {
+                        freshChar.vectorMemoryLastExtractAt = lastProcessedTimestamp;
+                        await DB.saveCharacter(freshChar);
+                        console.log(`🧠 [VectorExtract] Batch: updated lastExtractAt to ${new Date(lastProcessedTimestamp).toLocaleString()}`);
+                    }
+                }
+            } catch (e) {
+                console.error('🧠 [VectorExtract] Batch: failed to update lastExtractAt:', e);
             }
         }
 
         onProgress?.(windows.length, windows.length, totalCreated + totalUpdated);
         console.log(`🧠 [VectorExtract] Batch complete: ${totalCreated} created, ${totalUpdated} updated from ${windows.length} windows`);
         return totalCreated + totalUpdated;
+        } finally {
+            extractingChars.delete(charId);
+        }
     },
 
     /**
