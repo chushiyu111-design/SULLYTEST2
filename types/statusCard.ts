@@ -32,12 +32,14 @@ export interface StatusCardStyle {
 export interface CustomStatusTemplate {
     id: string;
     name: string;                   // 模板名称（如 "赛博日记"）
-    jsonSchema: string;             // 用户填的 JSON 格式模板（留空字段等 AI 填充）
-    skeleton?: string;              // 指定骨架名（留空则在 prompt 中让 AI 选）
+    systemPrompt: string;           // 用户自定义的 system prompt（告诉副模型输出什么格式）
+    extractRegex: string;           // 用户自定义的提取正则（从 AI 输出中提取渲染内容）
+    htmlTemplate?: string;          // 用户自定义的 HTML 模板（支持 $1, $2 等正则捕获组替换）
+    renderMode: 'html' | 'text';    // 渲染方式：html=iframe沙箱，text=纯文本卡片
 }
 
 /** 状态栏模式类型 */
-export type StatusBarMode = 'classic' | 'creative' | 'custom';
+export type StatusBarMode = 'off' | 'classic' | 'creative' | 'custom' | 'freeform';
 
 /** 可用的骨架类型 ID 列表 */
 export const SKELETON_TYPES = [

@@ -260,7 +260,7 @@ const WorldbookApp: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-1 shrink-0">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleEdit(book); }}
                                                 className="p-2 rounded-full hover:bg-white text-slate-400 hover:text-indigo-600 transition-colors"

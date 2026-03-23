@@ -2,6 +2,7 @@
 import React, { useRef, useState } from 'react';
 import Modal from '../os/Modal';
 import { CharacterProfile, Message, EmojiCategory } from '../../types';
+import { CustomStatusTemplate } from '../../types/statusCard';
 
 interface ChatModalsProps {
     modalType: string;
@@ -90,6 +91,9 @@ interface ChatModalsProps {
     // Status Bar Mode
     statusBarMode?: string;
     onStatusBarModeChange?: (mode: string) => void;
+    // Custom Template
+    customStatusTemplates?: CustomStatusTemplate[];
+    onSaveCustomTemplate?: (template: CustomStatusTemplate) => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -116,11 +120,26 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     onReadAloud, onVoiceToText, onDownloadVoice, autoTts, onToggleAutoTts,
     autoCall, onToggleAutoCall,
     statusBarMode, onStatusBarModeChange,
+    customStatusTemplates, onSaveCustomTemplate,
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
     const [historyPage, setHistoryPage] = useState(0);
     const HISTORY_PAGE_SIZE = 50;
+
+    // Custom template editor state
+    const existingTpl = customStatusTemplates?.[0];
+    const [tplPrompt, setTplPrompt] = useState(existingTpl?.systemPrompt || '');
+    const [tplRegex, setTplRegex] = useState(existingTpl?.extractRegex || '');
+    const [tplHtmlTemplate, setTplHtmlTemplate] = useState(existingTpl?.htmlTemplate || '');
+    const [tplRenderMode, setTplRenderMode] = useState<'html' | 'text'>(existingTpl?.renderMode || 'html');
+    // Sync state when existingTpl changes (e.g. switching characters)
+    React.useEffect(() => {
+        setTplPrompt(existingTpl?.systemPrompt || '');
+        setTplRegex(existingTpl?.extractRegex || '');
+        setTplHtmlTemplate(existingTpl?.htmlTemplate || '');
+        setTplRenderMode(existingTpl?.renderMode || 'html');
+    }, [existingTpl?.id]);
 
     const openVisibilityModal = () => {
         if (selectedCategory) {
@@ -291,37 +310,124 @@ const ChatModals: React.FC<ChatModalsProps> = ({
 
                     {/* Status Bar Mode Selector */}
                     <div className="pt-2 border-t border-slate-100">
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">状态栏模式 (心声)</label>
-                        <div className="flex gap-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">心声模式</label>
+                        <div className="grid grid-cols-2 gap-2">
                             {[
-                                { id: 'classic', label: '🎴 经典心声', desc: '明信片风格' },
-                                { id: 'creative', label: '🎨 创意卡片', desc: 'AI随机' },
-                                { id: 'custom', label: '✏️ 自定义', desc: '你的模板' },
-                            ].map(opt => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => onStatusBarModeChange?.(opt.id)}
-                                    className={`flex-1 py-2.5 px-2 rounded-xl text-center transition-all border ${
-                                        (statusBarMode || 'classic') === opt.id
-                                            ? 'bg-primary/10 border-primary/30 ring-1 ring-primary/20'
-                                            : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                                    }`}
-                                >
-                                    <div className={`text-sm font-bold ${
-                                        (statusBarMode || 'classic') === opt.id ? 'text-primary' : 'text-slate-600'
-                                    }`}>{opt.label}</div>
-                                    <div className="text-[9px] text-slate-400 mt-0.5">{opt.desc}</div>
-                                </button>
-                            ))}
+                                { id: 'off', title: '关闭', desc: '不生成心声，不消耗副 API' },
+                                { id: 'classic', title: '经典心声', desc: '明信片风格，点击头像查看' },
+                                { id: 'creative', title: '创意卡片', desc: 'AI 从 8 种预设骨架中选择' },
+                                { id: 'freeform', title: '自由创作', desc: 'AI 即兴生成独一无二的 HTML 碎片' },
+                                { id: 'custom', title: '自定义模板', desc: '自己写 prompt 和正则，完全自由' },
+                            ].map(opt => {
+                                const isActive = (statusBarMode || 'classic') === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => onStatusBarModeChange?.(opt.id)}
+                                        className={`relative text-left p-3 rounded-2xl transition-all border ${
+                                            isActive
+                                                ? 'bg-primary/8 border-primary/25 ring-1 ring-primary/15'
+                                                : 'bg-slate-50/80 border-slate-100 hover:bg-slate-100/80 active:scale-[0.97]'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                                                isActive ? 'bg-primary' : 'bg-slate-300'
+                                            }`} />
+                                            <div className={`text-[13px] font-bold leading-tight ${
+                                                isActive ? 'text-primary' : 'text-slate-600'
+                                            }`}>{opt.title}</div>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 leading-snug pl-3">{opt.desc}</div>
+                                    </button>
+                                );
+                            })}
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                            {(statusBarMode || 'classic') === 'classic' && '点击角色头像查看心声明信片。'}
-                            {statusBarMode === 'creative' && 'AI 根据对话语境随机生成不同风格的卡片（便签、小票、日记等）。'}
-                            {statusBarMode === 'custom' && '使用你自定义的模板生成卡片（开发中）。'}
-                        </p>
                     </div>
 
-                    {/* Auto TTS Toggle */}
+                    {/* Custom Template Editor — shown when custom mode selected */}
+                    {(statusBarMode || 'classic') === 'custom' && (
+                        <div className="mt-3 space-y-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4">
+                            <div className="bg-blue-50/50 rounded-xl p-3 border border-blue-100">
+                                <h4 className="text-[11px] font-bold text-blue-800 mb-1">🛠️ 酒馆风格 (Tavern Style) 自定义指南</h4>
+                                <ol className="text-[10px] text-blue-600 space-y-1 pl-3 list-decimal">
+                                    <li><b>写 Prompt：</b>定好规则，让 AI 输出指定格式（如 <code>&lt;status&gt;时间: ...&lt;/status&gt;</code>）。</li>
+                                    <li><b>写 正则：</b>用 <code>(.*?)</code> 抠出想要的内容，它们会自动变成变量 <code>$1, $2, $3...</code>。</li>
+                                    <li><b>写 HTML：</b>把你想要的卡片代码贴进来，把 <code>$1, $2</code> 塞进对应坑位。</li>
+                                </ol>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block">1. System Prompt (让 AI 怎么说)</label>
+                                <textarea
+                                    value={tplPrompt}
+                                    onChange={e => setTplPrompt(e.target.value)}
+                                    placeholder={`# 要求\n在每次输出后，仿照以下格式输出状态：\n<status>\n时间：...\n地点：...\n动作：...\n</status>`}
+                                    className="w-full h-28 bg-white rounded-xl p-3 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed border border-slate-100"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block">2. 提取正则 (怎么抠出变量 $1, $2...)</label>
+                                <textarea
+                                    value={tplRegex}
+                                    onChange={e => setTplRegex(e.target.value)}
+                                    placeholder={`<status>[\\s\\n]*时间: (.*?)[\\s\\n]*地点: (.*?)[\\s\\n]*动作: (.*?)[\\s\\n]*<\\/status>`}
+                                    className="w-full h-16 bg-white rounded-xl p-3 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed border border-slate-100"
+                                />
+                                <p className="text-[9px] text-slate-400 mt-1">每个 <code>(.*?)</code> 都会被依次保存为 <code>$1</code>, <code>$2</code>... 供第三步渲染使用。</p>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block">3. 渲染参数</label>
+                                <div className="flex gap-2 mb-2">
+                                    {(['html', 'text'] as const).map(mode => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => setTplRenderMode(mode)}
+                                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                                tplRenderMode === mode
+                                                    ? 'bg-primary/10 border-primary/30 text-primary'
+                                                    : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {mode === 'html' ? '卡片模式 (HTML)' : '纯文本模式'}
+                                        </button>
+                                    ))}
+                                </div>
+                                {tplRenderMode === 'html' && (
+                                    <textarea
+                                        value={tplHtmlTemplate}
+                                        onChange={e => setTplHtmlTemplate(e.target.value)}
+                                        placeholder={`<html>\n  <style>...</style>\n  <body>\n    <span>时间: $1</span>\n    <span>地点: $2</span>\n    <span>动作: $3</span>\n  </body>\n</html>`}
+                                        className="w-full h-32 bg-white rounded-xl p-3 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed border border-slate-100 placeholder:text-slate-300"
+                                    />
+                                )}
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    if (!tplPrompt.trim()) return;
+                                    onSaveCustomTemplate?.({
+                                        id: existingTpl?.id || `tpl_${Date.now()}`,
+                                        name: '自定义模板',
+                                        systemPrompt: tplPrompt.trim(),
+                                        extractRegex: tplRegex.trim(),
+                                        htmlTemplate: tplHtmlTemplate.trim(),
+                                        renderMode: tplRenderMode,
+                                    });
+                                }}
+                                disabled={!tplPrompt.trim()}
+                                className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
+                                    tplPrompt.trim()
+                                        ? 'bg-primary text-white active:scale-[0.97]'
+                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
+                            >
+                                保存模板
+                            </button>
+                        </div>
+                    )}
                     <div className="pt-2 border-t border-slate-100">
                         <div className="flex justify-between items-center cursor-pointer" onClick={onToggleAutoTts}>
                             <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">AI 自动语音回复</label>

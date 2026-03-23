@@ -68,7 +68,10 @@ const WECHAT_NOTIFICATION_URL = 'https://image2url.com/r2/default/audio/17717698
 /** @deprecated Use playThemeNotification(url) instead. Kept for backward compatibility. */
 export const playWechatNotification = () => playThemeNotification(WECHAT_NOTIFICATION_URL);
 
-// Eagerly pre-load the WeChat sound on module initialization
+// Eagerly pre-load (but NOT play) the WeChat sound on module initialization
 if (typeof window !== 'undefined') {
-    playThemeNotification(WECHAT_NOTIFICATION_URL); // This also caches the Audio element
+    const _preload = new Audio(WECHAT_NOTIFICATION_URL);
+    _preload.volume = 0.6;
+    _preload.preload = 'auto';
+    _soundCache.set(WECHAT_NOTIFICATION_URL, _preload);
 }

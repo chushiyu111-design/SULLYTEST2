@@ -124,6 +124,28 @@ const StatusCardRenderer: React.FC<StatusCardRendererProps> = ({ data }) => {
         },
     }), [data]);
 
+    // ── Freeform HTML card: render in sandboxed iframe ──
+    if (sanitizedData.cardType === 'freeform' && sanitizedData.meta?.html) {
+        return (
+            <iframe
+                srcDoc={sanitizedData.meta.html}
+                sandbox="allow-scripts"
+                title="Freeform creative card"
+                style={{
+                    width: '330px',
+                    maxWidth: 'calc(100vw - 48px)',
+                    height: '220px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    colorScheme: 'light dark',
+                    overflow: 'hidden',
+                    display: 'block',
+                }}
+            />
+        );
+    }
+
     // Resolve skeleton component
     const SkeletonComponent = skeletonLoaders[sanitizedData.cardType];
 

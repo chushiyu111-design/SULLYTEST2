@@ -1,3 +1,9 @@
+/**
+ * PhoneScreenSkeleton — 手机截图骨架
+ *
+ * 📱 高级 iOS 风 — 深邃渐变背景、毛玻璃导航栏、
+ * 精致灵动岛、真实感状态栏、屏幕反光层、玻璃质感
+ */
 import React from 'react';
 import { StatusCardData } from '../../../types/statusCard';
 
@@ -8,7 +14,6 @@ const FONT_MAP: Record<string, string> = {
     mono: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
 };
 
-/* ── appType presets ── */
 const APP_PRESETS: Record<string, { navIcon: string; navTitle: string; bodyIcon: string }> = {
     weather:      { navIcon: '🌤️', navTitle: '天气',   bodyIcon: '🌡️' },
     delivery:     { navIcon: '🛵',  navTitle: '外卖',   bodyIcon: '📦' },
@@ -16,83 +21,68 @@ const APP_PRESETS: Record<string, { navIcon: string; navTitle: string; bodyIcon:
     generic:      { navIcon: '📱',  navTitle: '应用',   bodyIcon: '' },
 };
 
-/* ── Signal bars (pure CSS) ── */
-const SignalBars: React.FC<{ count: number; color: string }> = ({ count, color }) => {
-    const bars = [1, 2, 3, 4];
-    return (
-        <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '1.5px', height: '10px' }}>
-            {bars.map(i => (
-                <span key={i} style={{
-                    width: '3px',
-                    height: `${i * 2.5}px`,
-                    borderRadius: '0.5px',
-                    background: i <= count ? color : `${color}33`,
-                    transition: 'background 0.3s',
-                }} />
-            ))}
-        </span>
-    );
-};
+/* ── Signal bars ── */
+const SignalBars: React.FC<{ count: number; color: string }> = ({ count, color }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '1.5px', height: '10px' }}>
+        {[1, 2, 3, 4].map(i => (
+            <span key={i} style={{
+                width: '3px',
+                height: `${i * 2.5}px`,
+                borderRadius: '0.5px',
+                background: i <= count ? color : `${color}30`,
+            }} />
+        ))}
+    </span>
+);
 
-/* ── Battery icon (pure CSS) ── */
+/* ── Battery icon ── */
 const BatteryIcon: React.FC<{ pct: number; color: string }> = ({ pct, color }) => {
-    const fillColor = pct <= 20 ? '#FF3B30' : pct <= 50 ? '#FFCC00' : '#34C759';
+    const fillColor = pct <= 20 ? '#FF3B30' : pct <= 50 ? '#FFCC00' : '#30D158';
     return (
-        <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: '2px',
-        }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '1px' }}>
             <span style={{
                 position: 'relative', width: '22px', height: '10px',
                 border: `1.5px solid ${color}`,
                 borderRadius: '2.5px',
                 display: 'inline-block',
             }}>
-                {/* fill */}
                 <span style={{
-                    position: 'absolute', left: '1px', top: '1px', bottom: '1px',
-                    width: `${Math.min(100, Math.max(0, pct)) * 0.18}px`,
+                    position: 'absolute', left: '1.5px', top: '1.5px', bottom: '1.5px',
+                    width: `${Math.min(100, Math.max(0, pct)) * 0.16}px`,
                     background: fillColor,
                     borderRadius: '1px',
                 }} />
             </span>
-            {/* nub */}
             <span style={{
-                width: '2px', height: '4px',
+                width: '1.5px', height: '4px',
                 background: color,
                 borderRadius: '0 1px 1px 0',
-                marginLeft: '-1px',
             }} />
         </span>
     );
 };
 
-/** PhoneScreenSkeleton — 手机截图骨架（精制版） */
 const PhoneScreenSkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
     const { title, body, footer, icon, meta, style } = data;
 
-    /* ── colours & fonts ── */
+    /* 背景 — 深邃渐变 */
     const bg = style.bgGradient
-        ? `linear-gradient(180deg, ${style.bgGradient[0]}, ${style.bgGradient[1]})`
-        : '#1c1c1e';
-    const textColor = style.textColor || '#ffffff';
-    const accent = style.accent || '#007AFF';
+        ? `linear-gradient(165deg, ${style.bgGradient[0]}, ${style.bgGradient[1]})`
+        : 'linear-gradient(165deg, #0A0A1A 0%, #1A1A35 40%, #12122A 100%)';
+    const textColor = style.textColor || '#F5F5F7';
+    const accent = style.accent || '#0A84FF';
     const fontFamily = FONT_MAP[style.fontStyle || 'sans'];
 
-    /* ── meta ── */
     const appType = (meta?.appType as string) || 'generic';
     const signal  = typeof meta?.signal  === 'number' ? meta.signal  : 3;
     const battery = typeof meta?.battery === 'number' ? meta.battery : 78;
 
-    /* ── dynamic time ── */
     const now = new Date();
     const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    /* ── app-type preset ── */
     const preset = APP_PRESETS[appType] || APP_PRESETS.generic;
     const navIcon  = icon || preset.navIcon;
     const navTitle = title || preset.navTitle;
-
-    /* ── subtle indicator color (lighter version of textColor) ── */
     const barColor = `${textColor}cc`;
 
     return (
@@ -102,147 +92,193 @@ const PhoneScreenSkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
             background: bg,
             color: textColor,
             fontFamily,
-            borderRadius: '32px',
+            /* 精致手机边框 — 多层模拟 */
+            borderRadius: '36px',
             overflow: 'hidden',
             boxShadow:
-                '0 0 0 1px rgba(255,255,255,0.08), ' +
-                '0 2px 4px rgba(0,0,0,0.15), ' +
-                '0 16px 48px -8px rgba(0,0,0,0.55)',
-            border: '3px solid rgba(128,128,128,0.25)',
+                '0 0 0 0.5px rgba(255,255,255,0.12), ' +       /* 内发光边 */
+                '0 0 0 3px rgba(40,40,50,0.95), ' +            /* 金属中框 */
+                '0 0 0 3.5px rgba(80,80,90,0.4), ' +           /* 金属高光 */
+                '0 0 0 4px rgba(20,20,30,0.6), ' +             /* 外边缘 */
+                '0 8px 32px -4px rgba(0,0,0,0.55), ' +         /* 设备投影 */
+                '0 24px 64px -12px rgba(0,0,0,0.35)',           /* 远投影 */
             position: 'relative',
         }}>
-            {/* ── Inner screen bezel ── */}
+            {/* ── 屏幕反光层 (斜向光带) ── */}
             <div style={{
-                borderRadius: '29px',
-                overflow: 'hidden',
-            }}>
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '36px',
+                background: `linear-gradient(
+                    125deg,
+                    transparent 0%,
+                    rgba(255,255,255,0.03) 30%,
+                    rgba(255,255,255,0.06) 45%,
+                    transparent 55%,
+                    transparent 100%
+                )`,
+                pointerEvents: 'none',
+                zIndex: 10,
+            }} />
 
-                {/* ═══════════  iOS Status Bar  ═══════════ */}
+            {/* ── 内屏区域 ── */}
+            <div style={{
+                borderRadius: '33px',
+                overflow: 'hidden',
+                position: 'relative',
+            }}>
+                {/* ═══  iOS 状态栏  ═══ */}
                 <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '10px 22px 4px',
-                    fontSize: '12px',
-                    fontWeight: 700,
+                    padding: '12px 26px 4px',
+                    fontSize: '13px',
+                    fontWeight: 600,
                     fontFamily: "'SF Pro Text', 'Inter', system-ui, sans-serif",
                     letterSpacing: '-0.2px',
                 }}>
-                    {/* Left — Time */}
-                    <span style={{ minWidth: '40px' }}>{timeStr}</span>
+                    <span style={{ minWidth: '44px' }}>{timeStr}</span>
 
-                    {/* Center — Notch (subtle pill) */}
-                    <span style={{
-                        width: '80px',
-                        height: '22px',
-                        background: 'rgba(0,0,0,0.65)',
+                    {/* 灵动岛 — 多层精致 */}
+                    <div style={{
+                        width: '86px',
+                        height: '24px',
+                        background: 'rgba(0,0,0,0.80)',
                         borderRadius: '20px',
-                        display: 'inline-block',
-                    }} />
+                        position: 'relative',
+                        boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.06), 0 0 12px rgba(0,0,0,0.3)',
+                    }}>
+                        {/* 前置摄像头 */}
+                        <div style={{
+                            position: 'absolute',
+                            right: '18px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'radial-gradient(circle at 40% 35%, rgba(30,30,50,0.9), rgba(15,15,25,1))',
+                            boxShadow: 'inset 0 0 1px rgba(255,255,255,0.15)',
+                        }} />
+                    </div>
 
-                    {/* Right — Icons */}
                     <span style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '5px',
-                        minWidth: '40px',
+                        minWidth: '44px',
                         justifyContent: 'flex-end',
                     }}>
                         <SignalBars count={signal} color={barColor} />
-                        <span style={{ fontSize: '10px', opacity: 0.7, fontWeight: 400 }}>
+                        <span style={{ fontSize: '10px', opacity: 0.65, fontWeight: 400 }}>
                             {battery}%
                         </span>
                         <BatteryIcon pct={battery} color={barColor} />
                     </span>
                 </div>
 
-                {/* ═══════════  App Navigation Bar  ═══════════ */}
+                {/* ═══  App 导航栏 — 毛玻璃效果  ═══ */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    padding: '10px 18px 12px',
-                    background: `linear-gradient(180deg, ${accent}22, ${accent}08)`,
-                    borderBottom: `0.5px solid ${accent}30`,
+                    padding: '10px 20px 12px',
+                    background: `linear-gradient(180deg, ${accent}18, ${accent}08)`,
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    borderBottom: `0.5px solid ${accent}25`,
+                    position: 'relative',
                 }}>
-                    {/* Back arrow */}
+                    {/* 毛玻璃底层 */}
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(255,255,255,0.04)',
+                        pointerEvents: 'none',
+                    }} />
+
                     <span style={{
                         fontSize: '18px',
-                        opacity: 0.55,
+                        opacity: 0.50,
                         lineHeight: 1,
                         cursor: 'default',
+                        color: accent,
                     }}>‹</span>
                     <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '16px' }}>{navIcon}</span>
                         <span style={{
-                            fontSize: '15px',
+                            fontSize: '16px',
                             fontWeight: 600,
-                            letterSpacing: '0.2px',
+                            letterSpacing: '0.1px',
                         }}>{navTitle}</span>
                     </span>
-                    {/* Right accessory */}
-                    <span style={{ fontSize: '14px', opacity: 0.4 }}>⋯</span>
+                    <span style={{
+                        fontSize: '16px',
+                        opacity: 0.35,
+                        color: accent,
+                    }}>⋯</span>
                 </div>
 
-                {/* ═══════════  Content Area  ═══════════ */}
+                {/* ═══  内容区  ═══ */}
                 <div style={{
-                    padding: '20px 20px 8px',
+                    padding: '22px 22px 10px',
                     minHeight: '110px',
                     position: 'relative',
                 }}>
-                    {/* Optional body icon (large, centred above text for weather/delivery) */}
                     {appType !== 'generic' && preset.bodyIcon && (
                         <div style={{
                             textAlign: 'center',
-                            fontSize: '36px',
-                            marginBottom: '12px',
-                            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.3))',
+                            fontSize: '38px',
+                            marginBottom: '14px',
+                            filter: 'drop-shadow(0 3px 8px rgba(0,0,0,0.35))',
                         }}>
                             {preset.bodyIcon}
                         </div>
                     )}
 
-                    {/* Body text */}
                     <div style={{
                         fontSize: '14px',
                         lineHeight: '1.85',
                         whiteSpace: 'pre-wrap',
                         letterSpacing: '0.3px',
+                        opacity: 0.92,
                     }}>
                         {body}
                     </div>
 
-                    {/* Dashed divider */}
+                    {/* 内容区分隔线 — 渐变淡出 */}
                     <div style={{
-                        margin: '16px 0 8px',
-                        borderTop: `1px dashed ${textColor}20`,
+                        margin: '18px 0 8px',
+                        height: '0.5px',
+                        background: `linear-gradient(90deg, transparent, ${textColor}18, transparent)`,
                     }} />
 
-                    {/* Footer */}
                     {footer && (
                         <div style={{
                             fontSize: '11px',
-                            opacity: 0.4,
+                            opacity: 0.35,
                             textAlign: 'right',
                             paddingBottom: '4px',
                             fontStyle: 'italic',
+                            fontFamily: "'Georgia', 'Noto Serif SC', serif",
                         }}>
                             {footer}
                         </div>
                     )}
                 </div>
 
-                {/* ═══════════  Home Indicator  ═══════════ */}
+                {/* ═══  Home Indicator  ═══ */}
                 <div style={{
                     display: 'flex',
                     justifyContent: 'center',
                     paddingBottom: '10px',
-                    paddingTop: '2px',
+                    paddingTop: '4px',
                 }}>
                     <span style={{
-                        width: '100px',
+                        width: '108px',
                         height: '4px',
-                        background: `${textColor}30`,
+                        background: `linear-gradient(90deg, ${textColor}25, ${textColor}35, ${textColor}25)`,
                         borderRadius: '2px',
                     }} />
                 </div>

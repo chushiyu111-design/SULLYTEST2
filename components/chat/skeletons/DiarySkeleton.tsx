@@ -1,8 +1,8 @@
 /**
  * DiarySkeleton — 日记页骨架
  *
- * 横线本页风格：红色装订线 + repeating 横线 + 手写感 + 墨渍装饰
- * 参照 skeleton_card_spec.md #5 设计
+ * 📓 温暖手写本风 — 奶油暖纸、棕红装订线、柔和蓝灰横线、
+ * 金属装订环、真实墨迹感、折角翻页效果
  */
 import React from 'react';
 import { StatusCardData } from '../../../types/statusCard';
@@ -14,23 +14,21 @@ const FONT_MAP: Record<string, string> = {
     mono: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
 };
 
-/* ---- 内联 SVG：纸张纹理 (fractal noise) ---- */
-const PAPER_TEXTURE_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E")`;
-
-/* 行高（px），横线间距基准 */
 const LINE_HEIGHT_PX = 34;
 
 const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
     const { title, body, footer, icon, style } = data;
 
-    const bgGrad = style.bgGradient
+    const bgColor = style.bgGradient
         ? `linear-gradient(180deg, ${style.bgGradient[0]}, ${style.bgGradient[1]})`
-        : '#FEFCF3';
-    const textColor = style.textColor || '#3D3425';
-    const accent = style.accent || '#C0392B';
+        : 'linear-gradient(180deg, #FDF8EF 0%, #FAF3E6 50%, #F7EEE0 100%)';
+    const textColor = style.textColor || '#3D3225';
+    const accent = style.accent || '#B85450';
     const fontFamily = FONT_MAP[style.fontStyle || 'handwrite'];
 
-    /* 装订线颜色 —— 基于 accent 略透明 */
+    /* 横线颜色 — 柔和蓝灰而非土灰 */
+    const lineColor = 'rgba(160,175,195,0.28)';
+    /* 装订线 */
     const bindingColor = accent;
 
     return (
@@ -38,26 +36,26 @@ const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
             style={{
                 width: '330px',
                 maxWidth: 'calc(100vw - 48px)',
-                background: typeof bgGrad === 'string' && bgGrad.startsWith('linear')
-                    ? bgGrad : bgGrad as string,
+                background: typeof bgColor === 'string' && bgColor.startsWith('linear')
+                    ? bgColor : bgColor as string,
                 color: textColor,
                 fontFamily,
                 borderRadius: '4px',
                 overflow: 'hidden',
                 position: 'relative' as const,
                 boxShadow:
-                    '0 2px 6px rgba(0,0,0,0.06), ' +
-                    '0 12px 28px -4px rgba(0,0,0,0.18), ' +
-                    '0 32px 56px -12px rgba(0,0,0,0.22), ' +
-                    'inset 0 0 0 1px rgba(255,255,255,0.45)',
+                    '0 2px 5px rgba(0,0,0,0.05), ' +
+                    '0 10px 24px -4px rgba(0,0,0,0.14), ' +
+                    '0 28px 50px -10px rgba(0,0,0,0.18), ' +
+                    'inset 0 0 0 1px rgba(255,255,255,0.55)',
             }}
         >
-            {/* ---- 纸张纹理叠加 ---- */}
+            {/* ── 纸张纹理 (温暖纤维感) ── */}
             <div
                 style={{
                     position: 'absolute' as const,
                     inset: 0,
-                    backgroundImage: PAPER_TEXTURE_SVG,
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E")`,
                     backgroundRepeat: 'repeat',
                     pointerEvents: 'none' as const,
                     zIndex: 1,
@@ -65,47 +63,81 @@ const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
                 }}
             />
 
-            {/* ---- 红色装订线（左侧竖线，双线） ---- */}
+            {/* ── 装订线 (棕红双线 + 微妙阴影) ── */}
             <div
                 style={{
                     position: 'absolute' as const,
                     left: '38px',
                     top: 0,
                     bottom: 0,
-                    width: '2px',
-                    background: `${bindingColor}30`,
+                    width: '1.5px',
+                    background: `${bindingColor}35`,
                     zIndex: 3,
-                    boxShadow: `3px 0 0 0 ${bindingColor}20`,
+                }}
+            />
+            <div
+                style={{
+                    position: 'absolute' as const,
+                    left: '42px',
+                    top: 0,
+                    bottom: 0,
+                    width: '1px',
+                    background: `${bindingColor}25`,
+                    zIndex: 3,
                 }}
             />
 
-            {/* ---- 装订孔装饰（左边缘圆孔） ---- */}
+            {/* ── 装订孔 — 金属环效果 ── */}
             {[0, 1, 2].map((i) => (
                 <div
                     key={`hole-${i}`}
                     style={{
                         position: 'absolute' as const,
-                        left: '10px',
-                        top: `${60 + i * 80}px`,
-                        width: '14px',
-                        height: '14px',
+                        left: '8px',
+                        top: `${55 + i * 80}px`,
+                        width: '16px',
+                        height: '16px',
                         borderRadius: '50%',
-                        background: 'rgba(0,0,0,0.04)',
-                        border: '1px solid rgba(0,0,0,0.06)',
-                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.08)',
                         zIndex: 4,
                     }}
-                />
+                >
+                    {/* 金属环外圈 */}
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        background: `conic-gradient(
+                            from 0deg,
+                            rgba(180,175,165,0.5) 0deg,
+                            rgba(210,205,195,0.7) 90deg,
+                            rgba(160,155,145,0.4) 180deg,
+                            rgba(200,195,185,0.6) 270deg,
+                            rgba(180,175,165,0.5) 360deg
+                        )`,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.12), inset 0 0 2px rgba(255,255,255,0.3)',
+                    }} />
+                    {/* 金属环内孔 */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '3px',
+                        left: '3px',
+                        right: '3px',
+                        bottom: '3px',
+                        borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.04)',
+                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.10), inset 0 -1px 1px rgba(255,255,255,0.15)',
+                    }} />
+                </div>
             ))}
 
-            {/* ---- 日期头区域 ---- */}
+            {/* ── 日期头区域 ── */}
             <div
                 style={{
                     padding: '18px 20px 14px 54px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    borderBottom: `2px solid ${accent}25`,
+                    borderBottom: `1.5px solid ${accent}18`,
                     position: 'relative' as const,
                     zIndex: 2,
                 }}
@@ -129,7 +161,7 @@ const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
                     <span
                         style={{
                             fontSize: '10px',
-                            opacity: 0.55,
+                            opacity: 0.50,
                             fontFamily: "'Georgia', serif",
                             letterSpacing: '0.15em',
                         }}
@@ -139,103 +171,108 @@ const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
                 )}
             </div>
 
-            {/* ---- 粗分隔线（标题与正文之间的横线） ---- */}
+            {/* ── 横线本体内容区域 ── */}
             <div
                 style={{
-                    marginLeft: '54px',
-                    marginRight: '20px',
-                    height: '1px',
-                    background: `linear-gradient(90deg, ${accent}20, ${accent}08)`,
-                    position: 'relative' as const,
-                    zIndex: 2,
-                }}
-            />
-
-            {/* ---- 横线本体内容区域 ---- */}
-            <div
-                style={{
-                    padding: `18px 20px 32px 54px`,
+                    padding: `18px 20px 40px 54px`,
                     fontSize: '15px',
                     lineHeight: `${LINE_HEIGHT_PX}px`,
                     whiteSpace: 'pre-wrap' as const,
                     minHeight: '170px',
                     position: 'relative' as const,
                     zIndex: 2,
-                    /* 横线用 repeating-linear-gradient 实现 */
+                    /* 横线 — 柔和蓝灰色 */
                     backgroundImage: `repeating-linear-gradient(
                         transparent,
                         transparent ${LINE_HEIGHT_PX - 1}px,
-                        #DED6C6 ${LINE_HEIGHT_PX - 1}px,
-                        #DED6C6 ${LINE_HEIGHT_PX}px
+                        ${lineColor} ${LINE_HEIGHT_PX - 1}px,
+                        ${lineColor} ${LINE_HEIGHT_PX}px
                     )`,
                     backgroundPosition: '0 17px',
                     letterSpacing: '0.6px',
                 }}
             >
-                {/* 微妙墨迹效果 — 文字略带不齐感 */}
+                {/* 手写墨迹效果 */}
                 <span
                     style={{
                         display: 'inline',
-                        textShadow: '0.3px 0.2px 0px rgba(45,35,25,0.08)',
+                        textShadow: `0.3px 0.2px 0.6px ${textColor}12`,
                     }}
                 >
                     {body?.trim()}
                 </span>
             </div>
 
-            {/* ---- 钢笔墨渍装饰（半透明圆点） ---- */}
+            {/* ── 墨渍装饰 (更有存在感的墨水飞溅) ── */}
             <div
                 style={{
                     position: 'absolute' as const,
-                    bottom: '28px',
-                    right: '24px',
+                    bottom: '24px',
+                    right: '20px',
                     zIndex: 3,
                     pointerEvents: 'none' as const,
                     display: 'flex',
-                    gap: '4px',
+                    gap: '5px',
                     alignItems: 'flex-end',
                 }}
             >
-                {/* 大墨点 */}
-                <div
-                    style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: `${textColor}15`,
-                        boxShadow: `1px 1px 3px ${textColor}08`,
-                    }}
-                />
-                {/* 小墨点 */}
-                <div
-                    style={{
-                        width: '4px',
-                        height: '4px',
-                        borderRadius: '50%',
-                        background: `${textColor}12`,
-                    }}
-                />
-                {/* 极小溅射点 */}
-                <div
-                    style={{
-                        width: '2px',
-                        height: '2px',
-                        borderRadius: '50%',
-                        background: `${textColor}10`,
-                        transform: 'translate(3px, -5px)',
-                    }}
-                />
+                {/* 大墨点 — 不规则 */}
+                <div style={{
+                    width: '10px',
+                    height: '9px',
+                    borderRadius: '50% 45% 55% 40%',
+                    background: `${textColor}18`,
+                    boxShadow: `1px 1px 4px ${textColor}0a`,
+                }} />
+                {/* 中墨点 */}
+                <div style={{
+                    width: '5px',
+                    height: '5px',
+                    borderRadius: '50%',
+                    background: `${textColor}14`,
+                }} />
+                {/* 小溅射 */}
+                <div style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: `${textColor}10`,
+                    transform: 'translate(4px, -6px)',
+                }} />
+                <div style={{
+                    width: '2px',
+                    height: '2px',
+                    borderRadius: '50%',
+                    background: `${textColor}0c`,
+                    transform: 'translate(-2px, -10px)',
+                }} />
             </div>
 
-            {/* ---- 角落装饰 icon ---- */}
+            {/* ── 页码 (底部居中) ── */}
+            <div style={{
+                position: 'absolute' as const,
+                bottom: '10px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                fontSize: '8px',
+                color: textColor,
+                opacity: 0.20,
+                fontFamily: "'Georgia', serif",
+                letterSpacing: '0.15em',
+                zIndex: 3,
+            }}>
+                — · —
+            </div>
+
+            {/* ── 角落装饰 icon ── */}
             {icon && (
                 <div
                     style={{
                         position: 'absolute' as const,
                         bottom: '16px',
-                        right: '18px',
+                        right: '16px',
                         fontSize: '22px',
-                        opacity: 0.12,
+                        opacity: 0.10,
                         transform: 'rotate(-8deg)',
                         zIndex: 2,
                         pointerEvents: 'none' as const,
@@ -245,28 +282,39 @@ const DiarySkeleton: React.FC<{ data: StatusCardData }> = ({ data }) => {
                 </div>
             )}
 
-            {/* ---- 纸张右下角微卷效果 ---- */}
+            {/* ── 纸张右下角折角 ── */}
             <div
                 style={{
                     position: 'absolute' as const,
                     bottom: 0,
                     right: 0,
-                    width: '32px',
-                    height: '32px',
+                    width: '36px',
+                    height: '36px',
                     background:
-                        'linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.015) 50%, rgba(0,0,0,0.035) 100%)',
+                        'linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.018) 50%, rgba(0,0,0,0.04) 100%)',
                     pointerEvents: 'none' as const,
                     zIndex: 5,
                 }}
             />
+            {/* 折角反面色 */}
+            <div style={{
+                position: 'absolute' as const,
+                bottom: 0,
+                right: 0,
+                width: '20px',
+                height: '20px',
+                background: 'linear-gradient(135deg, transparent 50%, rgba(245,238,225,0.8) 50%)',
+                pointerEvents: 'none' as const,
+                zIndex: 5,
+            }} />
 
-            {/* ---- 页面顶部微妙的年代感暗角 ---- */}
+            {/* ── 页面暗角 ── */}
             <div
                 style={{
                     position: 'absolute' as const,
                     inset: 0,
                     background:
-                        'radial-gradient(ellipse at center, transparent 60%, rgba(120,100,70,0.06) 100%)',
+                        'radial-gradient(ellipse at center, transparent 55%, rgba(140,120,85,0.05) 100%)',
                     pointerEvents: 'none' as const,
                     zIndex: 1,
                 }}

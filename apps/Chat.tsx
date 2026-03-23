@@ -1242,6 +1242,11 @@ const Chat: React.FC = () => {
                 onStatusBarModeChange={(mode: string) => {
                     updateCharacter(char.id, { statusBarMode: mode as any });
                 }}
+                customStatusTemplates={char.customStatusTemplates}
+                onSaveCustomTemplate={(tpl) => {
+                    updateCharacter(char.id, { customStatusTemplates: [tpl] });
+                    addToast('自定义模板已保存', 'success');
+                }}
             />
 
             <ChatHeader
@@ -1306,7 +1311,7 @@ const Chat: React.FC = () => {
                             isVoiceTextExpanded={expandedVoiceTextIds.has(m.id)}
                             onToggleVoiceText={toggleVoiceText}
                             innerVoice={isLastAssistant ? (char.moodState as any)?.innerVoice : undefined}
-                            statusCardData={isLastAssistant && (char.statusBarMode === 'creative' || char.statusBarMode === 'custom') ? char.lastStatusCard : undefined}
+                            statusCardData={isLastAssistant && (char.statusBarMode === 'creative' || char.statusBarMode === 'custom' || char.statusBarMode === 'freeform') ? char.lastStatusCard : undefined}
                             onRetryInnerVoice={isLastAssistant ? retryMindSnapshot : undefined}
                         />
                     );

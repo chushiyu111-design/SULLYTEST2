@@ -4,12 +4,22 @@ import { useOS } from '../../context/OSContext';
 import { STT_PROVIDER_DEFAULTS } from '../../types/stt';
 import type { SttProvider } from '../../types/stt';
 
+/** 识别语言选项 */
+const STT_LANGUAGE_OPTIONS: { value: string; label: string; hint?: string }[] = [
+    { value: '', label: '自动探测', hint: '让模型自动判断语种' },
+    { value: 'zh', label: '强制中文', hint: '推荐：彻底杜绝韩文幻觉' },
+    { value: 'en', label: '强制英文' },
+    { value: 'ja', label: '日本語' },
+    { value: 'ko', label: '한국어' },
+];
+
 const SttSettings: React.FC = () => {
     const { sttConfig, updateSttConfig, addToast } = useOS();
 
     const [sttProvider, setSttProvider] = useState<SttProvider>(sttConfig.provider);
     const [sttGroqKey, setSttGroqKey] = useState(sttConfig.groqApiKey);
     const [sttSiliconKey, setSttSiliconKey] = useState(sttConfig.siliconflowApiKey);
+    const [sttLanguage, setSttLanguage] = useState(sttConfig.language || '');
 
     return (
         <section className="relative overflow-hidden bg-[#eef4fb]/70 backdrop-blur-sm rounded-3xl p-6 shadow-sm border border-[#d4e4f7]/60">
@@ -49,6 +59,36 @@ const SttSettings: React.FC = () => {
                     </div>
                 </div>
 
+                {/* 识别语言选择 */}
+                <div>
+                    <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">识别语言</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {STT_LANGUAGE_OPTIONS.map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => setSttLanguage(opt.value)}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${sttLanguage === opt.value
+                                    ? 'bg-[#7b8db8]/15 text-[#5a6f94] ring-1 ring-[#7b8db8]/30'
+                                    : 'bg-white/50 text-[#8b9bb1] border border-[#d4e4f7]/60'
+                                    }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                    {/* 提示文字 */}
+                    {sttLanguage === '' && (
+                        <p className="text-[10px] text-[#c4956a] mt-1.5 pl-1 leading-relaxed">
+                            ⚠️ 自动探测模式下，静音或噪音可能被 Whisper 幻觉为韩文。建议选择「强制中文」。
+                        </p>
+                    )}
+                    {sttLanguage === 'zh' && (
+                        <p className="text-[10px] text-[#7faa95] mt-1.5 pl-1">
+                            ✓ 已锁定中文识别，不会再出现韩文幻觉问题。
+                        </p>
+                    )}
+                </div>
+
                 {/* Groq API Key */}
                 <div>
                     <label className="text-[10px] font-bold text-[#8b9bb1] uppercase tracking-widest mb-1.5 block pl-1">Groq API Key</label>
@@ -82,7 +122,12 @@ const SttSettings: React.FC = () => {
                 {/* 保存按钮 */}
                 <button
                     onClick={() => {
-                        updateSttConfig({ provider: sttProvider, groqApiKey: sttGroqKey, siliconflowApiKey: sttSiliconKey });
+                        updateSttConfig({
+                            provider: sttProvider,
+                            groqApiKey: sttGroqKey,
+                            siliconflowApiKey: sttSiliconKey,
+                            language: sttLanguage || undefined,
+                        });
                         addToast('语音识别配置已保存', 'success');
                     }}
                     className="w-full py-3 rounded-2xl font-bold text-white shadow-lg shadow-[#7b8db8]/20 bg-gradient-to-r from-[#7b8db8] to-[#8ba3c8] active:scale-95 transition-all"

@@ -943,9 +943,9 @@ mode 可选值：
                     notificationPlayed = true;
                     haptic.medium();
                     const themeId = char.bubbleStyle || 'default';
-                    // Resolve baseThemeId for custom Workshop themes (so they inherit notification sound)
-                    const resolvedThemeId = THEME_PLUGINS[themeId] ? themeId : 'default';
-                    const themePlugin = THEME_PLUGINS[resolvedThemeId];
+                    // Only play notification sound if this specific theme has one registered
+                    // (do NOT fall back to 'default' — that is WeChat-specific)
+                    const themePlugin = THEME_PLUGINS[themeId];
                     if (themePlugin?.notificationSound) playThemeNotification(themePlugin.notificationSound);
                 };
 
@@ -1211,6 +1211,9 @@ mode 可选值：
                 const charSnapshot = { ...char };
                 lastMindSnapshotCtx.current = { char: charSnapshot, aiContent, msgs: currentMsgs, config: secondaryConfig };
                 const statusMode = char.statusBarMode || 'classic';
+                // Skip entirely if heart voice is off
+                if (statusMode === 'off') { /* noop — bionic engine still runs */ }
+                else {
                 // Delay 2s to reduce resource contention on mobile
                 setTimeout(() => {
                     if (statusMode === 'classic') {
@@ -1226,18 +1229,45 @@ mode 可选值：
                                 }
                             })
                             .catch(e => console.error('💭 [InnerVoice] Background:', e));
-                    } else {
-                        // ── Creative / Custom card ──
-                        const customTemplate = statusMode === 'custom' && char.customStatusTemplates?.length
-                            ? char.customStatusTemplates[Math.floor(Math.random() * char.customStatusTemplates.length)]?.jsonSchema
-                            : undefined;
-                        MindSnapshotExtractor.generateCreativeCard(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                    } else if (statusMode === 'freeform') {
+                        // ── Freeform HTML card ──
+                        MindSnapshotExtractor.generateFreeformCard(charSnapshot, aiContent, currentMsgs, secondaryConfig,
                             (reason) => addToast(reason, 'error'),
-                            customTemplate,
                         )
                             .then(cardData => {
                                 if (cardData && char && onMoodUpdate) {
-                                    // Pass both the updated moodState AND the card data
+                                    onMoodUpdate(char.id, { ...(charSnapshot.moodState || {}), innerVoice: cardData.body }, cardData);
+                                } else {
+                                    console.warn('✨ [FreeformCard] Generation returned null');
+                                }
+                            })
+                            .catch(e => console.error('✨ [FreeformCard] Background:', e));
+                    } else if (statusMode === 'custom') {
+                        // ── Custom user-defined template ──
+                        const template = charSnapshot.customStatusTemplates?.[0];
+                        if (template?.systemPrompt) {
+                            MindSnapshotExtractor.generateCustomCard(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                                template,
+                                (reason) => addToast(reason, 'error'),
+                            )
+                                .then(cardData => {
+                                    if (cardData && char && onMoodUpdate) {
+                                        onMoodUpdate(char.id, { ...(charSnapshot.moodState || {}), innerVoice: cardData.body }, cardData);
+                                    } else {
+                                        console.warn('🎨 [CustomCard] Generation returned null');
+                                    }
+                                })
+                                .catch(e => console.error('🎨 [CustomCard] Background:', e));
+                        } else {
+                            console.warn('🎨 [CustomCard] No template configured, skipping');
+                        }
+                    } else {
+                        // ── Creative card ──
+                        MindSnapshotExtractor.generateCreativeCard(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                            (reason) => addToast(reason, 'error'),
+                        )
+                            .then(cardData => {
+                                if (cardData && char && onMoodUpdate) {
                                     onMoodUpdate(char.id, { ...(charSnapshot.moodState || {}), innerVoice: cardData.body }, cardData);
                                 } else {
                                     console.warn('🎴 [CreativeCard] Generation returned null');
@@ -1246,6 +1276,7 @@ mode 可选值：
                             .catch(e => console.error('🎴 [CreativeCard] Background:', e));
                     }
                 }, 2000);
+                } // end else (statusMode !== 'off')
             }
 
             // ====== Event Extractor (时间事件提取) — fire-and-forget ======
@@ -1274,6 +1305,10 @@ mode 可选值：
         if (!ctx) { console.warn('💭 [InnerVoice] No context to retry'); return; }
         const statusMode = ctx.char.statusBarMode || 'classic';
         console.log(`💭 [InnerVoice] Manual retry triggered (mode: ${statusMode})`);
+        if (statusMode === 'off') {
+            addToast('心声已关闭，请先选择一个模式', 'info');
+            return;
+        }
         if (statusMode === 'classic') {
             MindSnapshotExtractor.generateInnerVoice(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
                 (reason) => addToast(reason, 'error')
@@ -1284,13 +1319,33 @@ mode 可选值：
                     }
                 })
                 .catch(e => console.error('💭 [InnerVoice] Retry failed:', e));
+        } else if (statusMode === 'freeform') {
+            MindSnapshotExtractor.generateFreeformCard(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
+                (reason) => addToast(reason, 'error'),
+            )
+                .then(cardData => {
+                    if (cardData && ctx.char && onMoodUpdate) {
+                        onMoodUpdate(ctx.char.id, { ...(ctx.char.moodState || {}), innerVoice: cardData.body }, cardData);
+                    }
+                })
+                .catch(e => console.error('✨ [FreeformCard] Retry failed:', e));
+        } else if (statusMode === 'custom') {
+            const template = ctx.char.customStatusTemplates?.[0];
+            if (template?.systemPrompt) {
+                MindSnapshotExtractor.generateCustomCard(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
+                    template,
+                    (reason) => addToast(reason, 'error'),
+                )
+                    .then(cardData => {
+                        if (cardData && ctx.char && onMoodUpdate) {
+                            onMoodUpdate(ctx.char.id, { ...(ctx.char.moodState || {}), innerVoice: cardData.body }, cardData);
+                        }
+                    })
+                    .catch(e => console.error('🎨 [CustomCard] Retry failed:', e));
+            }
         } else {
-            const customTemplate = statusMode === 'custom' && ctx.char.customStatusTemplates?.length
-                ? ctx.char.customStatusTemplates[Math.floor(Math.random() * ctx.char.customStatusTemplates.length)]?.jsonSchema
-                : undefined;
             MindSnapshotExtractor.generateCreativeCard(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
                 (reason) => addToast(reason, 'error'),
-                customTemplate,
             )
                 .then(cardData => {
                     if (cardData && ctx.char && onMoodUpdate) {
