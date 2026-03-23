@@ -957,6 +957,9 @@ mode 可选值：
                 // Pattern B: content fully wrapped in brackets
                 // e.g. 【语音消息：喏？喏？...】or [语音消息：内容]
                 const VOICE_WRAP_RE = /^([\s\S]*?)[【\[]语音(?:消息)?[：:]\s*([\s\S]+?)\s*[】\]](.*)$/;
+                // Pattern C: XML-style voice tags (原版 SillyTavern 兼容)
+                // e.g. <语音>你好呀~</语音>
+                const VOICE_XML_RE = /^([\s\S]*?)<语音>([\s\S]+?)<\/语音>([\s\S]*)$/;
 
                 /**
                  * Save a text chunk — if it contains a voice tag, split into text + voice message;
@@ -969,6 +972,7 @@ mode 可选值：
                     let saved = 0;
                     const durMatch = cleanChunk.match(VOICE_DURATION_RE);
                     const wrapMatch = !durMatch ? cleanChunk.match(VOICE_WRAP_RE) : null;
+                    const xmlMatch = !durMatch && !wrapMatch ? cleanChunk.match(VOICE_XML_RE) : null;
 
                     if (durMatch) {
                         const tagStart = cleanChunk.search(/[【\[]语音(?:消息)?[：:]\s*\d/);
@@ -1019,6 +1023,38 @@ mode 可选值：
                             playFirstNotification();
                             saved++;
                             onVoiceMessageSaved?.(savedVoiceId2, voiceText);
+                        }
+                        if (textAfter) {
+                            await new Promise(r => setTimeout(r, 400));
+                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: textAfter });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            saved++;
+                        }
+                    } else if (xmlMatch) {
+                        // XML-style voice tag: <语音>内容</语音> (原版兼容)
+                        const textBefore = xmlMatch[1].trim();
+                        const voiceText = xmlMatch[2].trim();
+                        const textAfter = xmlMatch[3].trim();
+                        const estimatedDuration = Math.max(2, Math.ceil(voiceText.length / 4));
+
+                        if (textBefore) {
+                            await DB.saveMessage({ charId: char.id, role: 'assistant', type: 'text', content: textBefore, replyTo: replyData });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                        if (voiceText) {
+                            const savedVoiceId3 = await DB.saveMessage({
+                                charId: char.id, role: 'assistant', type: 'voice',
+                                content: voiceText,
+                                metadata: { duration: estimatedDuration, sourceText: voiceText, hasAudio: false },
+                                replyTo: textBefore ? undefined : replyData,
+                            });
+                            setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
+                            playFirstNotification();
+                            saved++;
+                            onVoiceMessageSaved?.(savedVoiceId3, voiceText);
                         }
                         if (textAfter) {
                             await new Promise(r => setTimeout(r, 400));
