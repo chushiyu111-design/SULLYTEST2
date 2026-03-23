@@ -2,6 +2,7 @@
 import { MemoryFragment, SpriteConfig, SkinSet, UserImpression } from './chat';
 import { RoomItem, RoomGeneratedState } from './room';
 import { ChatTheme, BubbleStyle } from './chat';
+import { StatusBarMode, CustomStatusTemplate, StatusCardData } from './statusCard';
 
 // --- DATE APP TYPES ---
 export interface DialogueItem {
@@ -63,14 +64,35 @@ export interface GroupProfile {
     createdAt: number;
 }
 
+/** 内部状态层 — 仿生情绪架构 (7维神经递质模型) */
+export interface InternalState {
+    // ─── 核心神经递质 (0.0 ~ 1.0, 基线 0.5) ───
+    dopamine: number;          // 多巴胺: 奖赏/动力/期待 (低→无聊, 高→兴奋)
+    serotonin: number;         // 血清素: 情绪稳定/安全感 (低→焦虑/emo, 高→平和)
+    cortisol: number;          // 皮质醇: 压力/警觉 (低→放松, 高→紧张/易怒)
+    oxytocin: number;          // 催产素: 亲密/信任 (低→疏离, 高→温柔/依恋)
+    norepinephrine: number;    // 去甲肾上腺素: 专注/警觉 (低→走神, 高→精神集中)
+    endorphin: number;         // 内啡肽: 释然/止痛 (低→痛感强, 高→释然/轻盈)
+    energy: number;            // 综合精力 (低→疲倦/敷衍, 高→活跃/话多)
+
+    // ─── 涌现层 ───
+    innerVoice: string;        // 心声: 角色此刻脑中闪过的念头
+    surfaceEmotion: string;    // 外显情绪标签 (2-4字, 用于日志/debug)
+
+    // ─── 元数据 ───
+    roundCount: number;        // 当前状态模式已持续几轮
+    updatedAt: number;         // 上次更新时间戳
+}
+
+/** @deprecated 旧格式兼容 — 迁移期保留 */
 export interface MoodState {
-    mood: string;           // 情绪词 (2-4字): "委屈", "放松", "心动"
-    intensity: number;      // 1-10 情绪强度
-    cause: string;          // 情绪原因 (15字以内)
-    innerVoice: string;     // 心声: 角色心里想但没说出口的话
-    unresolved?: string;    // 未解决的事 (15字以内)
-    roundCount: number;     // 当前情绪已持续几轮
-    updatedAt: number;      // 上次更新时间戳
+    mood: string;
+    intensity: number;
+    cause: string;
+    innerVoice: string;
+    unresolved?: string;
+    roundCount: number;
+    updatedAt: number;
 }
 
 export interface CharacterProfile {
@@ -143,8 +165,13 @@ export interface CharacterProfile {
     vectorMemoryTakeover?: boolean;          // @deprecated — use vectorMemoryMode instead
     vectorMemoryMode?: 'traditional' | 'hybrid' | 'vector';  // Three-tier mode (default: 'hybrid')
 
-    // Character State Bar (心智快照)
-    moodState?: MoodState;                     // Current emotional state with decay
+    // Internal State Layer (内部状态层 — 仿生情绪架构)
+    moodState?: InternalState | MoodState;     // Current internal state (or legacy MoodState for migration)
+
+    // Creative Status Bar (创意状态栏)
+    statusBarMode?: StatusBarMode;             // 'classic' | 'creative' | 'custom' (default: 'classic')
+    customStatusTemplates?: CustomStatusTemplate[];  // User-defined templates for 'custom' mode
+    lastStatusCard?: StatusCardData;           // Last generated creative card data
 }
 
 export interface CharacterExportData extends Omit<CharacterProfile, 'id' | 'memories' | 'refinedMemories' | 'activeMemoryMonths' | 'impression' | 'vectorMemoryEnabled' | 'vectorMemoryAutoExtract' | 'vectorMemoryExtractInterval' | 'vectorMemoryLastExtractAt' | 'vectorMemoryTakeover' | 'vectorMemoryMode' | 'moodState'> {

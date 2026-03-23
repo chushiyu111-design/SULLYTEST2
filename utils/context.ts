@@ -1,5 +1,7 @@
 
-import { CharacterProfile, UserProfile } from '../types';
+import { CharacterProfile, UserProfile, InternalState } from '../types';
+import { renderBodySignals } from './bodySignalRenderer';
+import { resolveInternalState } from './hormoneDynamics';
 
 /**
  * Memory Central
@@ -50,7 +52,7 @@ export const ContextBuilder = {
         context += `### 你的身份 (Character)\n`;
         context += `- 名字: ${char.name}\n`;
         context += `- 用户备注/爱称 (User Note/Nickname): ${char.description || '无'}\n`;
-        context += `  (注意: 这个备注是用户对你的称呼或印象，可能包含比喻。如果备注内容（如"快乐小狗"）与你的核心设定冲突，请以核心设定为准，不要真的扮演成动物，除非核心设定里写了你是动物。)\n`;
+        context += `  (注意: 这个备注是用户对你的称呼或印象，可能包含比喻。如果备注内容（如\"快乐小狗\"）与你的核心设定冲突，请以核心设定为准，不要真的扮演成动物，除非核心设定里写了你是动物。)\n`;
         context += `- 核心性格/指令:\n${char.systemPrompt || '你是一个温柔、拟人化的AI伴侣。'}\n\n`;
 
         // 2. 世界观 (Worldview)
@@ -133,15 +135,15 @@ export const ContextBuilder = {
         }
         context += `${memoryContent}\n\n`;
 
-        // 6. 角色状态栏 (Character State Bar) — only inject when emotion is notable
-        if (char.moodState && char.moodState.intensity >= 4) {
-            const ms = char.moodState;
-            let stateBar = `### 你此刻的内心状态\n`;
-            stateBar += `情绪: ${ms.mood} (强度: ${ms.intensity}/10, 已持续${ms.roundCount}轮对话)\n`;
-            if (ms.cause) stateBar += `起因: ${ms.cause}\n`;
-            if (ms.unresolved) stateBar += `悬而未决: ${ms.unresolved}\n`;
-            stateBar += `\n注意: 你的情绪应自然延续。强烈情绪不会因一两句话瞬间消散。即使表面上说"没关系"，内心的感受也需要时间消化。\n\n`;
-            context += stateBar;
+        // 6. 内部状态层 (Internal State Layer) — 基于神经递质的躯体信号注入
+        if (char.moodState) {
+            const internalState = resolveInternalState(char.moodState as any);
+            if (internalState) {
+                const bodySignals = renderBodySignals(internalState);
+                if (bodySignals) {
+                    context += bodySignals + '\n\n';
+                }
+            }
         }
 
         // ====== 【区域：最底部世界书】 ======

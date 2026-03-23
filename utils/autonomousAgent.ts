@@ -193,8 +193,23 @@ async function collectContext(charId: string, char: CharacterProfile): Promise<T
         hasExpiredEvents: expiredEvents.length > 0,
         expiredEvents,
         currentHour: new Date().getHours(),
-        moodIntensity: char.moodState?.intensity ?? 3,
-        charMood: char.moodState?.mood ?? '平静',
+        moodIntensity: (() => {
+            const state = char.moodState as any;
+            if (!state) return 3;
+            // New InternalState format: compute activation from cortisol/dopamine/energy
+            if (typeof state.cortisol === 'number') {
+                const stress = Math.max(0, state.cortisol - 0.5) * 2;
+                const excite = Math.max(0, (state.dopamine || 0.5) - 0.5) * 1.5;
+                return Math.min(10, Math.round((stress + excite + (state.energy || 0.5)) * 5));
+            }
+            // Legacy MoodState format
+            return state.intensity ?? 3;
+        })(),
+        charMood: (() => {
+            const state = char.moodState as any;
+            if (!state) return '平静';
+            return state.surfaceEmotion || state.mood || '平静';
+        })(),
         recentSummary,
         userName,
     };

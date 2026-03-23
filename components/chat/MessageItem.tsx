@@ -5,6 +5,7 @@
 import React, { useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Message, ChatTheme } from '../../types';
+import { StatusCardData } from '../../types/statusCard';
 import { haptic } from '../../utils/haptics';
 import { THEME_PLUGINS } from './ThemeRegistry';
 import DefaultTransferCard from './plugins/DefaultTransferCard';
@@ -23,6 +24,7 @@ import WeChatMomentsCard from './cards/WeChatMomentsCard';
 import ChatBubble from './ChatBubble';
 import InteractionPill from './InteractionPill';
 import VoiceBubble from './VoiceBubble';
+const StatusCardRenderer = React.lazy(() => import('./StatusCardRenderer'));
 
 // --- Deduplicated Selection Checkbox ---
 const SelectionCheckbox: React.FC<{ isSelected: boolean; onToggle: () => void }> = ({ isSelected, onToggle }) => (
@@ -73,8 +75,9 @@ interface MessageItemProps {
     // Voice transcript
     isVoiceTextExpanded?: boolean;
     onToggleVoiceText?: (msgId: number) => void;
-    // Inner voice (心声)
+    // Inner voice (心声) / Creative Card (创意状态栏)
     innerVoice?: string;
+    statusCardData?: StatusCardData;
     onRetryInnerVoice?: () => void;
 }
 
@@ -104,6 +107,7 @@ const MessageItem = React.memo(({
     isVoiceTextExpanded,
     onToggleVoiceText,
     innerVoice,
+    statusCardData,
     onRetryInnerVoice,
 }: MessageItemProps) => {
     const isUser = m.role === 'user';
@@ -195,8 +199,10 @@ const MessageItem = React.memo(({
         </div>
     ) : null;
 
+    const hasAnyVoice = !!(innerVoice || statusCardData);
+
     const handleAvatarClick = () => {
-        if (!innerVoice || selectionMode) return;
+        if (!hasAnyVoice || selectionMode) return;
         setShowInnerVoice(prev => !prev);
         // Auto dismiss after 8 seconds (increased for better reading experience)
         if (innerVoiceTimer.current) clearTimeout(innerVoiceTimer.current);
@@ -205,7 +211,7 @@ const MessageItem = React.memo(({
 
     const renderAvatar = (src: string, isCharAvatar = false) => (
         <div
-            className={`relative w-9 h-9 shrink-0 z-0 ${isCharAvatar && innerVoice ? 'cursor-pointer' : ''}`}
+            className={`relative w-9 h-9 shrink-0 z-0 ${isCharAvatar && hasAnyVoice ? 'cursor-pointer' : ''}`}
             onClick={isCharAvatar ? handleAvatarClick : undefined}
         >
             <img
@@ -228,14 +234,17 @@ const MessageItem = React.memo(({
                     }}
                 />
             )}
-            {/* Vintage heart indicator when inner voice is available */}
-            {isCharAvatar && innerVoice && !showInnerVoice && (
-                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 flex items-center justify-center animate-pulse" style={{ filter: 'drop-shadow(0 1px 2px rgba(180,60,60,0.3))' }}>
-                    <svg viewBox="0 0 24 24" fill="#c44d4d" className="w-3 h-3"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg>
+            {/* Indicator when inner voice / creative card is available */}
+            {isCharAvatar && hasAnyVoice && !showInnerVoice && (
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 flex items-center justify-center animate-pulse" style={{ filter: statusCardData ? 'drop-shadow(0 1px 2px rgba(100,60,180,0.4))' : 'drop-shadow(0 1px 2px rgba(180,60,60,0.3))' }}>
+                    {statusCardData
+                        ? <span style={{ fontSize: '10px' }}>🎴</span>
+                        : <svg viewBox="0 0 24 24" fill="#c44d4d" className="w-3 h-3"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg>
+                    }
                 </div>
             )}
             {/* Retry indicator when inner voice failed/missing */}
-            {isCharAvatar && !innerVoice && onRetryInnerVoice && !showInnerVoice && (
+            {isCharAvatar && !hasAnyVoice && onRetryInnerVoice && !showInnerVoice && (
                 <div
                     className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-black/60 backdrop-blur-sm cursor-pointer active:scale-90 transition-transform"
                     style={{ border: '1px solid rgba(212,165,71,0.3)' }}
@@ -329,8 +338,8 @@ const MessageItem = React.memo(({
                     <div className={`${selectionMode ? 'pointer-events-none' : ''} relative w-full`}>
                         {content}
                     </div>
-                    {/* Inner Voice Floating Overlay (心声) — 纸质明信片/艺术卡片 */}
-                    {!isUser && showInnerVoice && innerVoice && ReactDOM.createPortal(
+                    {/* Inner Voice / Creative Card Floating Overlay */}
+                    {!isUser && showInnerVoice && hasAnyVoice && ReactDOM.createPortal(
                         <div
                             className="fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-300 animate-fade-in"
                             style={{
@@ -340,130 +349,105 @@ const MessageItem = React.memo(({
                             }}
                             onClick={() => setShowInnerVoice(false)}
                         >
-                            {/* ═══ Premium Art Gallery Card ═══ */}
                             <div
                                 className="relative animate-inner-voice-in"
                                 style={{ width: '330px', maxWidth: 'calc(100vw - 48px)' }}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {/* Card body */}
-                                <div className="relative" style={{
-                                    background: '#F9F8F4', /* Very soft gallery cream */
-                                    borderRadius: '3px', /* Sharp, elegant corners like thick cardstock */
-                                    boxShadow: '0 30px 60px -15px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.7)',
-                                    transform: 'rotate(-1.5deg)', /* Slightly more tilt for casual feel */
-                                    padding: '18px',
-                                    paddingBottom: '24px', /* Heavier bottom padding to simulate polaroid/art framing */
-                                }}>
-                                    {/* Realistic Paper grain texture overlay */}
-                                    <div className="absolute inset-0 pointer-events-none rounded-[3px]" style={{
-                                        opacity: 0.15,
-                                        mixBlendMode: 'color-burn',
-                                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-                                        backgroundSize: '128px 128px',
-                                    }} />
-
-                                    {/* ── Polaroid / Gallery Image Area ── */}
-                                    <div className="relative w-full aspect-[4/3] bg-[#E8E6DF] z-10" style={{
-                                        boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.06)',
-                                        border: '1px solid rgba(0,0,0,0.05)',
+                                {statusCardData ? (
+                                    /* ═══ Creative Card Mode ═══ */
+                                    <React.Suspense fallback={<div style={{ color: '#fff', textAlign: 'center', padding: '40px' }}>加载中...</div>}>
+                                        <StatusCardRenderer data={statusCardData} />
+                                    </React.Suspense>
+                                ) : innerVoice ? (
+                                    /* ═══ Classic Inner Voice — Premium Art Gallery Card ═══ */
+                                    <div className="relative" style={{
+                                        background: '#F9F8F4',
+                                        borderRadius: '3px',
+                                        boxShadow: '0 30px 60px -15px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.7)',
+                                        transform: 'rotate(-1.5deg)',
+                                        padding: '18px',
+                                        paddingBottom: '24px',
                                     }}>
-                                        <img
-                                            src={`/images/inner-voice/${(() => {
-                                                const str = innerVoice || String(m.id ?? 0);
-                                                let hash = 0;
-                                                for (let i = 0; i < str.length; i++) {
-                                                    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-                                                }
-                                                return (((hash % 11) + 11) % 11) + 1;
-                                            })()}.jpg`}
-                                            alt=""
-                                            style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'cover',
-                                                objectPosition: 'center',
-                                                display: 'block',
-                                                filter: 'contrast(0.95) sepia(15%) opacity(0.95)',
-                                            }}
-                                            decoding="async"
-                                        />
-                                        
-                                        {/* Postmark Decoration - Randomly selected, individually tuned per stamp */}
-                                        {(() => {
-                                            // Each postmark has tuned params based on its visual shape
-                                            const POSTMARKS = [
-                                                { file: 'postmark.png',  w: 85, h: 85, rotate: -25, bottom: -7, right: -5  }, // Original rectangular label
-                                                { file: 'postmark2.png', w: 78, h: 90, rotate: -15, bottom: -8, right: -3  }, // Library of Congress (portrait)
-                                                { file: 'postmark3.png', w: 80, h: 80, rotate: -30, bottom: -6, right: -4  }, // Madrid circular stamp
-                                                { file: 'postmark4.png', w: 90, h: 75, rotate: -20, bottom: -5, right: -6  }, // Universidad Central oval
-                                            ];
-                                            const idx = Math.abs((m.id ?? 0)) % POSTMARKS.length;
-                                            const pm = POSTMARKS[idx];
-                                            return (
-                                                <div className="absolute pointer-events-none" style={{
-                                                    bottom: `${pm.bottom}px`,
-                                                    right: `${pm.right}px`,
-                                                    width: `${pm.w}px`,
-                                                    height: `${pm.h}px`,
-                                                    opacity: 0.55,
-                                                    mixBlendMode: 'multiply',
-                                                    transform: `rotate(${pm.rotate}deg)`,
-                                                    filter: 'contrast(1.2)',
-                                                }}>
-                                                    <img
-                                                        src={`/images/decorations/${pm.file}`}
-                                                        alt="postmark"
-                                                        className="w-full h-full object-contain"
-                                                    />
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-
-                                    {/* ── Header ── */}
-                                    <div className="w-full mt-7 mb-4 flex items-center justify-center relative z-10">
-                                        <div className="text-[10px] tracking-[0.4em] text-[#8C8273] font-serif uppercase">Inner Voice</div>
-                                    </div>
-
-                                    {/* ── Text ── */}
-                                    <div className="relative z-10 px-2" style={{
-                                        color: '#2A2520',
-                                        fontSize: '16px',
-                                        lineHeight: '2.0', /* Balanced natural handwritten look */
-                                        fontFamily: "'ShouXie6', 'HuangHunShouXie', 'Kaiti SC', STKaiti, serif",
-                                        letterSpacing: '1px',
-                                        textAlign: 'center', /* Artistic center alignment */
-                                        whiteSpace: 'pre-wrap', /* Natural wrapping instead of forced per-punctuation breaks */
-                                        minHeight: '60px', /* Ensure structure holds even for one short sentence */
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        justifyContent: 'center',
-                                    }}>
-                                        {innerVoice.trim()}
-                                    </div>
-
-                                    {/* ── Footer ── */}
-                                    <div className="w-full mt-6 pt-4 border-t border-[#8C8273]/20 flex justify-between items-end relative z-10">
-                                        <span className="text-[9px] text-[#A69D8F] font-serif tracking-[0.2em] uppercase">
-                                            Vol.{String((m.id ?? 0) % 100).padStart(2, '0')}
-                                        </span>
-                                        <span className="text-[9px] text-[#A69D8F] font-serif tracking-[0.2em] uppercase">
+                                        <div className="absolute inset-0 pointer-events-none rounded-[3px]" style={{
+                                            opacity: 0.15,
+                                            mixBlendMode: 'color-burn',
+                                            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+                                            backgroundSize: '128px 128px',
+                                        }} />
+                                        <div className="relative w-full aspect-[4/3] bg-[#E8E6DF] z-10" style={{
+                                            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.06)',
+                                            border: '1px solid rgba(0,0,0,0.05)',
+                                        }}>
+                                            <img
+                                                src={`/images/inner-voice/${(() => {
+                                                    const str = innerVoice || String(m.id ?? 0);
+                                                    let hash = 0;
+                                                    for (let i = 0; i < str.length; i++) {
+                                                        hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+                                                    }
+                                                    return (((hash % 11) + 11) % 11) + 1;
+                                                })()}.jpg`}
+                                                alt=""
+                                                style={{
+                                                    width: '100%', height: '100%',
+                                                    objectFit: 'cover', objectPosition: 'center',
+                                                    display: 'block',
+                                                    filter: 'contrast(0.95) sepia(15%) opacity(0.95)',
+                                                }}
+                                                decoding="async"
+                                            />
                                             {(() => {
-                                                const d = new Date(m.timestamp);
-                                                const months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
-                                                return `${months[d.getMonth()]} ${d.getDate()}`;
+                                                const POSTMARKS = [
+                                                    { file: 'postmark.png',  w: 85, h: 85, rotate: -25, bottom: -7, right: -5  },
+                                                    { file: 'postmark2.png', w: 78, h: 90, rotate: -15, bottom: -8, right: -3  },
+                                                    { file: 'postmark3.png', w: 80, h: 80, rotate: -30, bottom: -6, right: -4  },
+                                                    { file: 'postmark4.png', w: 90, h: 75, rotate: -20, bottom: -5, right: -6  },
+                                                ];
+                                                const idx = Math.abs((m.id ?? 0)) % POSTMARKS.length;
+                                                const pm = POSTMARKS[idx];
+                                                return (
+                                                    <div className="absolute pointer-events-none" style={{
+                                                        bottom: `${pm.bottom}px`, right: `${pm.right}px`,
+                                                        width: `${pm.w}px`, height: `${pm.h}px`,
+                                                        opacity: 0.55, mixBlendMode: 'multiply',
+                                                        transform: `rotate(${pm.rotate}deg)`, filter: 'contrast(1.2)',
+                                                    }}>
+                                                        <img src={`/images/decorations/${pm.file}`} alt="postmark" className="w-full h-full object-contain" />
+                                                    </div>
+                                                );
                                             })()}
-                                        </span>
+                                        </div>
+                                        <div className="w-full mt-7 mb-4 flex items-center justify-center relative z-10">
+                                            <div className="text-[10px] tracking-[0.4em] text-[#8C8273] font-serif uppercase">Inner Voice</div>
+                                        </div>
+                                        <div className="relative z-10 px-2" style={{
+                                            color: '#2A2520', fontSize: '16px', lineHeight: '2.0',
+                                            fontFamily: "'ShouXie6', 'HuangHunShouXie', 'Kaiti SC', STKaiti, serif",
+                                            letterSpacing: '1px', textAlign: 'center', whiteSpace: 'pre-wrap',
+                                            minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                                        }}>
+                                            {innerVoice.trim()}
+                                        </div>
+                                        <div className="w-full mt-6 pt-4 border-t border-[#8C8273]/20 flex justify-between items-end relative z-10">
+                                            <span className="text-[9px] text-[#A69D8F] font-serif tracking-[0.2em] uppercase">
+                                                Vol.{String((m.id ?? 0) % 100).padStart(2, '0')}
+                                            </span>
+                                            <span className="text-[9px] text-[#A69D8F] font-serif tracking-[0.2em] uppercase">
+                                                {(() => {
+                                                    const d = new Date(m.timestamp);
+                                                    const months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
+                                                    return `${months[d.getMonth()]} ${d.getDate()}`;
+                                                })()}
+                                            </span>
+                                        </div>
+                                        <div className="absolute top-0 right-0 w-12 h-12 pointer-events-none rounded-tr-[3px]" style={{
+                                            background: 'linear-gradient(225deg, rgba(0,0,0,0.02) 0%, transparent 50%)',
+                                        }}></div>
                                     </div>
-                                    
-                                    {/* Corner ambient occlusion for realism */}
-                                    <div className="absolute top-0 right-0 w-12 h-12 pointer-events-none rounded-tr-[3px]" style={{
-                                        background: 'linear-gradient(225deg, rgba(0,0,0,0.02) 0%, transparent 50%)',
-                                    }}></div>
-                                </div>
+                                ) : null}
                                 
-                                {/* Tap to close hint indicator outside the card */}
+                                {/* Tap to close hint */}
                                 <div className="absolute -bottom-10 left-0 right-0 flex justify-center z-10 pointer-events-none opacity-60">
                                     <div className="text-[10px] text-white/90 font-serif tracking-widest px-3 py-1 rounded-full border border-white/20 bg-black/20 backdrop-blur-sm">
                                         TAP ANYWHERE TO CLOSE
@@ -668,6 +652,7 @@ const MessageItem = React.memo(({
         !!prev.loadingMsgIds?.has(prev.msg.id) === !!next.loadingMsgIds?.has(next.msg.id) &&
         prev.isVoiceTextExpanded === next.isVoiceTextExpanded &&
         prev.innerVoice === next.innerVoice &&
+        prev.statusCardData === next.statusCardData &&
         prev.onRetryInnerVoice === next.onRetryInnerVoice;
 });
 

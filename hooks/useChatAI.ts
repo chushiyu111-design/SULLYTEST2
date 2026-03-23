@@ -30,7 +30,7 @@ interface UseChatAIProps {
     onVoiceMessageSaved?: (msgId: number, text: string) => void; // 语音消息保存后的回调（用于触发 TTS）
     autoCall?: boolean; // 开启后向 AI 注入主动来电指引
     onIncomingCall?: (mode: string, callReason: string) => void; // AI 触发来电时的回调
-    onMoodUpdate?: (charId: string, moodState: any) => void; // MindSnapshot 完成后回调
+    onMoodUpdate?: (charId: string, moodState: any, statusCardData?: any) => void; // MindSnapshot / CreativeCard 完成后回调
 }
 
 export const useChatAI = ({
@@ -118,9 +118,37 @@ export const useChatAI = ({
             const baseUrl = apiConfig.baseUrl.replace(/\/+$/, '');
             const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey || 'sk-none'}` };
 
-            // 1. Build System Prompt (包含实时世界信息 + 向量记忆检索)
+            // 0. Internal State Layer: senseBefore (和下方 buildSystemPrompt 的 embedding/rerank 并行)
+            const subKey = localStorage.getItem('sub_api_key');
+            const subUrl = localStorage.getItem('sub_api_base_url');
+            const subModel = localStorage.getItem('sub_api_model');
+            const secondaryConfig = (subKey && subUrl && subModel)
+                ? { baseUrl: subUrl, apiKey: subKey, model: subModel }
+                : apiConfig;
+
+            // Run senseBefore in parallel with buildSystemPrompt
             const embeddingApiKey = localStorage.getItem('embedding_api_key') || undefined;
-            let systemPrompt = await ChatPrompts.buildSystemPrompt(char, userProfile, groups, emojis, categories, currentMsgs, realtimeConfig, apiConfig, embeddingApiKey);
+            const [senseResult, systemPromptResult] = await Promise.all([
+                secondaryConfig.apiKey
+                    ? MindSnapshotExtractor.senseBefore(char, currentMsgs, secondaryConfig)
+                        .catch(e => { console.error('💭 [Sense] Parallel error:', e); return null; })
+                    : Promise.resolve(null),
+                (async () => {
+                    // If senseBefore finishes first and updates char.moodState (via DB persist),
+                    // buildCoreContext will pick it up. But since they run in parallel,
+                    // we also manually inject body signals after if needed.
+                    return ChatPrompts.buildSystemPrompt(char, userProfile, groups, emojis, categories, currentMsgs, realtimeConfig, apiConfig, embeddingApiKey);
+                })(),
+            ]);
+
+            let systemPrompt = systemPromptResult;
+
+            // If senseBefore returned a new state, update char in memory and notify UI
+            if (senseResult && onMoodUpdate) {
+                onMoodUpdate(char.id, senseResult);
+                // Also update the local char ref so subsequent code sees the new state
+                char.moodState = senseResult;
+            }
 
             // 1.1 Inject voice message format instruction (only when autoVoice is enabled)
             if (autoVoice) {
@@ -1166,42 +1194,57 @@ mode 可选值：
                 setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
             }
 
-            // ====== Build shared secondary API config for background extractors ======
-            const subKey = localStorage.getItem('sub_api_key');
-            const subUrl = localStorage.getItem('sub_api_base_url');
-            const subModel = localStorage.getItem('sub_api_model');
-            const secondaryConfig = (subKey && subUrl && subModel)
-                ? { baseUrl: subUrl, apiKey: subKey, model: subModel }
-                : apiConfig;
+            // ====== (secondaryConfig already built above for senseBefore) ======
 
             // ====== Vector Memory Extraction — fire-and-forget (success path only) ======
             if (char.vectorMemoryEnabled && char.vectorMemoryAutoExtract !== false) {
                 const emKey = localStorage.getItem('embedding_api_key');
                 if (emKey) {
-                    const charSnapshot = { ...char }; // snapshot before any re-render
+                    const charSnapshot = { ...char };
                     VectorMemoryExtractor.maybeExtract(charSnapshot, secondaryConfig, emKey)
                         .catch(e => console.error('🧠 [VectorExtract] Background:', e));
                 }
             }
 
-            // ====== Mind Snapshot (情绪状态栏 + 心声) — fire-and-forget ======
+            // ====== Inner Voice / Creative Card — fire-and-forget ======
             if (secondaryConfig?.apiKey && aiContent) {
                 const charSnapshot = { ...char };
-                // Store context for potential retry
                 lastMindSnapshotCtx.current = { char: charSnapshot, aiContent, msgs: currentMsgs, config: secondaryConfig };
-                // Delay 2s to reduce resource contention with VectorMemory/EventExtractor on mobile
+                const statusMode = char.statusBarMode || 'classic';
+                // Delay 2s to reduce resource contention on mobile
                 setTimeout(() => {
-                    MindSnapshotExtractor.extract(charSnapshot, aiContent, currentMsgs, secondaryConfig,
-                        (reason) => addToast(reason, 'error')
-                    )
-                        .then(newMood => {
-                            if (newMood && char && onMoodUpdate) {
-                                onMoodUpdate(char.id, newMood);
-                            } else {
-                                console.warn('💭 [MindSnapshot] Extraction returned null — retry available via avatar button');
-                            }
-                        })
-                        .catch(e => console.error('💭 [MindSnapshot] Background:', e));
+                    if (statusMode === 'classic') {
+                        // ── Classic inner voice ──
+                        MindSnapshotExtractor.generateInnerVoice(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                            (reason) => addToast(reason, 'error')
+                        )
+                            .then(newState => {
+                                if (newState && char && onMoodUpdate) {
+                                    onMoodUpdate(char.id, newState);
+                                } else {
+                                    console.warn('💭 [InnerVoice] Generation returned null — retry available via avatar button');
+                                }
+                            })
+                            .catch(e => console.error('💭 [InnerVoice] Background:', e));
+                    } else {
+                        // ── Creative / Custom card ──
+                        const customTemplate = statusMode === 'custom' && char.customStatusTemplates?.length
+                            ? char.customStatusTemplates[Math.floor(Math.random() * char.customStatusTemplates.length)]?.jsonSchema
+                            : undefined;
+                        MindSnapshotExtractor.generateCreativeCard(charSnapshot, aiContent, currentMsgs, secondaryConfig,
+                            (reason) => addToast(reason, 'error'),
+                            customTemplate,
+                        )
+                            .then(cardData => {
+                                if (cardData && char && onMoodUpdate) {
+                                    // Pass both the updated moodState AND the card data
+                                    onMoodUpdate(char.id, { ...(charSnapshot.moodState || {}), innerVoice: cardData.body }, cardData);
+                                } else {
+                                    console.warn('🎴 [CreativeCard] Generation returned null');
+                                }
+                            })
+                            .catch(e => console.error('🎴 [CreativeCard] Background:', e));
+                    }
                 }, 2000);
             }
 
@@ -1228,17 +1271,34 @@ mode 可选值：
 
     const retryMindSnapshot = useCallback(() => {
         const ctx = lastMindSnapshotCtx.current;
-        if (!ctx) { console.warn('💭 [MindSnapshot] No context to retry'); return; }
-        console.log('💭 [MindSnapshot] Manual retry triggered');
-        MindSnapshotExtractor.extract(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
-            (reason) => addToast(reason, 'error')
-        )
-            .then(newMood => {
-                if (newMood && ctx.char && onMoodUpdate) {
-                    onMoodUpdate(ctx.char.id, newMood);
-                }
-            })
-            .catch(e => console.error('💭 [MindSnapshot] Retry failed:', e));
+        if (!ctx) { console.warn('💭 [InnerVoice] No context to retry'); return; }
+        const statusMode = ctx.char.statusBarMode || 'classic';
+        console.log(`💭 [InnerVoice] Manual retry triggered (mode: ${statusMode})`);
+        if (statusMode === 'classic') {
+            MindSnapshotExtractor.generateInnerVoice(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
+                (reason) => addToast(reason, 'error')
+            )
+                .then(newState => {
+                    if (newState && ctx.char && onMoodUpdate) {
+                        onMoodUpdate(ctx.char.id, newState);
+                    }
+                })
+                .catch(e => console.error('💭 [InnerVoice] Retry failed:', e));
+        } else {
+            const customTemplate = statusMode === 'custom' && ctx.char.customStatusTemplates?.length
+                ? ctx.char.customStatusTemplates[Math.floor(Math.random() * ctx.char.customStatusTemplates.length)]?.jsonSchema
+                : undefined;
+            MindSnapshotExtractor.generateCreativeCard(ctx.char, ctx.aiContent, ctx.msgs, ctx.config,
+                (reason) => addToast(reason, 'error'),
+                customTemplate,
+            )
+                .then(cardData => {
+                    if (cardData && ctx.char && onMoodUpdate) {
+                        onMoodUpdate(ctx.char.id, { ...(ctx.char.moodState || {}), innerVoice: cardData.body }, cardData);
+                    }
+                })
+                .catch(e => console.error('🎴 [CreativeCard] Retry failed:', e));
+        }
     }, [addToast, onMoodUpdate]);
 
     return {

@@ -19,6 +19,7 @@ const SubApiSettings: React.FC = () => {
     const [subPresets, setSubPresets] = useState<Array<{ id: string; name: string; config: { baseUrl: string; apiKey: string; model: string } }>>(() => {
         try { return JSON.parse(localStorage.getItem('sub_api_presets') || '[]'); } catch { return []; }
     });
+    const [signalMode, setSignalMode] = useState(() => localStorage.getItem('body_signal_mode') || 'wordLibrary');
 
     const handleSaveSubApi = () => {
         localStorage.setItem('sub_api_key', subKey);
@@ -187,6 +188,53 @@ const SubApiSettings: React.FC = () => {
                 <p className="relative text-[10px] text-[#b0a48a] mt-4 leading-relaxed px-1">
                     💡 此接口用于心声、情绪状态栏等辅助功能。建议使用 <b>Flash 系列</b>模型（如 Gemini Flash、GPT-4o-mini）以降低成本、提高效率。留空则自动使用主 API。
                 </p>
+            </section>
+
+            {/* ─── 内部状态层注入模式 A/B 测试 ─── */}
+            <section className="relative overflow-hidden bg-[#f8f5ee]/70 backdrop-blur-sm rounded-3xl p-5 shadow-sm border border-[#e8e0cc]/60">
+                <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-gradient-to-br from-purple-100/60 to-indigo-100/60 rounded-xl text-purple-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-semibold text-[#8b7e64] tracking-wider">仿生感知引擎</h2>
+                        <p className="text-[10px] text-[#b0a48a]">内部状态层 · 主模型注入格式</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => { localStorage.setItem('body_signal_mode', 'wordLibrary'); setSignalMode('wordLibrary'); }}
+                        className={`flex-1 py-3 px-3 rounded-2xl text-xs font-bold border transition-all ${signalMode === 'wordLibrary'
+                            ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white border-purple-300 shadow-lg shadow-purple-500/20'
+                            : 'bg-white/50 text-[#8b7e64] border-[#e8e0cc]/60 active:bg-[#f0eadc]'}`}
+                    >
+                        <div className="text-center">
+                            <div className="text-sm mb-1">📝</div>
+                            <div>词库模式</div>
+                            <div className={`text-[9px] mt-0.5 ${signalMode === 'wordLibrary' ? 'text-purple-100' : 'text-[#b0a48a]'}`}>躯体化描述</div>
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => { localStorage.setItem('body_signal_mode', 'quantified'); setSignalMode('quantified'); }}
+                        className={`flex-1 py-3 px-3 rounded-2xl text-xs font-bold border transition-all ${signalMode === 'quantified'
+                            ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white border-purple-300 shadow-lg shadow-purple-500/20'
+                            : 'bg-white/50 text-[#8b7e64] border-[#e8e0cc]/60 active:bg-[#f0eadc]'}`}
+                    >
+                        <div className="text-center">
+                            <div className="text-sm mb-1">📊</div>
+                            <div>量化模式</div>
+                            <div className={`text-[9px] mt-0.5 ${signalMode === 'quantified' ? 'text-purple-100' : 'text-[#b0a48a]'}`}>进度条数据</div>
+                        </div>
+                    </button>
+                </div>
+
+                <div className="mt-3 p-3 bg-white/40 rounded-xl border border-[#e8e0cc]/40">
+                    <p className="text-[10px] text-[#8b7e64] font-mono leading-relaxed whitespace-pre-wrap">{signalMode === 'wordLibrary'
+                        ? '你留意到自己的身体——\n胸口有些发紧，像是有什么东西压着\n脑子有些发沉，眼皮在打架\n\n这些只是你身体的感觉…'
+                        : '[身体感知·本轮]\n紧绷感 ████████░░\n安定感 ███░░░░░░░\n精力　 ██░░░░░░░░\n\n这些是你身体的节律…'
+                    }</p>
+                </div>
             </section>
 
             {/* Sub API Model Selector Modal */}

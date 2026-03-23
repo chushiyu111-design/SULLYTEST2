@@ -174,8 +174,10 @@ const Chat: React.FC = () => {
             unlockAudio(); // 提前解锁音频（来电是程序触发，无用户手势，需要预解锁）
             openApp(AppID.VoiceCall, { direction: 'incoming', mode, callReason });
         } : undefined,
-        onMoodUpdate: (charId: string, moodState: any) => {
-            updateCharacter(charId, { moodState });
+        onMoodUpdate: (charId: string, moodState: any, statusCardData?: any) => {
+            const updates: any = { moodState };
+            if (statusCardData) updates.lastStatusCard = statusCardData;
+            updateCharacter(charId, updates);
         },
     });
 
@@ -1236,6 +1238,10 @@ const Chat: React.FC = () => {
                     setAutoCall(next);
                     localStorage.setItem(`chat_auto_call_${activeCharacterId}`, JSON.stringify(next));
                 }}
+                statusBarMode={char.statusBarMode || 'classic'}
+                onStatusBarModeChange={(mode: string) => {
+                    updateCharacter(char.id, { statusBarMode: mode as any });
+                }}
             />
 
             <ChatHeader
@@ -1299,7 +1305,8 @@ const Chat: React.FC = () => {
                             loadingMsgIds={loadingMsgIds}
                             isVoiceTextExpanded={expandedVoiceTextIds.has(m.id)}
                             onToggleVoiceText={toggleVoiceText}
-                            innerVoice={isLastAssistant ? char.moodState?.innerVoice : undefined}
+                            innerVoice={isLastAssistant ? (char.moodState as any)?.innerVoice : undefined}
+                            statusCardData={isLastAssistant && (char.statusBarMode === 'creative' || char.statusBarMode === 'custom') ? char.lastStatusCard : undefined}
                             onRetryInnerVoice={isLastAssistant ? retryMindSnapshot : undefined}
                         />
                     );

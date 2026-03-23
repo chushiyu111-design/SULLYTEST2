@@ -87,6 +87,9 @@ interface ChatModalsProps {
     onToggleAutoTts?: () => void;
     autoCall?: boolean;
     onToggleAutoCall?: () => void;
+    // Status Bar Mode
+    statusBarMode?: string;
+    onStatusBarModeChange?: (mode: string) => void;
 }
 
 const ChatModals: React.FC<ChatModalsProps> = ({
@@ -111,7 +114,8 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     xhsEnabled, onToggleXhs,
     showTimestampSetting, isTimestampForced, onToggleTimestamp,
     onReadAloud, onVoiceToText, onDownloadVoice, autoTts, onToggleAutoTts,
-    autoCall, onToggleAutoCall
+    autoCall, onToggleAutoCall,
+    statusBarMode, onStatusBarModeChange,
 }) => {
     const bgInputRef = useRef<HTMLInputElement>(null);
     const [visibilitySelection, setVisibilitySelection] = useState<Set<string>>(new Set());
@@ -282,6 +286,38 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
                             开启后，角色在聊天中可以搜索、浏览、发帖、评论小红书。需要在全局设置中配置 MCP 或 Cookie。
+                        </p>
+                    </div>
+
+                    {/* Status Bar Mode Selector */}
+                    <div className="pt-2 border-t border-slate-100">
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">状态栏模式 (心声)</label>
+                        <div className="flex gap-2">
+                            {[
+                                { id: 'classic', label: '🎴 经典心声', desc: '明信片风格' },
+                                { id: 'creative', label: '🎨 创意卡片', desc: 'AI随机' },
+                                { id: 'custom', label: '✏️ 自定义', desc: '你的模板' },
+                            ].map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => onStatusBarModeChange?.(opt.id)}
+                                    className={`flex-1 py-2.5 px-2 rounded-xl text-center transition-all border ${
+                                        (statusBarMode || 'classic') === opt.id
+                                            ? 'bg-primary/10 border-primary/30 ring-1 ring-primary/20'
+                                            : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <div className={`text-sm font-bold ${
+                                        (statusBarMode || 'classic') === opt.id ? 'text-primary' : 'text-slate-600'
+                                    }`}>{opt.label}</div>
+                                    <div className="text-[9px] text-slate-400 mt-0.5">{opt.desc}</div>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                            {(statusBarMode || 'classic') === 'classic' && '点击角色头像查看心声明信片。'}
+                            {statusBarMode === 'creative' && 'AI 根据对话语境随机生成不同风格的卡片（便签、小票、日记等）。'}
+                            {statusBarMode === 'custom' && '使用你自定义的模板生成卡片（开发中）。'}
                         </p>
                     </div>
 
