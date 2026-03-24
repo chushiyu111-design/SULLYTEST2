@@ -426,7 +426,7 @@ async function askLLM(
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.7,
-                max_tokens: 300,
+                max_tokens: 1024,
             }),
             signal: controller.signal,
         });
