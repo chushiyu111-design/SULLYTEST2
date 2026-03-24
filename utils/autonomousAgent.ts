@@ -280,8 +280,8 @@ function probabilityGate(ctx: TriggerContext): boolean {
         prob *= 0.08;
     }
 
-    // 刚聊完 (< 30 分钟)
-    if (ctx.hoursSinceLastUserMsg < 0.5) {
+    // 角色刚发过消息 (< 30 分钟) → 不要紧接着再发
+    if (ctx.hoursSinceLastAIMsg < 0.5) {
         prob *= 0.05;
     }
 
@@ -303,7 +303,7 @@ function probabilityGate(ctx: TriggerContext): boolean {
 
     const isDebug = localStorage.getItem('autonomous_debug') === 'true';
     if (isDebug) {
-        console.log(`🤖 [Agent] ProbabilityGate: prob=${prob.toFixed(3)}, roll=${roll.toFixed(3)}, passed=${passed}`);
+        console.log(`🤖 [Agent] ProbabilityGate: prob=${prob.toFixed(3)}, roll=${roll.toFixed(3)}, passed=${passed} | userSilent=${ctx.hoursSinceLastUserMsg.toFixed(2)}h, charSilent=${ctx.hoursSinceLastAIMsg.toFixed(2)}h`);
     }
 
     return passed;
@@ -511,7 +511,7 @@ async function tick(
 
     // 3. 概率门控
     if (!probabilityGate(ctx)) {
-        if (isDebug) console.log(`🤖 [Agent] tick: skipped (probability gate) | silent=${ctx.hoursSinceLastUserMsg.toFixed(1)}h`);
+        if (isDebug) console.log(`🤖 [Agent] tick: skipped (probability gate) | userSilent=${ctx.hoursSinceLastUserMsg.toFixed(2)}h, charSilent=${ctx.hoursSinceLastAIMsg.toFixed(2)}h`);
         return;
     }
 
