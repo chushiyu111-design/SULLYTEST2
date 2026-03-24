@@ -375,7 +375,30 @@ function parseDecisionJSON(content: string): LLMDecision | null {
                     reason: parsed.reason ? String(parsed.reason).slice(0, 100) : undefined,
                 };
             }
-        } catch { /* give up */ }
+        } catch { /* try fuzzy fallback */ }
+    }
+
+    // Fuzzy fallback: handle truncated JSON or text answers
+    const lower = content.toLowerCase();
+    // Truncated {"action":"none...
+    if (lower.includes('"action"') && lower.includes('"none"') || lower.includes('action":"none')) {
+        return { action: 'none' };
+    }
+    // Text-based answers
+    if (lower.includes('什么都不做') || lower.includes('选择a') || lower.match(/^\s*a[\.\s、]/)) {
+        return { action: 'none' };
+    }
+    // Truncated send/call
+    if (lower.includes('"send"') || lower.includes('action":"send')) {
+        const contentMatch = content.match(/"content"\s*:\s*"([^"]*)/);  
+        return {
+            action: 'send',
+            content: contentMatch ? contentMatch[1].slice(0, 500) : undefined,
+            reason: 'fuzzy-parsed',
+        };
+    }
+    if (lower.includes('"call"') || lower.includes('action":"call')) {
+        return { action: 'call', reason: 'fuzzy-parsed' };
     }
 
     return null;
@@ -403,7 +426,7 @@ async function askLLM(
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.7,
-                max_tokens: 100,
+                max_tokens: 300,
             }),
             signal: controller.signal,
         });
