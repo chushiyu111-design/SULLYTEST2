@@ -2,8 +2,8 @@
   "ignoreCommand": "exit 1",
   "rewrites": [
     {
-      "source": "/minimax-api/:path*",
-      "destination": "/api/tts-proxy?path=:path*"
+      "source": "/minimax-api/(.*)",
+      "destination": "/api/tts-proxy?path=$1"
     },
     {
       "source": "/(.*)",
