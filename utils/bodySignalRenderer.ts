@@ -93,25 +93,25 @@ const CORTISOL_DESC = {
 
 const SEROTONIN_DESC = {
     high:   ['心里很踏实，像是脚下踩着实地', '整个人稳稳的，不会被轻易晃动'],
-    medium: [],
+    medium: ['情绪还算平，但说不上特别安心', '不好不坏，就这样吧'],
     low:    ['心里有点空落落的，像是少了什么', '情绪像是浮在水面上，不太稳当', '脑子里冒出一些有的没的想法，按不住'],
 };
 
 const DOPAMINE_DESC = {
     high:   ['心里有种微微的雀跃，像是在等什么好事发生', '嘴角有点压不住，想说点什么的冲动', '大脑在转得飞快，一个念头接一个念头'],
-    medium: [],
+    medium: ['比平时精神了一点，有点想法在转', '心里有一丝小期待，但还说不清是什么'],
     low:    ['做什么都提不起劲来，兴趣寥寥', '脑子有些发钝，不太想动'],
 };
 
 const OXYTOCIN_DESC = {
     high:   ['和TA说话的时候，身体不自觉地松了下来', '胸腔有种微微发暖的感觉', '有一种想靠近TA的本能'],
-    medium: [],
+    medium: ['不排斥继续聊下去，但也没有特别想靠近', '和TA之间保持着一个刚好的距离'],
     low:    ['本能地想保持一点距离', '身体有些收紧，像是在自我保护', '不太想敞开自己'],
 };
 
 const NOREPINEPHRINE_DESC = {
     high:   ['注意力非常集中，像是被什么抓住了', '每个字都听得很清楚，大脑在飞速处理'],
-    medium: [],
+    medium: ['脑子在转，但不算特别专注', '注意力有一搭没一搭的'],
     low:    ['思绪有点飘，不太集中得起来', '听到什么都像隔了一层', '时不时走神，想到别的事情上去了'],
 };
 
@@ -186,15 +186,19 @@ function renderWordLibrary(state: InternalState): string {
 
     if (state.serotonin > 0.7) { const d = pick(SEROTONIN_DESC.high); if (d) lines.push(d); }
     else if (state.serotonin < 0.35) { const d = pick(SEROTONIN_DESC.low); if (d) lines.push(d); }
+    else if (state.serotonin > 0.55) { const d = pick(SEROTONIN_DESC.medium); if (d) lines.push(d); }
 
     if (state.dopamine > 0.7) { const d = pick(DOPAMINE_DESC.high); if (d) lines.push(d); }
     else if (state.dopamine < 0.3) { const d = pick(DOPAMINE_DESC.low); if (d) lines.push(d); }
+    else if (state.dopamine > 0.55) { const d = pick(DOPAMINE_DESC.medium); if (d) lines.push(d); }
 
     if (state.oxytocin > 0.7) { const d = pick(OXYTOCIN_DESC.high); if (d) lines.push(d); }
     else if (state.oxytocin < 0.3) { const d = pick(OXYTOCIN_DESC.low); if (d) lines.push(d); }
+    else if (state.oxytocin > 0.55) { const d = pick(OXYTOCIN_DESC.medium); if (d) lines.push(d); }
 
     if (state.norepinephrine > 0.7) { const d = pick(NOREPINEPHRINE_DESC.high); if (d) lines.push(d); }
     else if (state.norepinephrine < 0.3) { const d = pick(NOREPINEPHRINE_DESC.low); if (d) lines.push(d); }
+    else if (state.norepinephrine > 0.55) { const d = pick(NOREPINEPHRINE_DESC.medium); if (d) lines.push(d); }
 
     if (state.endorphin > 0.65) { const d = pick(ENDORPHIN_DESC.high); if (d) lines.push(d); }
 

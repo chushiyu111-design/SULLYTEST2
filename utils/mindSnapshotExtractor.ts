@@ -27,7 +27,7 @@ import {
 
 // ─── Configuration ───────────────────────────────────────────
 
-const SENSE_TIMEOUT_MS = 15000;   // senseBefore 超时（比 embedding 宽裕）
+const SENSE_TIMEOUT_MS = 25000;   // senseBefore 超时（与 embedding/rerank 并行，不影响用户等待）
 const VOICE_TIMEOUT_MS = 60000;   // innerVoice 超时（不阻塞，可以慢一点）
 const AUTO_RETRY_DELAY_MS = 3000;
 
@@ -1300,6 +1300,81 @@ async function legacyExtract(
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  6. batchSenseForWindow — 情感基因溯源专用
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 批量模式专用：为一组消息生成 InternalState（无副作用，不持久化）。
+ * 
+ * 复用 senseBefore 的 prompt 和解析逻辑，但：
+ *   - 不写入 DB
+ *   - 不使用模块级 AbortController
+ *   - 接受外部 signal 以支持中断
+ * 
+ * 用于情感基因溯源：从记忆的 sourceMessages 反推当时的激素状态。
+ */
+async function batchSenseForWindow(
+    msgs: { role: string; content: string; timestamp?: number }[],
+    charName: string,
+    charContext: string,
+    apiConfig: { baseUrl: string; model: string; apiKey: string },
+    signal?: AbortSignal,
+): Promise<InternalState | null> {
+    try {
+        // Build recent context from the provided messages
+        const lines: string[] = [];
+        // Take last few messages for context (similar to buildRecentContext but from raw msgs)
+        const tail = msgs.slice(-6);
+        for (const m of tail) {
+            const speaker = m.role === 'user' ? '用户' : charName;
+            lines.push(`[${speaker}说]: ${m.content.slice(0, 300)}`);
+        }
+        if (lines.length === 0) return null;
+
+        const recentContext = lines.join('\n');
+        const timeContext = RealtimeContextManager.getTimeContext();
+
+        const prompt = buildSensePrompt(charName, recentContext, charContext, timeContext);
+
+        // Use a local AbortController that chains to external signal
+        const localController = new AbortController();
+        if (signal) {
+            signal.addEventListener('abort', () => localController.abort(), { once: true });
+        }
+        const timer = setTimeout(() => localController.abort(), SENSE_TIMEOUT_MS);
+
+        try {
+            const content = await callSecondaryLLM(
+                apiConfig, prompt.system, prompt.user,
+                localController.signal, 800, 0.4,
+            );
+            if (!content) return null;
+
+            const sense = extractJSON(content, validateSenseOutput);
+            if (!sense) return null;
+
+            // Compute state from scratch (no previous state for batch mode)
+            const computed = computeNewState(sense, undefined);
+
+            return {
+                ...computed,
+                innerVoice: '',
+                surfaceEmotion: '',
+            } as InternalState;
+        } finally {
+            clearTimeout(timer);
+        }
+    } catch (err: any) {
+        if (err.name === 'AbortError') {
+            console.warn('🧬 [BatchSense] Aborted');
+        } else {
+            console.error('🧬 [BatchSense] Error:', err.message);
+        }
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  Public API
 // ═══════════════════════════════════════════════════════════════
 
@@ -1321,4 +1396,10 @@ export const MindSnapshotExtractor = {
 
     /** 回复后：用户自定义模板卡片（fire-and-forget，custom 模式） */
     generateCustomCard,
+
+    /** 情感基因溯源：为一组消息生成 InternalState（不持久化） */
+    batchSenseForWindow,
+
+    /** 构建角色上下文（供 backfill 共用） */
+    buildCharContext,
 };

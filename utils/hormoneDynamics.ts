@@ -63,6 +63,13 @@ const MAX_DELTA_PER_ROUND = 0.30;
 /** 基线值（"平静"状态） */
 const BASELINE = 0.5;
 
+/** 各维度基线（energy 的基线是 0.7 而非 0.5） */
+const BASELINES: Record<HormoneKey, number> = {
+    dopamine: 0.5, serotonin: 0.5, cortisol: 0.5,
+    oxytocin: 0.5, norepinephrine: 0.5, endorphin: 0.5,
+    energy: 0.7,
+};
+
 /** 偏离基线多少才算"有感觉"（用于注入判断） */
 export const DEVIATION_THRESHOLD = 0.15;
 
@@ -88,27 +95,37 @@ const DELTA_MAP: Record<SenseDelta, number> = {
     '+high':   0.85,
     '+medium': 0.70,
     '+low':    0.60,
-    'stable':  0.50,    // 不变 = 基线
+    'stable':  NaN,     // 特殊标记: stable → 保持当前值（不拉回基线）
     '-low':    0.40,
     '-medium': 0.30,
     '-high':   0.15,
 };
 
+/** 感知维度到激素维度的映射关系 */
+const SENSE_TO_HORMONE: { senseKey: keyof RawSenseOutput; hormoneKey: HormoneKey; invert?: boolean }[] = [
+    { senseKey: 'excitement',  hormoneKey: 'dopamine' },
+    { senseKey: 'stability',   hormoneKey: 'serotonin' },
+    { senseKey: 'pressure',    hormoneKey: 'cortisol' },
+    { senseKey: 'closeness',   hormoneKey: 'oxytocin' },
+    { senseKey: 'focus',       hormoneKey: 'norepinephrine' },
+    { senseKey: 'relief',      hormoneKey: 'endorphin' },
+    { senseKey: 'energyDrain', hormoneKey: 'energy', invert: true },
+];
+
 /**
  * 将副模型的人话感知转为 7 个目标数值。
  * 注意: energyDrain 方向反转（消耗大 → energy 低）
+ *
+ * 当标签为 'stable' 时，对应维度返回 NaN 作为标记，
+ * computeNewState 中会识别 NaN 并跳过 EMA（保持当前值）。
  */
 export function mapSenseToTargets(sense: RawSenseOutput): Record<HormoneKey, number> {
-    return {
-        dopamine:        DELTA_MAP[sense.excitement]   ?? BASELINE,
-        serotonin:       DELTA_MAP[sense.stability]    ?? BASELINE,
-        cortisol:        DELTA_MAP[sense.pressure]     ?? BASELINE,
-        oxytocin:        DELTA_MAP[sense.closeness]    ?? BASELINE,
-        norepinephrine:  DELTA_MAP[sense.focus]        ?? BASELINE,
-        endorphin:       DELTA_MAP[sense.relief]       ?? BASELINE,
-        // energyDrain "+high" 意味着消耗大 → energy 应该低
-        energy: 1.0 - (DELTA_MAP[sense.energyDrain] ?? BASELINE),
-    };
+    const result = {} as Record<HormoneKey, number>;
+    for (const mapping of SENSE_TO_HORMONE) {
+        const raw = DELTA_MAP[sense[mapping.senseKey]] ?? BASELINE;
+        result[mapping.hormoneKey] = mapping.invert && !isNaN(raw) ? 1.0 - raw : raw;
+    }
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -181,6 +198,24 @@ export function applyCrossEffects(state: Record<HormoneKey, number>): Record<Hor
         s.cortisol *= (1 - relief);
     }
 
+    // ── 【新增】血清素↑ → 缓冲皮质醇 (情绪稳定时压力自然减轻) ──
+    if (s.serotonin > 0.6) {
+        const calm = (s.serotonin - 0.6) * 0.25;
+        s.cortisol *= (1 - calm);
+    }
+
+    // ── 【新增】多巴胺↑ + 皮质醇↑ → 加剧去甲肾上腺素 (兴奋+紧张=高度警觉, 如告白前/考试前) ──
+    if (s.dopamine > 0.6 && s.cortisol > 0.6) {
+        const alertBoost = Math.min((s.dopamine - 0.6), (s.cortisol - 0.6)) * 0.4;
+        s.norepinephrine = Math.min(0.95, s.norepinephrine + alertBoost);
+    }
+
+    // ── 【新增】内啡肽↑ → 血清素微升 (释然后情绪基线回升) ──
+    if (s.endorphin > 0.6) {
+        const uplift = (s.endorphin - 0.6) * 0.2;
+        s.serotonin = Math.min(0.95, s.serotonin + uplift);
+    }
+
     // ── 多巴胺↑ → 能量消耗加速 (兴奋是耗能的) ──
     if (s.dopamine > 0.7) {
         s.energy -= (s.dopamine - 0.7) * 0.15;
@@ -211,6 +246,19 @@ export function applyCrossEffects(state: Record<HormoneKey, number>): Record<Hor
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * 昼夜节律精力恢复率曲线（时/h）。
+ * 比简单的 isLateNight 二值判断更自然。
+ */
+function getCircadianRecoveryRate(hour: number): number {
+    if (hour >= 6 && hour < 10)  return 0.10;  // 晨间恢复高峰
+    if (hour >= 10 && hour < 14) return 0.06;  // 稳态
+    if (hour >= 14 && hour < 16) return 0.04;  // 午后低谷
+    if (hour >= 16 && hour < 22) return 0.06;  // 稳态
+    if (hour >= 22 || hour < 1)  return 0.03;  // 夜间下降
+    /* 1:00 ~ 6:00 */           return 0.08;  // 睡眠恢复
+}
+
+/**
  * 基于距离上次更新的时间差，让各递质自然回归基线。
  * 使用半衰期公式: value = baseline + (value - baseline) × 0.5^(hours/halfLife)
  *
@@ -227,6 +275,9 @@ export function applyTimeDecay(
     // 如果间隔太短（< 10秒），不做时间衰减
     if (hours < 0.003) return s;
 
+    // 【Bug 修复】在衰减前保存原始 cortisol，用于后续能量惩罚
+    const originalCortisol = s.cortisol;
+
     for (const key of HORMONE_KEYS) {
         if (key === 'energy') continue; // 能量有专门的恢复逻辑
         const halfLife = HALF_LIFE_HOURS[key];
@@ -239,17 +290,18 @@ export function applyTimeDecay(
 
     // ── 能量恢复逻辑（特殊处理）──
     const currentHour = new Date().getHours();
-    const isLateNight = currentHour >= 1 && currentHour < 6;
-    const recoveryRate = isLateNight ? 0.02 : 0.08; // 深夜恢复慢
-    s.energy = Math.min(0.90, s.energy + hours * recoveryRate);
+    const recoveryRate = getCircadianRecoveryRate(currentHour);
+    let energyDelta = hours * recoveryRate;
 
-    // 如果离线前皮质醇高（"带着气睡觉"），能量恢复打折
-    if (s.cortisol > 0.6) {
-        const penalty = (s.cortisol - 0.6) * 0.5; // 最多 50% 打折
-        s.energy -= hours * recoveryRate * penalty;
+    // 【Bug 修复】使用原始 cortisol 判断能量惩罚（"带着气睡觉"）
+    if (originalCortisol > 0.6) {
+        const penalty = (originalCortisol - 0.6) * 0.5; // 最多 50% 打折
+        energyDelta *= (1 - penalty);
     }
 
-    // Clamp
+    s.energy = s.energy + energyDelta;
+
+    // Clamp（统一最后执行）
     for (const key of HORMONE_KEYS) {
         s[key] = Math.max(0.05, Math.min(0.95, s[key]));
     }
@@ -260,6 +312,11 @@ export function applyTimeDecay(
 // ═══════════════════════════════════════════════════════════════
 //  5. 完整计算管线
 // ═══════════════════════════════════════════════════════════════
+
+/** 情绪惯性: streak > 此阈值时，回归速率开始衰减 */
+const INERTIA_STREAK_THRESHOLD = 3;
+/** 每多 1 轮 streak，down α 乘以此系数（越小 = 越难回归） */
+const INERTIA_DAMPING = 0.85;
 
 /**
  * 从副模型的语义感知到最终的 InternalState，一步到位。
@@ -277,6 +334,10 @@ export function computeNewState(
     // 初始化：第一轮没有历史状态
     if (!previous) {
         const targets = mapSenseToTargets(sense);
+        // 将 NaN (stable) 替换为基线
+        for (const key of HORMONE_KEYS) {
+            if (isNaN(targets[key])) targets[key] = BASELINES[key];
+        }
         return {
             ...targets,
             roundCount: 1,
@@ -302,14 +363,54 @@ export function computeNewState(
     // Step 1: 语义标签 → 目标数值
     const targets = mapSenseToTargets(sense);
 
-    // Step 2: EMA 平滑（新旧加权）
-    const smoothed = applyEMASmoothing(decayed, targets);
+    // Step 1.5: stable 标签处理 — NaN 的维度使用当前值（跳过 EMA）
+    for (const key of HORMONE_KEYS) {
+        if (isNaN(targets[key])) {
+            targets[key] = decayed[key];  // 保持当前值，不拉回基线
+        }
+    }
+
+    // Step 2: EMA 平滑（新旧加权），应用情绪惯性
+    const prevStreaks = previous.streaks || {};
+    const smoothed = {} as Record<HormoneKey, number>;
+    for (const key of HORMONE_KEYS) {
+        const rates = EMA_RATES[key];
+        let downRate = rates.down;
+
+        // 情绪惯性: streak 超过阈值时，减缓回归速度
+        const streak = prevStreaks[key] || 0;
+        if (streak > INERTIA_STREAK_THRESHOLD) {
+            const dampingRounds = streak - INERTIA_STREAK_THRESHOLD;
+            downRate *= Math.pow(INERTIA_DAMPING, dampingRounds);
+        }
+
+        smoothed[key] = applyEMA(decayed[key], targets[key], rates.up, downRate);
+    }
 
     // Step 3: 互抑修正（化学反应）
     const final = applyCrossEffects(smoothed);
 
+    // Step 4: 更新 streak 计数器
+    const newStreaks: Partial<Record<string, number>> = {};
+    for (const key of HORMONE_KEYS) {
+        const base = BASELINES[key];
+        const deviation = final[key] - base;
+        const prevDeviation = prevHormones[key] - base;
+
+        // 同方向偏离 → streak +1，方向反转或回归基线 → 重置
+        if (Math.abs(deviation) > DEVIATION_THRESHOLD) {
+            if (Math.sign(deviation) === Math.sign(prevDeviation) && Math.abs(prevDeviation) > DEVIATION_THRESHOLD) {
+                newStreaks[key] = (prevStreaks[key] || 0) + 1;
+            } else {
+                newStreaks[key] = 1;  // 新方向开始
+            }
+        }
+        // deviation <= threshold → 回到基线附近，不记入 streaks（自然消失）
+    }
+
     return {
         ...final,
+        streaks: Object.keys(newStreaks).length > 0 ? newStreaks : undefined,
         roundCount: previous.roundCount + 1,
         updatedAt: now,
     };
@@ -391,12 +492,10 @@ export function computeActivationLevel(state: InternalState): number {
 /** 检查是否有任何维度偏离基线超过阈值（用于决定是否注入 prompt） */
 export function hasSignificantDeviation(state: InternalState): boolean {
     for (const key of HORMONE_KEYS) {
-        if (Math.abs(state[key] - BASELINE) > DEVIATION_THRESHOLD) {
+        if (Math.abs(state[key] - BASELINES[key]) > DEVIATION_THRESHOLD) {
             return true;
         }
     }
-    // 能量的基线是 0.7 而非 0.5，特殊判断
-    if (Math.abs(state.energy - 0.7) > DEVIATION_THRESHOLD) return true;
     return false;
 }
 
@@ -404,4 +503,77 @@ export function hasSignificantDeviation(state: InternalState): boolean {
 export function formatStateLog(state: InternalState): string {
     const vals = HORMONE_KEYS.map(k => `${k.slice(0, 4)}=${state[k].toFixed(2)}`).join(' ');
     return `${vals} | ${state.surfaceEmotion} | R${state.roundCount}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  8. 情感基因 — 激素快照 & 冲量 & 共振
+// ═══════════════════════════════════════════════════════════════
+
+/** 激素快照类型（7 维浮点向量） */
+export type HormoneSnapshot = {
+    [K in typeof HORMONE_KEYS[number]]: number;
+};
+
+/** 从 InternalState 提取 7 维激素快照 */
+export function extractHormoneSnapshot(state: InternalState): HormoneSnapshot {
+    const snapshot = {} as HormoneSnapshot;
+    for (const key of HORMONE_KEYS) {
+        snapshot[key] = state[key];
+    }
+    return snapshot;
+}
+
+/**
+ * 计算情绪冲量 (Salience Score)。
+ * 
+ * 每个维度的偏离按其最大可能偏离归一化到 [0, 1]，保证 7 个维度等权。
+ * 总范围: 0（完全平静）~ 7（所有维度满偏离）。
+ *
+ * 冲量越高 = 情绪波动越剧烈 = 记忆越"刻骨铭心"。
+ */
+export function computeSalience(state: InternalState): number {
+    // 使用模块级 BASELINES 常量
+    const MAX_DEVS: Record<string, number> = {
+        dopamine: 0.45, serotonin: 0.45, cortisol: 0.45,
+        oxytocin: 0.45, norepinephrine: 0.45, endorphin: 0.45,
+        energy: 0.65,  // energy 基线 0.7, clamp 下限 0.05 → 最大偏离 0.65
+    };
+    let sum = 0;
+    for (const key of HORMONE_KEYS) {
+        const dev = Math.abs(state[key] - BASELINES[key]);
+        sum += dev / MAX_DEVS[key];  // 归一化到 [0, 1]
+    }
+    return sum;  // 范围 [0, 7]
+}
+
+/**
+ * 两个激素快照之间的"情绪共振"分数。
+ * 
+ * 关键：先减去基线，将原始全正值向量转为"情绪偏离向量"。
+ * 不这样做的话，全正向量的余弦相似度永远在 0.85~0.95，失去区分力。
+ * 
+ * 偏离向量的余弦值 ∈ [-1, 1]：
+ *   - +1：完全同向（相同的情绪偏离模式）
+ *   -  0：正交（无关的情绪状态）
+ *   - -1：完全反向（相反的情绪偏离模式）
+ * 
+ * 映射到 [0, 1] 后返回：
+ *   - 1.0：完美共振（两个状态偏离方向完全一致）
+ *   - 0.5：中性（无偏离，或偏离正交）
+ *   - 0.0：反向共振（适合"对比回忆"场景）
+ */
+export function hormoneResonance(a: HormoneSnapshot, b: HormoneSnapshot): number {
+    let dot = 0, normA = 0, normB = 0;
+    for (const key of HORMONE_KEYS) {
+        const base = key === 'energy' ? 0.7 : BASELINE;
+        const da = a[key] - base;
+        const db = b[key] - base;
+        dot += da * db;
+        normA += da * da;
+        normB += db * db;
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    if (denom === 0) return 0.5;  // 两者都在基线附近 → 中性共振
+    const rawCos = dot / denom;   // ∈ [-1, 1]
+    return (rawCos + 1) / 2;      // 映射到 [0, 1]
 }

@@ -27,10 +27,11 @@
  *   rawSim >= 0.35 OR kwScore >= 0.5 → allows keyword-rescued memories
  */
 
-import { Message, VectorMemory, APIConfig } from '../types';
+import { Message, VectorMemory, APIConfig, InternalState } from '../types';
 import { EmbeddingService, getEmbeddingConfig, segmentWords } from './embeddingService';
 import { DB } from './db';
 import { parseDateExpression } from './parseDateExpression';
+import { extractHormoneSnapshot, hormoneResonance as computeHormoneResonance } from './hormoneDynamics';
 
 const QUERY_REWRITE_MODEL = 'Qwen/Qwen3-8B';
 const QUERY_REWRITE_TIMEOUT_MS = 3000;
@@ -266,7 +267,8 @@ export const VectorMemoryRetriever = {
         charId: string,
         currentMsgs: Message[],
         embeddingApiKey: string,
-        _apiConfig?: APIConfig  // reserved for future use, currently unused
+        _apiConfig?: APIConfig,  // reserved for future use
+        currentHormoneState?: InternalState,  // 当前激素状态（用于状态依存性检索）
     ): Promise<string | null> {
         try {
             // Extract recent conversation context
@@ -371,6 +373,9 @@ export const VectorMemoryRetriever = {
             const scored: { memory: VectorMemory; score: number; rawSim: number; kwScore: number }[] = [];
             let skippedCount = 0;
 
+            // Precompute current hormone snapshot for resonance matching
+            const currentSnapshot = currentHormoneState ? extractHormoneSnapshot(currentHormoneState) : null;
+
             for (const mem of memories) {
                 if (mem.vector.length !== queryDim) {
                     skippedCount++;
@@ -378,7 +383,17 @@ export const VectorMemoryRetriever = {
                 }
                 const rawSim = EmbeddingService.cosineSimilarity(queryVector, mem.vector);
                 const kwScore = kwScoreMap.get(mem.id) || 0;
-                const score = EmbeddingService.weightedScore(rawSim, mem.importance, mem.createdAt, kwScore, mem.lastMentioned);
+
+                // Compute hormone resonance: cosine similarity between current state and memory's snapshot
+                let resonance = 0;
+                if (currentSnapshot && mem.hormoneSnapshot) {
+                    resonance = computeHormoneResonance(currentSnapshot, mem.hormoneSnapshot);
+                }
+
+                const score = EmbeddingService.weightedScore(
+                    rawSim, mem.importance, mem.createdAt, kwScore, mem.lastMentioned,
+                    mem.salienceScore || 0, resonance,
+                );
                 scored.push({ memory: mem, score, rawSim, kwScore });
             }
 

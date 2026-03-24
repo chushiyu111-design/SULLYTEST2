@@ -137,6 +137,16 @@ export interface Emoji {
     categoryId?: string;
 }
 
+export interface HormoneSnapshot {
+    dopamine: number;
+    serotonin: number;
+    cortisol: number;
+    oxytocin: number;
+    norepinephrine: number;
+    endorphin: number;
+    energy: number;
+}
+
 export interface VectorMemory {
     id: string;                    // "vmem-{timestamp}-{random}"
     charId: string;
@@ -154,4 +164,6 @@ export interface VectorMemory {
     sourceMessageIds?: number[];           // IDs of messages that produced/updated this memory
     deprecated?: boolean;              // Marked as outdated by LLM (info was corrected/superseded)
     deprecatedReason?: string;         // Why it was invalidated (e.g. "用户已声明不再喝奶茶")
+    hormoneSnapshot?: HormoneSnapshot; // 情感基因：记忆产生时的 7 维激素状态快照
+    salienceScore?: number;            // 情绪冲量 (0 ~ 7)：归一化偏离基线总和，越高越"刻骨铭心"
 }

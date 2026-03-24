@@ -12,6 +12,8 @@
 import { CharacterProfile, VectorMemory, APIConfig } from '../types';
 import { EmbeddingService, getEmbeddingConfig } from './embeddingService';
 import { DB } from './db';
+import { extractHormoneSnapshot, computeSalience } from './hormoneDynamics';
+import { MindSnapshotExtractor } from './mindSnapshotExtractor';
 
 // Module-level concurrency lock: one extraction per character at a time
 const extractingChars = new Set<string>();
@@ -121,11 +123,11 @@ async function processResult(
     embeddingApiKey: string,
     vectorCache: Map<string, number[]>,
     sourceMessageIds: number[] = []
-): Promise<boolean> {
+): Promise<string | null> {
     const config = getEmbeddingConfig();
 
     if (result.action === 'skip') {
-        return false;
+        return null;
     }
 
     // Handle invalidation — mark a memory as deprecated
@@ -142,13 +144,13 @@ async function processResult(
             // Remove deprecated memory from dedup cache
             vectorCache.delete(result.targetId);
             console.log(`🧠 [VectorExtract] Invalidated: "${target.title}" — ${updatedMem.deprecatedReason}`);
-            return true;
+            return target.id;
         }
-        return false;
+        return null;
     }
 
     if (!result.title || !result.content) {
-        return false;
+        return null;
     }
 
     const textToEmbed = `${result.title}: ${result.content}`;
@@ -177,7 +179,7 @@ async function processResult(
                 await DB.saveVectorMemory(updatedMem);
                 vectorCache.set(duplicateId, vector); // update cache with new vector
                 console.log(`🧠 [VectorExtract] Dedup-updated: "${updatedMem.title}"`);
-                return true;
+                return duplicateId;
             }
         }
 
@@ -200,7 +202,7 @@ async function processResult(
         await DB.saveVectorMemory(newMem);
         vectorCache.set(newMem.id, vector); // add new memory to cache
         console.log(`🧠 [VectorExtract] Created: "${result.title}" (imp: ${newMem.importance})`);
-        return true;
+        return newMem.id;
 
     } else if (result.action === 'update' && result.targetId) {
         // O(1) lookup by ID — no full table scan
@@ -223,10 +225,12 @@ async function processResult(
             await DB.saveVectorMemory(updatedMem);
             vectorCache.set(result.targetId, vector); // update cache with new vector
             console.log(`🧠 [VectorExtract] Updated: "${updatedMem.title}"`);
+            return result.targetId;
         } else {
             // Fallback: create if target missing
+            const fallbackId = `vmem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const newMem: VectorMemory = {
-                id: `vmem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: fallbackId,
                 charId,
                 title: result.title || '未命名记忆',
                 content: result.content,
@@ -241,12 +245,12 @@ async function processResult(
                 sourceMessageIds,
             };
             await DB.saveVectorMemory(newMem);
-            vectorCache.set(newMem.id, vector); // add fallback-created memory to cache
+            vectorCache.set(fallbackId, vector);
             console.log(`🧠 [VectorExtract] Target not found, created as new: "${result.title}"`);
+            return fallbackId;
         }
-        return true;
     }
-    return false;
+    return null;
 }
 
 // Call LLM and parse response, with retry on truncation
@@ -378,7 +382,8 @@ export const VectorMemoryExtractor = {
     async maybeExtract(
         charSnapshot: CharacterProfile,
         apiConfig: APIConfig,
-        embeddingApiKey: string
+        embeddingApiKey: string,
+        subApiConfig?: { baseUrl: string; model: string; apiKey: string },
     ): Promise<void> {
         const charId = charSnapshot.id;
 
@@ -439,8 +444,16 @@ export const VectorMemoryExtractor = {
                 const results = await callLLM(prompt, apiConfig);
 
                 const windowSourceIds = windowMsgs.map(m => m.id).filter((id): id is number => typeof id === 'number');
+                const newMemIds: string[] = [];
                 for (const result of results) {
-                    await processResult(result, charId, embeddingApiKey, vectorCache, windowSourceIds);
+                    const memId = await processResult(result, charId, embeddingApiKey, vectorCache, windowSourceIds);
+                    if (memId) newMemIds.push(memId);
+                }
+
+                // 情感基因溯源：对新记忆回填激素快照（fire-and-forget）
+                if (newMemIds.length > 0 && subApiConfig) {
+                    VectorMemoryExtractor.backfillNewMemories(newMemIds, charSnapshot.name, subApiConfig)
+                        .catch(e => console.warn('🧬 [AutoBackfill] Non-fatal:', e));
                 }
 
                 // Mark this window as successfully processed
@@ -500,7 +513,8 @@ export const VectorMemoryExtractor = {
         embeddingApiKey: string,
         charName: string,
         onProgress?: (windowIdx: number, totalWindows: number, memoriesCreated: number) => void,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        subApiConfig?: { baseUrl: string; model: string; apiKey: string },
     ): Promise<number> {
         // Concurrency lock: prevent batch + auto extraction from running simultaneously
         if (extractingChars.has(charId)) {
@@ -554,13 +568,21 @@ export const VectorMemoryExtractor = {
                 if (signal?.aborted) break; // Check after LLM call returns
 
                 const batchSourceIds = windows[w].map(m => m.id).filter((id): id is number => typeof id === 'number');
+                const windowMemIds: string[] = [];
                 for (const result of results) {
-                    if (signal?.aborted) break; // Check before each DB write
-                    const success = await processResult(result, charId, embeddingApiKey, vectorCache, batchSourceIds);
-                    if (success) {
+                    if (signal?.aborted) break;
+                    const memId = await processResult(result, charId, embeddingApiKey, vectorCache, batchSourceIds);
+                    if (memId) {
+                        windowMemIds.push(memId);
                         if (result.action === 'create') totalCreated++;
                         else totalUpdated++;
                     }
+                }
+
+                // 情感基因溯源：每个窗口的新记忆回填（fire-and-forget）
+                if (windowMemIds.length > 0 && subApiConfig && !signal?.aborted) {
+                    VectorMemoryExtractor.backfillNewMemories(windowMemIds, charName, subApiConfig)
+                        .catch(e => console.warn('🧬 [BatchBackfill] Non-fatal:', e));
                 }
             } catch (err: any) {
                 // AbortError is expected when user cancels — don't log as error
@@ -624,6 +646,7 @@ export const VectorMemoryExtractor = {
         callTimestamp: number,
         apiConfig: APIConfig,
         embeddingApiKey: string,
+        subApiConfig?: { baseUrl: string; model: string; apiKey: string },
     ): Promise<number> {
         // 短通话跳过（≤4 轮 ≈ 打个招呼）
         if (callHistory.length <= 4) {
@@ -673,9 +696,19 @@ export const VectorMemoryExtractor = {
                 const prompt = buildExtractionPrompt(charName, existingHeaders, formattedMsgs);
                 const results = await callLLM(prompt, apiConfig);
 
+                const callMemIds: string[] = [];
                 for (const result of results) {
-                    const success = await processResult(result, charId, embeddingApiKey, vectorCache);
-                    if (success) totalExtracted++;
+                    const memId = await processResult(result, charId, embeddingApiKey, vectorCache);
+                    if (memId) {
+                        callMemIds.push(memId);
+                        totalExtracted++;
+                    }
+                }
+
+                // 情感基因溯源（fire-and-forget）
+                if (callMemIds.length > 0 && subApiConfig) {
+                    VectorMemoryExtractor.backfillNewMemories(callMemIds, charName, subApiConfig)
+                        .catch(e => console.warn('🧬 [CallBackfill] Non-fatal:', e));
                 }
 
                 // 窗口间延迟
@@ -692,4 +725,132 @@ export const VectorMemoryExtractor = {
         }
         return totalExtracted;
     },
+
+    // ═══════════════════════════════════════════════════════════
+    //  情感基因溯源 — 统一回填入口
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 为一组记忆回填激素快照。统一入口：auto/batch/call/一键回填共用。
+     *
+     * 流程：
+     *   1. 遍历每条记忆
+     *   2. 跳过已有快照的、无 sourceMessageIds 的
+     *   3. 从 DB 加载 sourceMessageIds 对应的消息
+     *   4. 调用 batchSenseForWindow() 生成 InternalState
+     *   5. 提取 hormoneSnapshot + computeSalience
+     *   6. 回写到记忆
+     *
+     * @returns { success: number; skipped: number; failed: number }
+     */
+    backfillHormoneSnapshots: async (
+        memories: VectorMemory[],
+        charName: string,
+        subApiConfig: { baseUrl: string; model: string; apiKey: string },
+        onProgress?: (current: number, total: number, memTitle: string) => void,
+        signal?: AbortSignal,
+    ): Promise<{ success: number; skipped: number; failed: number }> => {
+        const result = { success: 0, skipped: 0, failed: 0 };
+        const total = memories.length;
+
+        // Build char context once (reused for all windows)
+        const charContext = MindSnapshotExtractor.buildCharContext({ name: charName } as CharacterProfile);
+
+        for (let i = 0; i < total; i++) {
+            if (signal?.aborted) {
+                console.log(`🧬 [Backfill] Aborted at ${i}/${total}`);
+                break;
+            }
+
+            const mem = memories[i];
+            onProgress?.(i + 1, total, mem.title);
+
+            // Skip if already has snapshot
+            if (mem.hormoneSnapshot) {
+                result.skipped++;
+                continue;
+            }
+
+            // Skip if no source messages to trace back to
+            if (!mem.sourceMessageIds || mem.sourceMessageIds.length === 0) {
+                result.skipped++;
+                continue;
+            }
+
+            try {
+                // Load source messages from DB
+                const sourceMsgs = await DB.getMessagesByIds(mem.sourceMessageIds);
+                if (sourceMsgs.length === 0) {
+                    result.skipped++;
+                    continue;
+                }
+
+                // Run sub-model to generate InternalState
+                const state = await MindSnapshotExtractor.batchSenseForWindow(
+                    sourceMsgs.map(m => ({
+                        role: m.role,
+                        content: m.content || '',
+                        timestamp: m.timestamp,
+                    })),
+                    charName,
+                    charContext,
+                    subApiConfig,
+                    signal,
+                );
+
+                if (!state) {
+                    result.failed++;
+                    continue;
+                }
+
+                // Extract snapshot and compute salience
+                const snapshot = extractHormoneSnapshot(state);
+                const salience = computeSalience(state);
+
+                // Write back to memory
+                mem.hormoneSnapshot = snapshot;
+                mem.salienceScore = salience;
+                await DB.saveVectorMemory(mem);
+
+                result.success++;
+                console.log(`🧬 [Backfill] ✅ "${mem.title}" salience=${salience.toFixed(2)}`);
+
+                // Rate limit: small delay between calls to avoid overwhelming the API
+                if (i < total - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            } catch (err: any) {
+                console.error(`🧬 [Backfill] ❌ "${mem.title}":`, err.message);
+                result.failed++;
+            }
+        }
+
+        console.log(`🧬 [Backfill] Done: ${result.success} success, ${result.skipped} skipped, ${result.failed} failed`);
+        return result;
+    },
+
+    /**
+     * 便捷方法：对一组新创建的记忆 ID 进行情感基因溯源。
+     * 用于 maybeExtract / batchExtract / callExtract 完成后自动回填。
+     */
+    backfillNewMemories: async (
+        memoryIds: string[],
+        charName: string,
+        subApiConfig: { baseUrl: string; model: string; apiKey: string },
+    ): Promise<void> => {
+        if (memoryIds.length === 0) return;
+        try {
+            const memories = await DB.getVectorMemoriesByIds(memoryIds);
+            const needBackfill = memories.filter(m => !m.hormoneSnapshot && m.sourceMessageIds?.length);
+            if (needBackfill.length === 0) return;
+
+            console.log(`🧬 [AutoBackfill] Starting for ${needBackfill.length} new memories...`);
+            await VectorMemoryExtractor.backfillHormoneSnapshots(
+                needBackfill, charName, subApiConfig,
+            );
+        } catch (err) {
+            console.error('🧬 [AutoBackfill] Error:', err);
+        }
+    },
 };
+

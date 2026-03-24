@@ -257,7 +257,7 @@ export function useVoiceCallEngine(options: UseVoiceCallEngineOptions): UseVoice
                 }));
                 // fire-and-forget：与 LLM 并行执行，结果到达后注入（影响后续句子）
                 VectorMemoryRetriever.retrieve(
-                    opts.char.id, msgs, opts.embeddingApiKey, opts.apiConfig,
+                    opts.char.id, msgs, opts.embeddingApiKey, opts.apiConfig, opts.char.moodState as any,
                 ).then(memBlock => {
                     if (memBlock && gen === generationRef.current && llmRef.current) {
                         llmRef.current.setVectorMemoryBlock(memBlock);
@@ -862,6 +862,7 @@ export function useVoiceCallEngine(options: UseVoiceCallEngineOptions): UseVoice
                             msgs,
                             opts.embeddingApiKey,
                             opts.apiConfig,
+                            opts.char.moodState as any,
                         );
                         if (memBlock && engineActiveRef.current && llmRef.current) {
                             llmRef.current.setVectorMemoryBlock(memBlock);
