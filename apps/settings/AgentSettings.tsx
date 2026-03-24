@@ -17,6 +17,7 @@ const AgentSettings: React.FC = () => {
         saveAgentConfig(next);
         setSaved(true);
         setTimeout(() => setSaved(false), 1500);
+        window.dispatchEvent(new Event('agent-config-changed'));
     };
 
     return (
@@ -171,6 +172,7 @@ const AgentSettings: React.FC = () => {
                                 haptic.medium();
                                 localStorage.setItem('autonomous_debug', String(e.target.checked));
                                 setConfig({ ...config }); // force re-render
+                                window.dispatchEvent(new Event('agent-config-changed'));
                             }}
                             className="sr-only peer"
                         />

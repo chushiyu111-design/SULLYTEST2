@@ -335,6 +335,15 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
     // Sys Operation Status
     const [sysOperation, setSysOperation] = useState<{ status: 'idle' | 'processing', message: string, progress: number }>({ status: 'idle', message: '', progress: 0 });
 
+    const [agentReloadCounter, setAgentReloadCounter] = useState(0);
+
+    // Subscribe to agent config changes to force restart
+    useEffect(() => {
+        const handler = () => setAgentReloadCounter(c => c + 1);
+        window.addEventListener('agent-config-changed', handler);
+        return () => window.removeEventListener('agent-config-changed', handler);
+    }, []);
+
     const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Ref mirrors for scheduler
@@ -716,7 +725,7 @@ const OSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =
         const agent = new AutonomousAgent();
         const cleanup = agent.start(activeCharacterId, char, secondaryApi);
         return cleanup;
-    }, [isDataLoaded, activeCharacterId, characters]);
+    }, [isDataLoaded, activeCharacterId, characters, agentReloadCounter]);
 
     const updateTheme = async (updates: Partial<OSTheme>) => {
         const { wallpaper, launcherWidgetImage, launcherWidgets, desktopDecorations, customFont, ...styleUpdates } = updates;
