@@ -536,11 +536,28 @@ const MessageItem = React.memo(({
         );
     }
 
-    // --- Voice Message Rendering ---
-    if (m.type === 'voice') {
+    // --- Voice Compat: detect <语音>...</语音> in text messages (原版 SillyTavern 导入兼容) ---
+    // Original SillyTavern stores voice messages as type:'text' with XML tags in content.
+    // We detect this at render time and display them as proper voice bubbles.
+    let effectiveVoiceType: 'voice' | null = null;
+    let compatVoiceText: string | undefined;
+    let compatDuration = 0;
+
+    if (m.type === 'text' && m.content) {
+        const xmlVoiceMatch = m.content.match(/^[\s]*<[语語]音>([\s\S]+?)<\/[语語]音>[\s]*$/);
+        if (xmlVoiceMatch) {
+            compatVoiceText = xmlVoiceMatch[1].trim();
+            compatDuration = Math.max(2, Math.ceil(compatVoiceText.length / 4));
+            effectiveVoiceType = 'voice';
+        }
+    }
+
+    // --- Voice Message Rendering (native + compat) ---
+    if (m.type === 'voice' || effectiveVoiceType === 'voice') {
+        const isCompat = effectiveVoiceType === 'voice';
         const isVoiceLoading = !!loadingMsgIds?.has(m.id);
         const hasAudio = !!m.metadata?.hasAudio;
-        const sourceText = m.metadata?.sourceText || m.content;
+        const sourceText = isCompat ? (compatVoiceText || '') : (m.metadata?.sourceText || m.content);
         const hasSourceText = !!sourceText && sourceText.trim().length > 0;
 
         // Parse bilingual content in voice transcript (reuses shared utility)
@@ -560,7 +577,7 @@ const MessageItem = React.memo(({
             <div className="flex flex-col gap-1">
                 <div className={`flex items-center gap-1.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                     <BubbleComponent
-                        duration={m.metadata?.duration ?? 0}
+                        duration={isCompat ? compatDuration : (m.metadata?.duration ?? 0)}
                         isPlaying={playingMsgId === m.id}
                         isLoading={isVoiceLoading}
                         hasFailed={!hasAudio && !isVoiceLoading}

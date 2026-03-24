@@ -107,20 +107,28 @@ export function extractContent(data: any): string {
 /**
  * Robustly extract a JSON object from AI-generated text.
  *
- * Handles common Claude format instabilities:
+ * Handles common AI format instabilities:
+ *  - `<think>` / `<thinking>` reasoning tags (DeepSeek-R1, etc.)
  *  - JSON wrapped in ```json ... ``` code blocks
  *  - Extra prose before/after the JSON ("Here is the result: { ... }")
  *  - Trailing commas in arrays/objects  (common Claude habit)
  *  - Single-quoted strings
  *  - Unquoted keys
+ *  - **Truncated JSON** (max_tokens cutoff) — auto-closes unclosed braces/brackets
  *
  * Returns parsed object on success, null on total failure.
  */
 export function extractJson(raw: string): any | null {
     if (!raw) return null;
 
-    // 1. Strip markdown code fences
+    // 0. Strip <think>/<thinking> reasoning tags (DeepSeek-R1, some Claude models)
     let text = raw
+        .replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/g, '')
+        .replace(/<think(?:ing)?>([\s\S]*)$/g, '')  // unclosed think tag at end
+        .trim();
+
+    // 1. Strip markdown code fences
+    text = text
         .replace(/^```(?:json|JSON)?\s*\n?/gm, '')
         .replace(/\n?```\s*$/gm, '')
         .trim();
@@ -140,24 +148,79 @@ export function extractJson(raw: string): any | null {
         jsonStr = objMatch?.[1] || arrMatch?.[1] || '';
     }
 
-    if (!jsonStr) return null;
-
     // 4. Try parsing the extracted substring
-    try { return JSON.parse(jsonStr); } catch {}
+    if (jsonStr) {
+        try { return JSON.parse(jsonStr); } catch {}
+    }
 
     // 5. Fix common AI formatting issues and retry
-    let fixed = jsonStr
-        // Trailing commas: ,} or ,]
-        .replace(/,\s*([}\]])/g, '$1')
-        // Single quotes → double quotes (careful with apostrophes in text)
-        // Only replace quotes that look like JSON string delimiters
-        .replace(/'/g, '"')
-        // Unquoted keys:  { foo: "bar" } → { "foo": "bar" }
-        .replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
+    if (jsonStr) {
+        const fixed = jsonStr
+            // Trailing commas: ,} or ,]
+            .replace(/,\s*([}\]])/g, '$1')
+            // Single quotes → double quotes
+            .replace(/'/g, '"')
+            // Unquoted keys:  { foo: "bar" } → { "foo": "bar" }
+            .replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
 
-    try { return JSON.parse(fixed); } catch {}
+        try { return JSON.parse(fixed); } catch {}
+    }
 
-    // 6. Last resort: try to extract individual JSON objects if there are multiple
+    // 6. Truncated JSON repair — auto-close unclosed braces/brackets
+    //    This handles the common case where max_tokens cuts off the response mid-JSON.
+    //    Uses two strategies: (1) close brackets directly, (2) strip last incomplete entry then close.
+    const firstBrace = text.indexOf('{');
+    const firstBracket = text.indexOf('[');
+    const startIdx = (firstBrace >= 0 && firstBracket >= 0)
+        ? Math.min(firstBrace, firstBracket)
+        : Math.max(firstBrace, firstBracket);
+
+    if (startIdx >= 0) {
+        // Helper: count unclosed brackets, close them, try parse
+        const tryRepairClose = (s: string): any | null => {
+            let openBraces = 0, openBrackets = 0;
+            let inStr = false, esc = false;
+            for (const ch of s) {
+                if (esc) { esc = false; continue; }
+                if (ch === '\\') { esc = true; continue; }
+                if (ch === '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (ch === '{') openBraces++;
+                if (ch === '}') openBraces--;
+                if (ch === '[') openBrackets++;
+                if (ch === ']') openBrackets--;
+            }
+            if (openBraces <= 0 && openBrackets <= 0) return null;
+            let repaired = s;
+            if (inStr) repaired += '"';
+            for (let b = 0; b < openBrackets; b++) repaired += ']';
+            for (let b = 0; b < openBraces; b++) repaired += '}';
+            repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+            try { return JSON.parse(repaired); } catch { return null; }
+        };
+
+        const rawSlice = text.slice(startIdx);
+
+        // Strategy 1: Close brackets directly (works when JSON is complete except for closing brackets)
+        const r1 = tryRepairClose(rawSlice);
+        if (r1 !== null) {
+            console.warn('[extractJson] Recovered truncated JSON via bracket repair');
+            return r1;
+        }
+
+        // Strategy 2: Strip from last comma (the last entry is likely incomplete), then close
+        const lastComma = rawSlice.lastIndexOf(',');
+        if (lastComma > 0) {
+            const stripped = rawSlice.slice(0, lastComma);
+            const r2 = tryRepairClose(stripped);
+            if (r2 !== null) {
+                console.warn('[extractJson] Recovered truncated JSON via strip-last + bracket repair');
+                return r2;
+            }
+        }
+    }
+
+    // 7. Last resort: try to extract individual JSON objects if there are multiple
     // (AI sometimes outputs two JSON blocks, take the larger one)
     const allObjects = [...text.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
     if (allObjects.length > 0) {
@@ -172,4 +235,32 @@ export function extractJson(raw: string): any | null {
 
     console.error('[extractJson] All attempts failed. Raw:', raw.slice(0, 300));
     return null;
+}
+
+/**
+ * Type-safe variant of extractJson.
+ *
+ * Parses AI text into JSON, then runs a user-supplied `validate` function
+ * that either returns a typed result or null (if the structure doesn't match).
+ *
+ * This is the recommended entry point for all AI-output JSON extraction
+ * where you need guaranteed structure (e.g. sense output, inner voice, events).
+ *
+ * @example
+ * ```ts
+ * const result = extractJsonTyped(aiText, (obj) => {
+ *     if (obj.innerVoice && typeof obj.innerVoice === 'string') {
+ *         return { innerVoice: obj.innerVoice.slice(0, 80) };
+ *     }
+ *     return null;
+ * });
+ * ```
+ */
+export function extractJsonTyped<T>(
+    raw: string,
+    validate: (obj: any) => T | null,
+): T | null {
+    const parsed = extractJson(raw);
+    if (parsed === null) return null;
+    return validate(parsed);
 }

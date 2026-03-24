@@ -9,6 +9,7 @@
  */
 
 import { addPendingEvent, PendingEvent } from './temporalContext';
+import { extractJsonTyped } from './safeApi';
 
 // ─── Configuration ──────────────────────────────────────────
 
@@ -72,46 +73,19 @@ interface ExtractionResult {
     confidence?: 'high' | 'medium' | 'low';
 }
 
-function parseExtractionJSON(content: string): ExtractionResult | null {
-    // Strip <think>...</think> reasoning tags (DeepSeek-R1 output)
-    content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-    try {
-        const parsed = JSON.parse(content);
-        if (typeof parsed.hasEvent === 'boolean') {
-            return {
-                hasEvent: parsed.hasEvent,
-                event: parsed.event ? String(parsed.event).slice(0, 20) : undefined,
-                estimatedMinutes: typeof parsed.estimatedMinutes === 'number'
-                    ? Math.max(1, Math.min(1440, Math.round(parsed.estimatedMinutes))) // 1min ~ 24h
-                    : undefined,
-                confidence: ['high', 'medium', 'low'].includes(parsed.confidence)
-                    ? parsed.confidence
-                    : 'medium',
-            };
-        }
-    } catch {
-        // Try extracting JSON from markdown code block
-        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || content.match(/(\{[\s\S]*\})/);
-        if (jsonMatch) {
-            try {
-                const parsed = JSON.parse(jsonMatch[1].trim());
-                if (typeof parsed.hasEvent === 'boolean') {
-                    return {
-                        hasEvent: parsed.hasEvent,
-                        event: parsed.event ? String(parsed.event).slice(0, 20) : undefined,
-                        estimatedMinutes: typeof parsed.estimatedMinutes === 'number'
-                            ? Math.max(1, Math.min(1440, Math.round(parsed.estimatedMinutes)))
-                            : undefined,
-                        confidence: ['high', 'medium', 'low'].includes(parsed.confidence)
-                            ? parsed.confidence
-                            : 'medium',
-                    };
-                }
-            } catch { /* give up */ }
-        }
-    }
-    return null;
+function validateExtractionResult(obj: any): ExtractionResult | null {
+    if (typeof obj.hasEvent !== 'boolean') return null;
+    return {
+        hasEvent: obj.hasEvent,
+        event: obj.event ? String(obj.event).slice(0, 20) : undefined,
+        estimatedMinutes: typeof obj.estimatedMinutes === 'number'
+            ? Math.max(1, Math.min(1440, Math.round(obj.estimatedMinutes)))
+            : undefined,
+        confidence: ['high', 'medium', 'low'].includes(obj.confidence)
+            ? obj.confidence
+            : 'medium',
+    };
 }
 
 // ─── Core Extraction ─────────────────────────────────────────
@@ -182,7 +156,7 @@ async function extract(
             content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
             content = content.replace(/<think>[\s\S]*/g, '').trim();
 
-            const result = parseExtractionJSON(content);
+            const result = extractJsonTyped(content, validateExtractionResult);
             if (!result) {
                 console.warn('⏰ [EventExtractor] Failed to parse JSON:', content.slice(0, 80));
                 return;
