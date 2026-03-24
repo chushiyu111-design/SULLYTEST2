@@ -269,6 +269,42 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
         }
     };
 
+    const handleImportToolData = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const text = ev.target?.result as string;
+                const data = JSON.parse(text);
+
+                if (data.format !== 'nuomi-vector-memory' || !Array.isArray(data.memories)) {
+                    addToast('文件格式不正确，需要独立工具站导出的 JSON 合集', 'error');
+                    return;
+                }
+
+                setIsBatching(true);
+                let count = 0;
+                for (const mem of data.memories) {
+                    mem.charId = formData.id; // Map to current character
+                    await DB.saveVectorMemory(mem);
+                    count++;
+                }
+                
+                addToast(`成功合入 ${count} 条外部向量记忆！`, 'success');
+                refreshVmList();
+            } catch (err) {
+                console.error(err);
+                addToast('解析导入文件失败', 'error');
+            } finally {
+                setIsBatching(false);
+                e.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
+
     const handleImportMemories = async () => {
         const embKey = localStorage.getItem('embedding_api_key');
         if (!embKey) { addToast('请先配置 Embedding API Key', 'error'); return; }
@@ -634,6 +670,13 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
                                 <button onClick={handleImportMemories} disabled={isBatching} className="py-1 px-3 rounded-xl text-[10px] font-bold text-slate-700 bg-white border border-slate-200 active:scale-95 transition-all shadow-sm hover:bg-slate-50 disabled:opacity-50">
                                     一键清洗导入
                                 </button>
+                            </div>
+                            <div className="pt-2 border-t border-slate-100/50 flex justify-between items-center">
+                                <p className="text-[10px] text-slate-500 font-medium">3. 导入外部向量合集 (独立站)</p>
+                                <label className={`py-1 px-3 rounded-xl text-[10px] font-bold text-white bg-indigo-500 active:scale-95 transition-all shadow-sm hover:bg-indigo-400 cursor-pointer ${isBatching ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    ⬇️ 导入 JSON
+                                    <input type="file" accept=".json" className="hidden" onChange={handleImportToolData} disabled={isBatching} />
+                                </label>
                             </div>
                             {batchProgress && (
                                 <div className="flex items-center justify-between bg-emerald-50 text-emerald-600 text-[10px] font-bold px-3 py-2 rounded-xl mt-2 animate-pulse border border-emerald-100">
