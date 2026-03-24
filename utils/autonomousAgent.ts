@@ -602,7 +602,7 @@ async function generateWithPrimaryModel(
                     model: primary.model,
                     messages,
                     temperature: 0.85,
-                    max_tokens: 1024,
+                    max_tokens: 4096,
                 }),
                 signal: controller.signal,
             });
