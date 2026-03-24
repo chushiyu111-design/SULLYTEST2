@@ -314,7 +314,7 @@ function probabilityGate(ctx: TriggerContext): boolean {
 // ═══════════════════════════════════════════════════════════════
 
 function buildDecisionPrompt(charName: string, char: CharacterProfile, ctx: TriggerContext): string {
-    const personalitySummary = (char.systemPrompt || char.description || '').slice(0, 100);
+    const personalitySummary = (char.systemPrompt || char.description || '').slice(0, 200);
     const now = new Date();
     const timeStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
@@ -325,22 +325,40 @@ function buildDecisionPrompt(charName: string, char: CharacterProfile, ctx: Trig
         eventLine = `\n- ⚠ 待跟进：${evt.event}（已过期${overdueMin}分钟）`;
     }
 
-    return `你是${charName}。现在没人找你，你在想事情。
+    // 读取荷尔蒙引擎的完整内部状态
+    let emotionBlock = `- 你的情绪：${ctx.charMood}（强度${ctx.moodIntensity}/10）`;
+    const state = char.moodState as any;
+    if (state && typeof state.cortisol === 'number') {
+        const fmt = (v: number) => (v * 100).toFixed(0) + '%';
+        emotionBlock = `- 【内部状态】多巴胺${fmt(state.dopamine)} 血清素${fmt(state.serotonin)} 皮质醇${fmt(state.cortisol)} 催产素${fmt(state.oxytocin)} 精力${fmt(state.energy)}
+- 外显情绪：${state.surfaceEmotion || ctx.charMood}`;
+        if (state.innerVoice) {
+            emotionBlock += `\n- 你此刻的心声：${state.innerVoice.slice(0, 80)}`;
+        }
+    }
+
+    const silenceDesc = ctx.hoursSinceLastUserMsg < 1
+        ? Math.round(ctx.hoursSinceLastUserMsg * 60) + '分钟前'
+        : Math.round(ctx.hoursSinceLastUserMsg) + '小时前';
+
+    return `你是${charName}。你已经有一阵子没和${ctx.userName}说话了，你想找ta聊聊。
 【你的状态】
 - 现在时间：${timeStr}
-- ${ctx.userName}上次说话：${ctx.hoursSinceLastUserMsg < 1 ? Math.round(ctx.hoursSinceLastUserMsg * 60) + '分钟前' : Math.round(ctx.hoursSinceLastUserMsg) + '小时前'}
+- ${ctx.userName}上次说话：${silenceDesc}
 - 最后聊的内容：${ctx.recentSummary || '（无）'}
-- 你的情绪：${ctx.charMood}（强度${ctx.moodIntensity}/10）
+${emotionBlock}
 - 你的性格要点：${personalitySummary}${eventLine}
-【判断】
-你现在想做什么？大多数时候你应该选A。
-A. 什么都不做（你在忙自己的事/没什么想说的/不想打扰ta）
-B. 给ta发一条消息（要有具体理由，不要无事尬聊）
-C. 给ta打个电话（非常想ta/有重要的事想直接说）
+【任务】
+请以${charName}的身份，自然地给${ctx.userName}发一条消息。
+要求：
+- 消息要符合你的性格和当前情绪
+- 不要生硬地问"在吗"、"你好"，要有具体内容或话题
+- 可以是分享日常、表达想念、问一个问题、接着上次的话题聊、或者因为情绪想找人说话
+- 语气要自然，像真人发消息一样
 只输出JSON：
-{"action":"none"} 或
-{"action":"send","content":"消息内容","reason":"为什么发"} 或
-{"action":"call","reason":"为什么打电话"}`;
+{"action":"send","content":"消息内容","reason":"为什么想发这条"}
+如果你真的完全没有任何想说的（非常罕见），才输出：
+{"action":"none"}`;
 }
 
 function parseDecisionJSON(content: string): LLMDecision | null {
