@@ -11,6 +11,7 @@
 import { DB } from './db';
 import { getPendingEvents, PendingEvent } from './temporalContext';
 import { CharacterProfile } from '../types';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 // ═══════════════════════════════════════════════════════════════
 //  Types
@@ -50,17 +51,55 @@ interface LLMDecision {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Constants
+//  Config — 用户可通过设置面板调整这些参数
 // ═══════════════════════════════════════════════════════════════
 
 const COOLDOWN_STORAGE_KEY = 'autonomous_cooldown_state';
 const LLM_TIMEOUT_MS = 15000;
-const MIN_INTERVAL_MS = 15 * 60 * 1000;  // 15 分钟
-const MAX_INTERVAL_MS = 40 * 60 * 1000;  // 40 分钟
 const DEBUG_INTERVAL_MS = 30 * 1000;     // 调试模式: 30 秒
-const MIN_COOLDOWN_HOURS = 2;            // 两次动作至少间隔 2 小时
-const MAX_DAILY_ACTIONS = 5;             // 每天最多 5 次
-const MAX_CONSECUTIVE_IGNORED = 2;       // 连续 2 条未回复 → 强制冷却
+
+export interface AgentConfig {
+    minIntervalMin: number;       // 最短检查间隔（分钟）
+    maxIntervalMin: number;       // 最长检查间隔（分钟）
+    cooldownHours: number;        // 发消息后冷却时间（小时）
+    maxDailyActions: number;      // 每日主动消息上限
+    maxConsecutiveIgnored: number; // 连续未回复容忍次数
+    baseProb: number;             // 基础触发概率 (0~1)
+    notificationsEnabled: boolean; // 是否弹出系统通知
+}
+
+const AGENT_CONFIG_DEFAULTS: AgentConfig = {
+    minIntervalMin: 15,
+    maxIntervalMin: 40,
+    cooldownHours: 2,
+    maxDailyActions: 5,
+    maxConsecutiveIgnored: 2,
+    baseProb: 0.15,
+    notificationsEnabled: true,
+};
+
+const AGENT_CONFIG_STORAGE_KEY = 'agent_config';
+
+/** 读取用户配置，缺失项使用默认值 */
+export function getAgentConfig(): AgentConfig {
+    try {
+        const raw = localStorage.getItem(AGENT_CONFIG_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            return { ...AGENT_CONFIG_DEFAULTS, ...parsed };
+        }
+    } catch { /* ignore */ }
+    return { ...AGENT_CONFIG_DEFAULTS };
+}
+
+/** 保存用户配置 */
+export function saveAgentConfig(config: Partial<AgentConfig>): void {
+    try {
+        const current = getAgentConfig();
+        const merged = { ...current, ...config };
+        localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(merged));
+    } catch { /* ignore */ }
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  1. CooldownManager — localStorage 持久化冷却状态
@@ -97,17 +136,18 @@ function saveCooldown(state: CooldownState): void {
 
 function isInCooldown(): boolean {
     const cd = loadCooldown();
+    const cfg = getAgentConfig();
     const now = Date.now();
     const hoursSinceLast = (now - cd.lastActionTime) / 3600000;
 
     // 冷却期未过
-    if (cd.lastActionTime > 0 && hoursSinceLast < MIN_COOLDOWN_HOURS) return true;
+    if (cd.lastActionTime > 0 && hoursSinceLast < cfg.cooldownHours) return true;
 
     // 每日上限
-    if (cd.todayActionCount >= MAX_DAILY_ACTIONS) return true;
+    if (cd.todayActionCount >= cfg.maxDailyActions) return true;
 
     // 连续未回复
-    if (cd.consecutiveIgnored >= MAX_CONSECUTIVE_IGNORED) return true;
+    if (cd.consecutiveIgnored >= cfg.maxConsecutiveIgnored) return true;
 
     return false;
 }
@@ -220,7 +260,8 @@ async function collectContext(charId: string, char: CharacterProfile): Promise<T
 // ═══════════════════════════════════════════════════════════════
 
 function probabilityGate(ctx: TriggerContext): boolean {
-    let prob = 0.15;
+    const cfg = getAgentConfig();
+    let prob = cfg.baseProb;
 
     // 用户沉默越久 → 越可能主动
     if (ctx.hoursSinceLastUserMsg > 8) {
@@ -398,7 +439,7 @@ async function askLLM(
 //  5. ActionExecutor — 复用预制消息管道
 // ═══════════════════════════════════════════════════════════════
 
-async function executeAction(charId: string, decision: LLMDecision): Promise<void> {
+async function executeAction(charId: string, charName: string, decision: LLMDecision): Promise<void> {
     if (decision.action === 'none') return;
 
     if (decision.action === 'send' && decision.content) {
@@ -411,6 +452,24 @@ async function executeAction(charId: string, decision: LLMDecision): Promise<voi
             createdAt: Date.now(),
         });
         console.log(`🤖 [Agent] Scheduled autonomous message: "${decision.content.slice(0, 30)}..." (reason: ${decision.reason || 'N/A'})`);
+
+        // 系统原生通知（Capacitor / Android）
+        const cfg = getAgentConfig();
+        if (cfg.notificationsEnabled) {
+            try {
+                const perm = await LocalNotifications.checkPermissions();
+                if (perm.display === 'granted') {
+                    await LocalNotifications.schedule({
+                        notifications: [{
+                            title: charName,
+                            body: decision.content.slice(0, 200),
+                            id: Math.floor(Math.random() * 100000),
+                            smallIcon: 'ic_stat_icon_config_sample',
+                        }],
+                    });
+                }
+            } catch { /* web 环境无原生通知，静默 */ }
+        }
     }
 
     if (decision.action === 'call') {
@@ -461,7 +520,7 @@ async function tick(
     const decision = await askLLM(freshChar, ctx, apiConfig);
 
     // 5. 执行动作
-    await executeAction(charId, decision);
+    await executeAction(charId, freshChar.name, decision);
 
     // 6. 更新冷却状态
     updateCooldownAfterAction(decision);
@@ -488,9 +547,12 @@ export class AutonomousAgent {
             if (this.stopped) return;
 
             const isDbg = localStorage.getItem('autonomous_debug') === 'true';
+            const cfg = getAgentConfig();
+            const minMs = cfg.minIntervalMin * 60 * 1000;
+            const maxMs = cfg.maxIntervalMin * 60 * 1000;
             const interval = isDbg
                 ? DEBUG_INTERVAL_MS
-                : MIN_INTERVAL_MS + Math.random() * (MAX_INTERVAL_MS - MIN_INTERVAL_MS);
+                : minMs + Math.random() * (maxMs - minMs);
 
             this.timerId = setTimeout(async () => {
                 if (this.stopped) return;

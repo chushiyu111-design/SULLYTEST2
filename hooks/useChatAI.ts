@@ -281,8 +281,20 @@ mode 可选值：
             });
             updateTokenUsage(data, historyMsgCount, 'initial');
 
+            // 3.5 Check for empty API responses (e.g. content filters, max context limits)
+            if (!data.choices || data.choices.length === 0) {
+                const errMsg = data.error?.message || data.error || data.msg || JSON.stringify(data);
+                throw new Error(`API 返回空结果或拦截: ${errMsg}`);
+            }
+
             // 4. Initial Cleanup
-            let aiContent = data.choices?.[0]?.message?.content || '';
+            let aiContent = data.choices[0]?.message?.content || '';
+            if (!aiContent.trim()) {
+                const finishReason = data.choices[0]?.finish_reason;
+                const hint = finishReason ? ` (Finish Reason: ${finishReason})` : '';
+                throw new Error(`AI 生成了空白内容。可能是触发了风控拦截，或者超出了该模型的上下文窗口上限${hint}。请尝试清理聊天上下文或更换更大上下文的模型。`);
+            }
+
             aiContent = ChatParser.cleanAiSecondPass(aiContent);
 
             // 4.1 Strip <thinking> CoT content (from cot_protocol)
