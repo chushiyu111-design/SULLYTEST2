@@ -12,6 +12,7 @@
  */
 
 import { CharacterProfile, InternalState, Message } from '../types';
+import { extractJsonTyped } from './safeApi';
 import { StatusCardData, CustomStatusTemplate, SKELETON_REGISTRY } from '../types/statusCard';
 import { DB } from './db';
 import { RealtimeContextManager } from './realtimeContext';
@@ -95,88 +96,6 @@ function buildRecentContext(msgs: Message[], charName: string, limit: number = 3
     return lines.length > 0 ? lines.join('\n') : null;
 }
 
-/** 通用 JSON 解析：从 LLM 输出中提取 JSON 对象 */
-function extractJSON<T>(content: string, validate: (obj: any) => T | null): T | null {
-    // Strip think tags
-    content = content.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/g, '').trim();
-    content = content.replace(/<think(?:ing)?>([\s\S]*)$/g, '').trim();
-    // Strip markdown code fences
-    content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-
-    // 1. Try direct parse
-    try {
-        const parsed = JSON.parse(content);
-        const result = validate(parsed);
-        if (result) return result;
-    } catch { /* not valid JSON */ }
-
-    // 2. Try code block extraction
-    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-        try {
-            const parsed = JSON.parse(codeBlockMatch[1].trim());
-            const result = validate(parsed);
-            if (result) return result;
-        } catch { /* */ }
-    }
-
-    // 3. Find last {...} block
-    const lastBraceIdx = content.lastIndexOf('}');
-    if (lastBraceIdx >= 0) {
-        let depth = 0;
-        for (let i = lastBraceIdx; i >= 0; i--) {
-            if (content[i] === '}') depth++;
-            if (content[i] === '{') depth--;
-            if (depth === 0) {
-                try {
-                    const parsed = JSON.parse(content.slice(i, lastBraceIdx + 1));
-                    const result = validate(parsed);
-                    if (result) return result;
-                } catch { /* */ }
-                break;
-            }
-        }
-    }
-
-    // 4. Truncated JSON repair — try to close unclosed braces/brackets
-    const firstBrace = content.indexOf('{');
-    if (firstBrace >= 0) {
-        let candidate = content.slice(firstBrace);
-        // 移除末尾可能被截断的不完整 key/value
-        candidate = candidate.replace(/,\s*"[^"]*"?\s*:?\s*[^}\]]*$/, '');
-        candidate = candidate.replace(/,\s*$/, '');
-        // 计算需要闭合的括号
-        let openBraces = 0, openBrackets = 0;
-        let inString = false, escape = false;
-        for (const ch of candidate) {
-            if (escape) { escape = false; continue; }
-            if (ch === '\\') { escape = true; continue; }
-            if (ch === '"') { inString = !inString; continue; }
-            if (inString) continue;
-            if (ch === '{') openBraces++;
-            if (ch === '}') openBraces--;
-            if (ch === '[') openBrackets++;
-            if (ch === ']') openBrackets--;
-        }
-        if (openBraces > 0 || openBrackets > 0) {
-            // 闭合字符串引号（如果在字符串中间被截断）
-            if (inString) candidate += '"';
-            // 闭合括号
-            for (let b = 0; b < openBrackets; b++) candidate += ']';
-            for (let b = 0; b < openBraces; b++) candidate += '}';
-            try {
-                const parsed = JSON.parse(candidate);
-                const result = validate(parsed);
-                if (result) {
-                    console.warn('🔧 [extractJSON] Recovered truncated JSON via repair');
-                    return result;
-                }
-            } catch { /* repair failed */ }
-        }
-    }
-
-    return null;
-}
 
 /** 调用副API */
 async function callSecondaryLLM(
@@ -322,7 +241,7 @@ async function senseBefore(
         const content = await callSecondaryLLM(apiConfig, prompt.system, prompt.user, controller.signal, 800, 0.4);
         if (!content) return null;
 
-        const sense = extractJSON(content, validateSenseOutput);
+        const sense = extractJsonTyped(content, validateSenseOutput);
         if (!sense) {
             console.warn('💭 [Sense] Failed to parse sense output:', content.slice(0, 200));
             return null;
@@ -513,7 +432,7 @@ async function generateInnerVoice(
         const content = await callSecondaryLLM(apiConfig, prompt.system, prompt.user, controller.signal, 800, 0.6);
         if (!content) return null;
 
-        const parsed = extractJSON(content, (obj: any) => {
+        const parsed = extractJsonTyped(content, (obj: any) => {
             if (obj.innerVoice && typeof obj.innerVoice === 'string') {
                 return {
                     innerVoice: String(obj.innerVoice).slice(0, 80),
@@ -778,7 +697,7 @@ async function generateCreativeCard(
         const content = await callSecondaryLLM(apiConfig, prompt.system, prompt.user, controller.signal, 1200, 0.7);
         if (!content) return null;
 
-        const parsed = extractJSON<StatusCardData>(content, (obj: any) => {
+        const parsed = extractJsonTyped<StatusCardData>(content, (obj: any) => {
             if (!obj.body || typeof obj.body !== 'string') return null;
             if (!obj.cardType || typeof obj.cardType !== 'string') return null;
             // Validate and normalize
@@ -1350,7 +1269,7 @@ async function batchSenseForWindow(
             );
             if (!content) return null;
 
-            const sense = extractJSON(content, validateSenseOutput);
+            const sense = extractJsonTyped(content, validateSenseOutput);
             if (!sense) return null;
 
             // Compute state from scratch (no previous state for batch mode)

@@ -928,7 +928,10 @@ const Chat: React.FC = () => {
         return (msgId: number) => {
             const msg = messagesRef.current.find(m => m.id === msgId);
             if (!msg || !ttsConfig) return;
-            const text = msg.metadata?.sourceText || msg.content;
+            let text = msg.metadata?.sourceText || msg.content;
+            // Strip <语音>/<語音> XML tags for compat messages (原版导入的 text 消息含标签)
+            const xmlVoiceMatch = text.match(/^[\s]*<[语語]音>([\s\S]+?)<\/[语語]音>[\s]*$/);
+            if (xmlVoiceMatch) text = xmlVoiceMatch[1].trim();
             synthesizeForMessage(msgId, text, ttsConfig).then(async (result) => {
                 if (result) {
                     await reloadMessages(visibleCountRef.current);
