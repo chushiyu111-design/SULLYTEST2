@@ -272,27 +272,58 @@ export const EmbeddingService = {
     },
 
     /**
-     * Weighted relevance score combining semantic similarity, keyword match, importance, and recency.
+     * Weighted relevance score combining semantic similarity, keyword match,
+     * importance, recency, hormone resonance, and emotional salience.
      * Returns value in [0, 1].
      * 
-     * When keywordScore > 0 (hybrid mode):
-     *   0.4 × cosine + 0.25 × keyword + 0.2 × importance + 0.15 × freshness
-     * When keywordScore = 0 (pure semantic):
-     *   0.6 × cosine + 0.2 × importance + 0.2 × freshness
+     * With hormone data (hormoneResonance > 0 or salienceScore > 0):
+     *   0.35×cosine + 0.20×keyword + 0.15×importance + 0.10×resonance + 0.10×salience + 0.10×freshness
      * 
-     * Freshness uses lastMentioned if available — recently referenced memories stay fresh
-     * even if they were created long ago.
+     * Without hormone data (backward compatible):
+     *   hybrid:  0.40×cosine + 0.25×keyword + 0.20×importance + 0.15×freshness
+     *   pure:    0.60×cosine + 0.20×importance + 0.20×freshness
+     * 
+     * Dynamic half-life: salience-based (14d ~ 365d) instead of fixed 30d.
      */
-    weightedScore(similarity: number, importance: number, createdAt: number, keywordScore: number = 0, lastMentioned: number = 0): number {
+    weightedScore(
+        similarity: number, importance: number, createdAt: number,
+        keywordScore: number = 0, lastMentioned: number = 0,
+        salienceScore: number = 0, hormoneResonance: number = 0,
+    ): number {
         const sim = Math.max(0, similarity);
         const imp = Math.min(importance, 10) / 10;
 
-        // Use the more recent of createdAt and lastMentioned for freshness
+        // Dynamic half-life based on salience (range 0~7):
+        // 高冲量记忆衰减慢（最长365天），低冲量记忆衰减快（最短14天）
         const referenceTime = lastMentioned > 0 ? Math.max(lastMentioned, createdAt) : createdAt;
         const ageMs = Date.now() - referenceTime;
-        const halfLifeMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+        let halfLifeDays: number;
+        if (salienceScore > 0) {
+            const baseDays = 14;
+            const maxDays = 365;
+            // salience ≥ 3.5（7 维中半数满偏离）→ 半衰期封顶 365 天
+            halfLifeDays = baseDays + (maxDays - baseDays) * Math.min(salienceScore / 3.5, 1.0);
+        } else {
+            halfLifeDays = 30; // 无冲量数据时用原来的 30 天
+        }
+        const halfLifeMs = halfLifeDays * 24 * 60 * 60 * 1000;
         const freshness = Math.exp(-0.693 * ageMs / halfLifeMs);
 
+        // Hormone-aware scoring (when any hormone data is present)
+        const hasHormoneData = hormoneResonance > 0 || salienceScore > 0;
+        if (hasHormoneData && keywordScore > 0) {
+            // Normalized salience: map 0~7 → 0~1，≥3.5 封顶
+            const salienceNorm = Math.min(salienceScore / 3.5, 1.0);
+            return sim * 0.35 + keywordScore * 0.20 + imp * 0.15
+                 + hormoneResonance * 0.10 + salienceNorm * 0.10 + freshness * 0.10;
+        }
+        if (hasHormoneData) {
+            const salienceNorm = Math.min(salienceScore / 3.5, 1.0);
+            return sim * 0.40 + imp * 0.15
+                 + hormoneResonance * 0.15 + salienceNorm * 0.10 + freshness * 0.20;
+        }
+
+        // Backward compatible: no hormone data
         if (keywordScore > 0) {
             return sim * 0.4 + keywordScore * 0.25 + imp * 0.2 + freshness * 0.15;
         }

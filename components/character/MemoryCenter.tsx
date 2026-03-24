@@ -86,6 +86,11 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
     const abortRef = useRef<AbortController | null>(null);
     const [isAborting, setIsAborting] = useState(false);
 
+    // --- 情感基因溯源 State ---
+    const [isBackfilling, setIsBackfilling] = useState(false);
+    const [backfillProgress, setBackfillProgress] = useState('');
+    const backfillAbortRef = useRef(false);
+
     // --- Stats State ---
     const { tree, stats } = useMemo(() => {
         const tree: Record<string, Record<string, MemoryFragment[]>> = {};
@@ -319,6 +324,57 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
         await DB.clearVectorMemories(formData.id);
         refreshVmList();
         addToast('已清空所有向量记忆', 'info');
+    };
+
+    // --- 情感基因溯源 Handler ---
+    const handleBackfillSnapshots = async () => {
+        const subKey = localStorage.getItem('sub_api_key');
+        const subUrl = localStorage.getItem('sub_api_base_url');
+        const subModel = localStorage.getItem('sub_api_model');
+        if (!subKey || !subUrl || !subModel) {
+            addToast('请先在副 API 设置中配置模型（用于情感基因溯源）', 'error');
+            return;
+        }
+        const subApiConfig = { baseUrl: subUrl, apiKey: subKey, model: subModel };
+
+        // Find memories without hormone snapshots
+        const needBackfill = vmList.filter(m => !m.hormoneSnapshot && m.sourceMessageIds && m.sourceMessageIds.length > 0);
+        if (needBackfill.length === 0) {
+            addToast('所有记忆已完成情感基因标注 ✓', 'info');
+            return;
+        }
+
+        setIsBackfilling(true);
+        backfillAbortRef.current = false;
+        setBackfillProgress(`准备处理 ${needBackfill.length} 条记忆...`);
+
+        try {
+            const ids = needBackfill.map(m => m.id);
+            const charName = formData.name || 'AI';
+
+            // Process in batches of 5
+            let done = 0;
+            const BATCH = 5;
+            for (let i = 0; i < ids.length; i += BATCH) {
+                if (backfillAbortRef.current) break;
+                const batch = ids.slice(i, i + BATCH);
+                await VectorMemoryExtractor.backfillNewMemories(batch, charName, subApiConfig);
+                done += batch.length;
+                setBackfillProgress(`🧬 已处理 ${done}/${needBackfill.length} 条记忆`);
+            }
+
+            if (backfillAbortRef.current) {
+                addToast(`情感基因溯源已中止（${done}/${needBackfill.length}）`, 'info');
+            } else {
+                addToast(`✨ 情感基因溯源完成！${done} 条记忆已标注`, 'success');
+            }
+        } catch (e: any) {
+            addToast(`情感基因溯源失败: ${e.message}`, 'error');
+        } finally {
+            setIsBackfilling(false);
+            setBackfillProgress('');
+            refreshVmList();
+        }
     };
 
     const toggleExpandVm = async (vmem: VectorMemory) => {
@@ -586,6 +642,43 @@ const MemoryCenter: React.FC<MemoryCenterProps> = ({
                                 </div>
                             )}
                         </div>
+
+                        {/* 情感基因溯源 */}
+                        {vmCount > 0 && (
+                            <div className="bg-white/60 backdrop-blur-md rounded-3xl p-4 border border-white shadow-sm space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-[11px] font-bold text-slate-700 tracking-widest uppercase flex items-center gap-1.5">🧬 情感基因溯源</h4>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">为已有记忆回填激素快照，需副 API（消耗 Token）</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[9px] text-slate-400 font-mono">
+                                            {vmList.filter(m => m.hormoneSnapshot).length}/{vmCount} 已标注
+                                        </span>
+                                        <button
+                                            onClick={handleBackfillSnapshots}
+                                            disabled={isBackfilling || isBatching}
+                                            className="py-1 px-3 rounded-xl text-[10px] font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 active:scale-95 transition-all shadow-sm hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+                                        >
+                                            {isBackfilling ? '溯源中...' : '开始溯源'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {backfillProgress && (
+                                    <div className="flex items-center justify-between bg-purple-50 text-purple-600 text-[10px] font-bold px-3 py-2 rounded-xl animate-pulse border border-purple-100">
+                                        <span>{backfillProgress}</span>
+                                        {isBackfilling && (
+                                            <button
+                                                onClick={() => { backfillAbortRef.current = true; }}
+                                                className="font-bold text-red-500 hover:opacity-80"
+                                            >
+                                                中止
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* List & Filtering */}
                         <div className="space-y-3">

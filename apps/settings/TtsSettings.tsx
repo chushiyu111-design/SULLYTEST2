@@ -150,7 +150,7 @@ const TtsSettings: React.FC = () => {
                         <div className="flex items-center gap-2 mb-3"><span className="text-sm font-bold text-[#9b7e8f]">API 连接</span></div>
                         <div><label className="text-[10px] font-bold text-[#b8aaa0] uppercase block mb-1">API Base URL (代理直连)</label>
                             <input type="text" value={ttsBaseUrl} onChange={e => setTtsBaseUrl(e.target.value)} className="w-full bg-white/60 backdrop-blur-sm border border-[#e5ddf0]/50 rounded-xl px-3 py-2.5 text-sm font-mono focus:bg-white/80 transition-all" placeholder="默认 /minimax-api" />
-                            <p className="text-[10px] text-[#b8aaa0]/80 mt-1">跨域问题 (CORS) 必填。本地调试默认保留 <span className="font-mono bg-white/50 inline-block px-1 rounded text-[#9b7e8f]">/minimax-api</span></p></div>
+                            <p className="text-[10px] text-[#b8aaa0]/80 mt-1">默认值 <span className="font-mono bg-white/50 inline-block px-1 rounded text-[#9b7e8f]">/minimax-api</span> 即可，无需修改。</p></div>
                         <div><label className="text-[10px] font-bold text-[#b8aaa0] uppercase block mb-1">MiniMax API Key</label>
                             <input type="password" value={ttsApiKey} onChange={e => setTtsApiKey(e.target.value)} className="w-full bg-white/60 backdrop-blur-sm border border-[#e5ddf0]/50 rounded-xl px-3 py-2.5 text-sm font-mono focus:bg-white/80 transition-all" placeholder="Bearer Token" /></div>
                         <div><label className="text-[10px] font-bold text-[#b8aaa0] uppercase block mb-1">Group ID <span className="text-[#c4929f]">（必填）</span></label>
@@ -340,7 +340,7 @@ const TtsSettings: React.FC = () => {
                                         languageBoost: ttsLangBoost || undefined,
                                         preprocessConfig: { enabled: false, prompt: '', apiBase: '', apiKey: '', model: '' },
                                     };
-                                    const result = await MinimaxTts.synthesize(ttsTestText, testConfig, (_s, msg) => setTtsTestStatus(`⏳ ${msg}`));
+                                    const result = await MinimaxTts.synthesizeSync(ttsTestText, testConfig, (_s, msg) => setTtsTestStatus(`⏳ ${msg}`));
                                     setTtsTestAudioUrl(result.url);
                                     setTtsTestStatus(`✅ 合成成功！字符数: ${result.usageCharacters || '?'}`);
                                 } catch (e: any) { setTtsTestStatus(`❌ ${e.message}`); }

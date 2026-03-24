@@ -79,6 +79,9 @@ export interface InternalState {
     innerVoice: string;        // 心声: 角色此刻脑中闪过的念头
     surfaceEmotion: string;    // 外显情绪标签 (2-4字, 用于日志/debug)
 
+    // ─── 情绪惯性 ───
+    streaks?: Partial<Record<string, number>>;  // 各维度连续偏离轮数（可选，旧数据自动兼容）
+
     // ─── 元数据 ───
     roundCount: number;        // 当前状态模式已持续几轮
     updatedAt: number;         // 上次更新时间戳
