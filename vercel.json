@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "",
   "rewrites": [
     {
       "source": "/minimax-api/:path*",
